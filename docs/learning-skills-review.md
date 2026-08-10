@@ -49,15 +49,17 @@
 
 流程差异和目标行为已经由 D4–D16 逐项研究并经用户确认。当前尚未决定的是实现设计：
 
-- 最终保留的 Skill 名称和目录；
-- 运行范围、通用状态层级和仓库适配方向已在 D6 确定；具体文件结构仍待实现设计；
+- 合并后的唯一主 Skill 已在 D17 定名为 `guide-learning`，显示名为 “Guided Learning / 学习带练”；
+- 精简主入口与按需 references 的目标目录已经在 D18 确定；各 reference 的最终文本和具体 schema 仍待
+  实现前设计；
 - 教学微循环已在 D4 确定，检查题设计与纠错规则已在 D12 确定；关键节点划分的场景示例待实现设计；
 - 微动作、综合验收与正式练习的衔接已在 D5 确定，提示梯度与 mastery 证据已在 D12–D13 确定；
   最小练习契约的最终字段和具体场景模板仍待设计；
 - PlanA 的事实源角色和“不创建第二套通用档案树”已在 D6 确定；现有文件的精简迁移方式仍待设计；
 - Session、Lesson、Program、mastery 和文章状态的分离已在 D6 确定，稀疏写入时机和所有权已在 D14
   确定；具体 schema 仍待实现设计；
-- PlanA 事实源映射与消费仓库适配职责已在 D15 确定；旧文件的精简迁移和适配配置格式仍待实现设计。
+- PlanA 事实源映射与消费仓库适配职责已在 D15 确定；旧文件的分阶段迁移、兼容窗口和退役顺序已在
+  D19 确定，具体变更仍须等待整体实现授权。
 
 ### D4：教学微循环采用“先讲关键节点，再检查理解”
 
@@ -500,6 +502,125 @@ raw 模式必须在输出前确认 source、起止边界、隐私和目标位置
 缩小边界或改用结构化模式；确需脱敏时采用可复现规则并记录 redaction 元数据，不手工润色正文。
 结构化临时提取可以在明确告警后容忍尾部残缺记录，raw 导出必须严格失败并保留原目标不变。
 
+### D17：合并后的唯一主 Skill 命名为 `guide-learning`
+
+合并后的目录名和 frontmatter `name` 统一使用 `guide-learning`，人类可见名称使用
+“Guided Learning / 学习带练”。该名称以动词开头，并能覆盖一次答疑、陪学 Session 和持久 Course，
+不再像 `learn-by-practice` 一样暗示正式实践每次必经，也不继承 `study-companion` 的 PlanA 日常仪式和
+固定命令语义。
+
+frontmatter `description` 必须在紧凑的一段中完成触发路由：
+
+- 明确服务对象是人类学习者，能力包括来源驱动讲解、讲后自适应检查、按证据缺口触发的正式练习、
+  学习工件 Review、mastery 验证和最小恢复状态；
+- 覆盖“教我／解释这个主题”“带我读文档、教程、论文、示例或源码”“开始、继续或恢复 Lesson”
+  “设计或评审学习练习”“开展跨会话 Course”等自然语言意图，不要求固定措辞；
+- 排除没有学习意图的普通实现、修复或代码审查，以及 `resource-planning` 的资料治理、`study-log` 的
+  对话提取、`memo-cards` 的制卡和 `english-coach` 的英语专项反馈；
+- 不写入 PlanA 路径、斜杠命令、固定开始语，也不承诺每轮练习、写日志、生成文章或建立档案。
+
+`study-companion` 与 `learn-by-practice` 在迁移完成后都退出活动 catalog、消费配置和发现目录。不得保留
+带 frontmatter 的 alias／redirect 包装，因为三个相近入口会产生重复触发和长期漂移。新 catalog 条目
+须保存两者的来源仓库、路径和固定提交作为 lineage。旧名称在原始对话、已完成 Lesson、历史决策和 Git
+历史中保持原样，不做全局替换。
+
+### D18：`guide-learning` 采用精简入口与按需 references
+
+目标目录固定为：
+
+```text
+skills/guide-learning/
+├── SKILL.md
+├── agents/
+│   └── openai.yaml
+└── references/
+    ├── teaching-cycle.md
+    ├── source-authority.md
+    ├── practice-review-mastery.md
+    ├── state-records.md
+    ├── repository-adaptation.md
+    └── examples.md
+```
+
+主 `SKILL.md` 以约 180–230 行作为非约束性精简目标，并始终保持在 500 行以内。它只保留每次触发都
+需要的内容：三种最窄运行范围、上下文建立与恢复、来源角色摘要、D4 微循环、D5 综合验收分流、
+Lesson 内外授权、正式练习所有权入口、三维 mastery 名称及按目标预先声明 `required`／`not-required`
+的规则、D14 稀疏写入摘要、自然语言控制、跨 Skill 边界，以及每个 reference 的明确读取条件。详细
+schema、场景与变体不在主入口重复。
+
+各 reference 只承担一类按需知识：
+
+| 文件 | 唯一职责 |
+| --- | --- |
+| `teaching-cycle.md` | 关键节点划分、必要前置核对、检查题选择、补差与换题、跨节点综合验收 |
+| `source-authority.md` | teaching spine、claim authority、版本锚点、来源冲突、最小补充核验和实证边界 |
+| `practice-review-mastery.md` | 正式练习契约、所有权、tests-first、提示梯度、finding 生命周期和 D13 最低证据 |
+| `state-records.md` | 开课契约及 Program、Lesson、Session event、Checkpoint 的逻辑 schema 与 D14 写入事务 |
+| `repository-adaptation.md` | 逻辑角色映射到消费仓库现有文件的发现顺序和 fallback 原则，不硬编码 PlanA 路径 |
+| `examples.md` | 少量非规范性边界案例，用于展示一次答疑、跳过正式练习、恢复 drift、临时专项等选择 |
+
+`guide-learning` 首版不设置 `scripts/`、`assets/` 或 Skill 内 `tests/`。教学、诊断、适配和状态判断属于
+高自由度推理，不用脚本固化；完全没有学习记录约定的仓库采用 schema-only fallback，由 Agent 依据
+`state-records.md` 在用户授权目标路径后生成最小记录，不附带可复制的通用 Lesson 模板。后续只有前向
+测试证明 schema 不足时，才重新评估是否增加小型 asset。
+
+旧资源按以下边界处理：
+
+- 两个旧 `SKILL.md` 合并重写；只吸收通用的带练、恢复、练习、Review、mastery 和协作边界；
+- 旧 `agents/openai.yaml` 丢弃，最终根据新 `SKILL.md` 重新生成；
+- `learning-archive.md` 拆入 `state-records.md`、`repository-adaptation.md` 和 `source-authority.md`；
+- `practice-review-mastery.md` 保留文件名但按 D5、D7、D12、D13 大幅重写；
+- `dialogue-archive.md`、`export_codex_dialogue.py` 及其有效测试迁入唯一所有者 `study-log`；
+- 316 行 Lesson 模板、固定 archive index 和 `init_learning_archive.py` 退出，不提供替代的固定档案树；
+- 初始化器测试随已退出脚本删除；exporter 测试迁往 `study-log`，不得在两个 Skill 中保留副本。
+
+静态结构检查和教学行为前向测试属于中央仓库级验证面，不进入运行时 Skill 目录。至少验证 frontmatter
+与 `agents/openai.yaml` 一致、所有一级 reference 可达、主入口无 PlanA 路径／斜杠命令／JSONL 解析，
+并覆盖三种运行范围、未知知识不猜测、正式练习授权、material hint、暂停恢复、Lesson 关闭、临时专项
+和来源冲突。
+
+### D19：采用公开中央远端和分阶段、单入口迁移
+
+正式中央远端确定为公开的 `XiFenM/agent-skills`。消费仓库的 `.gitmodules` 使用相对 URL
+`../agent-skills.git`，使其随父仓库继承 SSH 或 HTTPS 协议，并允许公开消费仓库匿名递归克隆。当前
+中央仓库尚未配置远端；由用户在分阶段迁移开始前创建公开仓库。本阶段不创建远端、不发布、不加入
+本地路径 submodule，也不因该前置条件暂停其余设计工作。
+
+迁移按以下阶段执行：
+
+1. **M0，发布中央来源**：远端就绪后推送已验证基线，并为迁移前基线和合并兼容版本保留 tag／固定
+   提交作为回滚锚点。
+2. **M1，中央兼容版本**：完成并验证 `guide-learning` 与升级后的 `study-log`；旧 `study-companion`
+   和 `learn-by-practice` 暂时保留在中央树中，仅供回滚，所有新消费配置都不得选择它们。catalog 和
+   materializer 增加同一互斥组，按 host 拒绝同时选择多个主学习入口。
+3. **M2，消费仓库空管线**：PlanA 与 programming-lab 先分别提交 `.agent-skills` submodule、
+   `.agent-skills.json`、生成目录／state／lock 忽略规则和安装校验说明；配置暂设 `"skills": {}`，不改变
+   当时的 Skill 发现状态。
+4. **M3，programming-lab canary**：一个原子切换提交将 `guide-learning` 与 `study-log` 配置给 Codex，
+   删除本地 `learn-by-practice` 源码、Windows 上退化为文本的发现／exporter 链接和重复 exporter 测试，
+   清理 pytest、VS Code、CI 与活跃文档引用，再由 materializer 生成并 `--check`。
+5. **M4，PlanA 切换**：在切换当时的真实语义暂停点冻结活动 Checkpoint，保持唯一下一动作和返回点
+   不变；本次设计基线是 Pass C-1，若迁移时仍未变化则直接沿用。随后移除两棵受 Git 跟踪的 Skill
+   副本，配置 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、
+   `resource-planning` 和 `playwright-cli` 给 Codex 与 Claude，改造 `陪学流程.md`、`学习断点.md`、学习
+   偏好及入口文档后，分别验证两棵生成目录。迁移不得触碰或顺手提交无关的用户工作。
+6. **M5，中央删除旧入口**：只有两个消费者均通过 materializer 检查、programming-lab 完成一次新流程
+   前向验证、PlanA 能从迁移时冻结的 Checkpoint 无漂移恢复并保存一次稀疏 Checkpoint，且 `study-log`
+   两种模式均通过测试后，才删除两个旧目录与 catalog 条目。消费者随后升级中央指针并重新 materialize。
+
+每个消费仓库在任一时刻只能发现一个主学习 Skill。兼容窗口保留的是中央源码和固定提交，不是可发现
+的 alias wrapper。programming-lab 已完成的 Lesson 01／02、原始对话和历史命令冻结为 legacy evidence；
+不批量重写其中的旧 Skill 名称、旧绝对路径或已纳入哈希的正文，从 Lesson 03 起采用新结构。PlanA 则
+在迁移时的真实暂停点做无损状态迁移，不等待整个专项完成；Pass C-1 仅是本次设计时的基线。
+
+M3 与 M4 都必须先把旧跟踪目录的删除、消费配置和活跃文档变更提交完成，再运行 materializer 生成被
+忽略的发现目录并执行 `--check`。不得在提交删除前把同路径生成回来；否则 Git 仍把生成内容视为受跟踪
+文件，PlanA 的同名物理副本也会因无法证明受管所有权而被 materializer 拒绝覆盖。
+
+回滚时先把当前消费配置临时设为空并运行 materializer 安全卸载受管目录，再回退消费仓库切换提交；
+若只是中央版本回归，优先回退 submodule 指针并重新 materialize。PlanA 的状态适配与子模块基础设施
+分开提交，允许只回退 schema 转换而不破坏中央接入。
+
 ## 当前禁止事项
 
 在用户确认最终实现设计并明确进入修改阶段前：
@@ -508,19 +629,21 @@ raw 模式必须在输出前确认 source、起止边界、隐私和目标位置
 - 不移动或删除 `study-log`、`learn-by-practice` 的脚本、参考资料和测试；
 - 不宣布任何旧 Skill 已被弃用；
 - 不修改 PlanA 或 programming-lab 的学习状态、进度、断点和文章；
+- 不创建、配置或推送 `agent-skills` 远端，也不在消费仓库添加本地路径 submodule；
 - 不把本文件中的候选设计解读为最终实现授权。
 
 ## 下一阶段研究议程
 
-D1–D16 已完成角色、教学流程、证据门槛、状态写入、PlanA 事实源和 `study-log` 政策的设计裁决。
-下一阶段进入实现前设计，仍先研究并由用户确认：
+D1–D19 已完成角色、教学流程、证据门槛、状态写入、事实源、日志政策、最终身份、资源分层、退役与
+分阶段迁移的高层设计裁决。远端创建由用户另行完成，在用户通知就绪前不启动 M0–M5。
 
-1. 合并后主学习 Skill 的最终名称、目录和触发描述，以及两个旧 Skill 的退役身份；
-2. 主 `SKILL.md`、按需 references、脚本和消费仓库适配配置的边界；
-3. 开课契约、正式练习契约、Lesson、Session event、Checkpoint、finding 与 mastery 的最小 schema；
-4. `study-log` 共享提取内核的命令接口、私有 archive root 配置、脚本／参考资料／测试迁移清单；
-5. PlanA 与 programming-lab 的旧状态和引用迁移顺序，包括 `陪学流程.md`、学习偏好记忆、入口文档和
-   现有 Triton 档案的兼容策略；
-6. 静态校验、脚本测试和覆盖三种运行范围、暂停恢复、正式练习、临时专项及两种日志模式的前向测试矩阵。
+下一阶段仍先完成实现前细化并由用户确认：
 
-每项继续先比较取舍、记录用户决定，再请求整体实现授权；未授权前不修改 Skill 或消费仓库。
+1. 开课契约、正式练习契约、Lesson、Session event、Checkpoint、finding 与 mastery 的最小 schema；
+2. `study-log` 共享提取内核的命令接口、私有 archive root 配置及脚本／测试的精确迁移清单；
+3. catalog 多来源 lineage、主学习互斥组和 materializer 旧名称错误提示的机器可读设计；
+4. 静态校验、脚本测试和覆盖三种运行范围、暂停恢复、正式练习、临时专项及两种日志模式的前向测试矩阵；
+5. 中央实现的提交边界和整体修改授权。消费仓库迁移在中央实现验证通过且公开远端就绪后另行启动。
+
+每项继续先比较取舍、记录用户决定，再请求整体实现授权；未授权前不修改 Skill、catalog、同步工具或
+消费仓库。
