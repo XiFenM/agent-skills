@@ -9,7 +9,7 @@
 - PlanA 的 PyTorch、SGLang、vLLM 源码子模块自带 Skill 不迁移、不登记。
 - Remotion 只暴露官方聚合入口 `remotion-best-practices`，不再保留功能重复的独立入口。
 
-完整来源、分类、状态和消费仓库记录在 [`catalog.json`](catalog.json)，迁移边界及已知问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。
+完整来源、分类、状态和消费仓库记录在 [`catalog.json`](catalog.json)，迁移边界及已知问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的已确认合并方向和待研究问题记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
 
 ## 目录
 
