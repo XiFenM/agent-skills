@@ -56,11 +56,17 @@ class MaterializeTests(unittest.TestCase):
         write_json(
             root / "catalog.json",
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "selection_groups": {
+                    "primary-learning": {"max_distinct_per_config": 1}
+                },
+                "retired_names": {},
                 "skills": [
                     {
                         "name": "demo-skill",
                         "path": "skills/demo-skill",
+                        "lifecycle": {"state": "active"},
+                        "groups": [],
                     }
                 ],
             },
@@ -82,6 +88,42 @@ class MaterializeTests(unittest.TestCase):
                 "skills": skills,
             },
         )
+
+    def read_catalog(self) -> dict[str, object]:
+        return json.loads((self.central / "catalog.json").read_text(encoding="utf-8"))
+
+    def write_catalog(self, catalog: dict[str, object]) -> None:
+        write_json(self.central / "catalog.json", catalog)
+
+    def add_skill(
+        self,
+        name: str,
+        *,
+        groups: list[str] | None = None,
+        state: str = "active",
+        replacement: str | None = None,
+        create_source: bool = True,
+    ) -> None:
+        if create_source:
+            skill = self.central / "skills" / name
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: Test fixture.\n---\n",
+                encoding="utf-8",
+            )
+        catalog = self.read_catalog()
+        entry: dict[str, object] = {
+            "name": name,
+            "path": f"skills/{name}",
+            "lifecycle": {"state": state},
+            "groups": groups or [],
+        }
+        if replacement is not None:
+            entry["replacement"] = replacement
+        skills = catalog["skills"]
+        assert isinstance(skills, list)
+        skills.append(entry)
+        self.write_catalog(catalog)
 
     def target(self, host: str = "codex") -> Path:
         root = ".agents" if host == "codex" else ".claude"
@@ -138,6 +180,102 @@ class MaterializeTests(unittest.TestCase):
         self.write_config({"con": ["codex"]})
         with self.assertRaisesRegex(materialize_skills.SyncError, "reserved Windows"):
             materialize_skills.synchronize(self.repo, self.central, self.config)
+
+    def test_primary_group_counts_distinct_skills_across_hosts(self) -> None:
+        catalog = self.read_catalog()
+        skills = catalog["skills"]
+        assert isinstance(skills, list)
+        skills[0]["groups"] = ["primary-learning"]
+        self.write_catalog(catalog)
+        self.add_skill("other-primary", groups=["primary-learning"])
+        self.commit_central("add primary entries")
+
+        # One Skill on both hosts is one distinct group choice and remains legal.
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertTrue(self.target("codex").is_dir())
+        self.assertTrue(self.target("claude").is_dir())
+
+        self.write_config(
+            {
+                "demo-skill": ["codex"],
+                "other-primary": ["claude"],
+            }
+        )
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "primary-learning.*demo-skill, other-primary"
+        ):
+            materialize_skills.synchronize(self.repo, self.central, self.config)
+
+    def test_rollback_and_retired_names_report_final_active_replacement(self) -> None:
+        self.add_skill(
+            "old-skill",
+            state="rollback-only",
+            replacement="retired-middle",
+            create_source=False,
+        )
+        catalog = self.read_catalog()
+        retired = catalog["retired_names"]
+        assert isinstance(retired, dict)
+        retired["retired-middle"] = {"replacement": "demo-skill"}
+        retired["retired-skill"] = {"replacement": "old-skill"}
+        self.write_catalog(catalog)
+        self.commit_central("add replacement chain")
+
+        for selected, lifecycle in (
+            ("old-skill", "rollback-only"),
+            ("retired-skill", "retired"),
+        ):
+            with self.subTest(selected=selected):
+                self.write_config({selected: ["codex"]})
+                with self.assertRaisesRegex(
+                    materialize_skills.SyncError,
+                    rf"{lifecycle} Skill.*{selected}.*demo-skill",
+                ):
+                    materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertFalse(self.target().exists())
+
+    def test_nonselectable_name_is_rejected_before_group_or_source_planning(self) -> None:
+        catalog = self.read_catalog()
+        skills = catalog["skills"]
+        assert isinstance(skills, list)
+        skills[0]["groups"] = ["primary-learning"]
+        self.write_catalog(catalog)
+        self.add_skill(
+            "old-primary",
+            groups=["primary-learning"],
+            state="rollback-only",
+            replacement="demo-skill",
+            create_source=False,
+        )
+        self.commit_central("add unavailable rollback entry")
+        self.write_config(
+            {
+                "aaa-unknown": ["codex"],
+                "demo-skill": ["codex"],
+                "old-primary": ["claude"],
+            }
+        )
+
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "rollback-only Skill.*demo-skill"
+        ):
+            materialize_skills.synchronize(self.repo, self.central, self.config)
+
+    def test_non_string_lifecycle_state_is_a_schema_error(self) -> None:
+        for state in ([], {}):
+            with self.subTest(state=state):
+                catalog = self.read_catalog()
+                skills = catalog["skills"]
+                assert isinstance(skills, list)
+                skills[0]["lifecycle"]["state"] = state
+                self.write_catalog(catalog)
+                with self.assertRaisesRegex(
+                    materialize_skills.SyncError,
+                    "lifecycle.state must be active or rollback-only",
+                ):
+                    materialize_skills.build_plan(
+                        self.repo, self.central, self.config
+                    )
 
     def test_non_string_hosts_are_schema_errors(self) -> None:
         for hosts in (["codex", 1], [["codex"]]):

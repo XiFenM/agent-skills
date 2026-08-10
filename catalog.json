@@ -1,6 +1,12 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "repository": "agent-skills",
+  "selection_groups": {
+    "primary-learning": {
+      "max_distinct_per_config": 1
+    }
+  },
+  "retired_names": {},
   "categories": {
     "automation/browser": "浏览器自动化与网页测试",
     "integration/zenmux": "ZenMux 配置、使用与资料查询",
@@ -15,11 +21,17 @@
       "category": "workflow/content-production",
       "kind": "first-party",
       "path": "skills/creator-workflow",
-      "origin": {
-        "repository": "daily-work",
-        "path": ".agents/skills/creator-workflow",
-        "commit": "859e0d9e1791d6b471e4add920a4ac8ca1e0caf2"
+      "lineage": [
+        {
+          "repository": "daily-work",
+          "path": ".agents/skills/creator-workflow",
+          "commit": "859e0d9e1791d6b471e4add920a4ac8ca1e0caf2"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [],
       "consumers": [
         "daily-work"
       ],
@@ -37,11 +49,17 @@
       "category": "learning/coaching",
       "kind": "first-party",
       "path": "skills/english-coach",
-      "origin": {
-        "repository": "PlanA",
-        "path": ".claude/skills/english-coach",
-        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      "lineage": [
+        {
+          "repository": "PlanA",
+          "path": ".claude/skills/english-coach",
+          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [],
       "consumers": [
         "PlanA"
       ],
@@ -59,11 +77,19 @@
       "category": "learning/coaching",
       "kind": "first-party",
       "path": "skills/learn-by-practice",
-      "origin": {
-        "repository": "programming-lab",
-        "path": "skills/learn-by-practice",
-        "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
+      "lineage": [
+        {
+          "repository": "programming-lab",
+          "path": "skills/learn-by-practice",
+          "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [
+        "primary-learning"
+      ],
       "consumers": [
         "programming-lab"
       ],
@@ -80,11 +106,17 @@
       "category": "learning/knowledge-management",
       "kind": "first-party",
       "path": "skills/memo-cards",
-      "origin": {
-        "repository": "PlanA",
-        "path": ".claude/skills/memo-cards",
-        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      "lineage": [
+        {
+          "repository": "PlanA",
+          "path": ".claude/skills/memo-cards",
+          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [],
       "consumers": [
         "PlanA"
       ],
@@ -103,11 +135,17 @@
       "category": "learning/knowledge-management",
       "kind": "first-party",
       "path": "skills/resource-planning",
-      "origin": {
-        "repository": "PlanA",
-        "path": ".claude/skills/resource-planning",
-        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      "lineage": [
+        {
+          "repository": "PlanA",
+          "path": ".claude/skills/resource-planning",
+          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [],
       "consumers": [
         "PlanA"
       ],
@@ -125,11 +163,19 @@
       "category": "learning/coaching",
       "kind": "first-party",
       "path": "skills/study-companion",
-      "origin": {
-        "repository": "PlanA",
-        "path": ".claude/skills/study-companion",
-        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      "lineage": [
+        {
+          "repository": "PlanA",
+          "path": ".claude/skills/study-companion",
+          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [
+        "primary-learning"
+      ],
       "consumers": [
         "PlanA"
       ],
@@ -147,11 +193,17 @@
       "category": "learning/knowledge-management",
       "kind": "first-party",
       "path": "skills/study-log",
-      "origin": {
-        "repository": "PlanA",
-        "path": ".claude/skills/study-log",
-        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      "lineage": [
+        {
+          "repository": "PlanA",
+          "path": ".claude/skills/study-log",
+          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
       },
+      "groups": [],
       "consumers": [
         "PlanA"
       ],
@@ -174,6 +226,10 @@
         "repository_url": "https://github.com/microsoft/playwright-cli.git",
         "submodule": "vendor/microsoft-playwright-cli"
       },
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
       "consumers": [
         "daily-work",
         "PlanA"
@@ -193,6 +249,10 @@
         "repository_url": "https://github.com/remotion-dev/skills.git",
         "submodule": "vendor/remotion-skills"
       },
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
       "consumers": [
         "daily-work"
       ],
@@ -213,6 +273,10 @@
         "repository_url": "https://github.com/ZenMux/skills.git",
         "submodule": "vendor/zenmux-skills"
       },
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
       "consumers": [
         "daily-work"
       ],
@@ -231,6 +295,10 @@
         "repository_url": "https://github.com/ZenMux/skills.git",
         "submodule": "vendor/zenmux-skills"
       },
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
       "consumers": [
         "daily-work"
       ],
@@ -249,6 +317,10 @@
         "repository_url": "https://github.com/ZenMux/skills.git",
         "submodule": "vendor/zenmux-skills"
       },
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
       "consumers": [
         "daily-work"
       ],

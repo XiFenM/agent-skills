@@ -40,6 +40,8 @@ TARGET_ROOTS = {
 IGNORED_DIRECTORY_NAMES = {".git", ".pytest_cache", ".venv", "__pycache__"}
 IGNORED_FILE_SUFFIXES = {".pyc", ".pyo"}
 HEX_DIGEST_LENGTH = 64
+LIFECYCLE_STATES = {"active", "rollback-only"}
+PRIMARY_LEARNING_GROUP = "primary-learning"
 
 
 class SyncError(RuntimeError):
@@ -55,6 +57,14 @@ class DesiredTarget:
     target: Path
     target_relative: str
     digest: str
+
+
+@dataclass(frozen=True)
+class CatalogPolicy:
+    skills: dict[str, dict[str, Any]]
+    selection_groups: dict[str, int]
+    retired_names: dict[str, str]
+    replacements: dict[str, str]
 
 
 def _path_present(path: Path) -> bool:
@@ -212,23 +222,134 @@ def _validated_name(value: Any, label: str) -> str:
         raise SyncError(str(exc)) from exc
 
 
-def _catalog_index(central_root: Path) -> dict[str, dict[str, Any]]:
+def _catalog_policy(central_root: Path) -> CatalogPolicy:
     catalog = _load_json(central_root / CATALOG_FILE)
-    if not isinstance(catalog, dict) or catalog.get("schema_version") != 1:
+    if not isinstance(catalog, dict) or catalog.get("schema_version") != 2:
         raise SyncError("unsupported or invalid catalog schema")
+
+    raw_selection_groups = catalog.get("selection_groups")
+    if not isinstance(raw_selection_groups, dict):
+        raise SyncError("catalog selection_groups must be an object")
+    selection_groups: dict[str, int] = {}
+    for raw_name, raw_policy in raw_selection_groups.items():
+        name = _validated_name(raw_name, "selection group name")
+        if not isinstance(raw_policy, dict):
+            raise SyncError(f"selection group {name!r} policy must be an object")
+        maximum = raw_policy.get("max_distinct_per_config")
+        if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < 1:
+            raise SyncError(
+                f"selection group {name!r} max_distinct_per_config must be a "
+                "positive integer"
+            )
+        selection_groups[name] = maximum
+    if selection_groups.get(PRIMARY_LEARNING_GROUP) != 1:
+        raise SyncError(
+            "catalog primary-learning selection group must have "
+            "max_distinct_per_config 1"
+        )
+
+    raw_retired = catalog.get("retired_names")
+    if not isinstance(raw_retired, dict):
+        raise SyncError("catalog retired_names must be an object")
+    retired_names: dict[str, str] = {}
+    for raw_name, raw_record in raw_retired.items():
+        name = _validated_name(raw_name, "retired Skill name")
+        if not isinstance(raw_record, dict):
+            raise SyncError(f"retired Skill {name!r} record must be an object")
+        replacement = _validated_name(
+            raw_record.get("replacement"), f"retired Skill {name!r} replacement"
+        )
+        retired_names[name] = replacement
+
     entries = catalog.get("skills")
     if not isinstance(entries, list):
         raise SyncError("catalog skills must be an array")
 
     index: dict[str, dict[str, Any]] = {}
+    replacements: dict[str, str] = dict(retired_names)
     for position, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise SyncError(f"catalog Skill entry {position} must be an object")
         name = _validated_name(entry.get("name"), f"catalog Skill {position} name")
         if name in index:
             raise SyncError(f"catalog contains duplicate Skill {name!r}")
+
+        lifecycle = entry.get("lifecycle")
+        state = lifecycle.get("state") if isinstance(lifecycle, dict) else None
+        if not isinstance(state, str) or state not in LIFECYCLE_STATES:
+            raise SyncError(
+                f"catalog Skill {name!r} lifecycle.state must be active or rollback-only"
+            )
+        if state == "rollback-only":
+            replacements[name] = _validated_name(
+                entry.get("replacement"), f"catalog Skill {name!r} replacement"
+            )
+        elif "replacement" in entry:
+            raise SyncError(
+                f"catalog active Skill {name!r} must not declare a replacement"
+            )
+
+        groups = entry.get("groups")
+        if not isinstance(groups, list) or not all(isinstance(group, str) for group in groups):
+            raise SyncError(f"catalog Skill {name!r} groups must be a string array")
+        if len(groups) != len(set(groups)):
+            raise SyncError(f"catalog Skill {name!r} groups contain duplicates")
+        unknown_groups = sorted(set(groups) - set(selection_groups))
+        if unknown_groups:
+            raise SyncError(
+                f"catalog Skill {name!r} uses unknown selection groups: "
+                + ", ".join(unknown_groups)
+            )
         index[name] = entry
-    return index
+
+    overlap = sorted(set(index) & set(retired_names))
+    if overlap:
+        raise SyncError(
+            "catalog Skill and retired names overlap: " + ", ".join(overlap)
+        )
+
+    policy = CatalogPolicy(
+        skills=index,
+        selection_groups=selection_groups,
+        retired_names=retired_names,
+        replacements=replacements,
+    )
+    for name in sorted(replacements):
+        _active_replacement(name, policy)
+    return policy
+
+
+def _catalog_index(central_root: Path) -> dict[str, dict[str, Any]]:
+    """Return the schema-v2 Skill index for callers that only need entries."""
+
+    return _catalog_policy(central_root).skills
+
+
+def _active_replacement(name: str, catalog: CatalogPolicy) -> str:
+    """Resolve a rollback/retired name to its final active Skill."""
+
+    cursor = name
+    visited: list[str] = []
+    while True:
+        if cursor in visited:
+            cycle = visited[visited.index(cursor) :] + [cursor]
+            raise SyncError(
+                "catalog replacement chain contains a cycle: " + " -> ".join(cycle)
+            )
+        visited.append(cursor)
+
+        if cursor in catalog.retired_names:
+            cursor = catalog.retired_names[cursor]
+            continue
+
+        entry = catalog.skills.get(cursor)
+        if entry is None:
+            raise SyncError(
+                f"catalog replacement chain for {name!r} is dangling at {cursor!r}"
+            )
+        if entry["lifecycle"]["state"] == "active":
+            return cursor
+        cursor = catalog.replacements[cursor]
 
 
 def _read_config(
@@ -273,14 +394,47 @@ def build_plan(
     repo = _absolute(repo)
     central_root = _absolute(central_root)
     selected, source_relative = _read_config(repo, config_path, central_root)
-    catalog = _catalog_index(central_root)
+    catalog = _catalog_policy(central_root)
     desired: list[DesiredTarget] = []
 
+    # Reject non-selectable names before group checks or any source-tree work so
+    # callers always receive the actionable final active replacement.
     for name in sorted(selected):
-        if name not in catalog:
+        if name in catalog.retired_names:
+            replacement = _active_replacement(name, catalog)
+            raise SyncError(
+                f"retired Skill in {config_path.name}: {name}; "
+                f"use active replacement {replacement!r}"
+            )
+        if (
+            name in catalog.skills
+            and catalog.skills[name]["lifecycle"]["state"] == "rollback-only"
+        ):
+            replacement = _active_replacement(name, catalog)
+            raise SyncError(
+                f"rollback-only Skill in {config_path.name}: {name}; "
+                f"use active replacement {replacement!r}"
+            )
+
+    for name in sorted(selected):
+        if name not in catalog.skills:
             raise SyncError(f"unknown Skill in {config_path.name}: {name}")
+
+    # Count distinct Skill names, not host targets: the same Skill selected for
+    # Codex and Claude is one choice, while two different primary entries conflict.
+    for group, maximum in sorted(catalog.selection_groups.items()):
+        members = sorted(
+            name for name in selected if group in catalog.skills[name]["groups"]
+        )
+        if len(members) > maximum:
+            raise SyncError(
+                f"selection group {group!r} allows at most {maximum} distinct Skill "
+                f"per config; selected: {', '.join(members)}"
+            )
+
+    for name in sorted(selected):
         source, source_path = _resolve_under(
-            central_root, catalog[name].get("path"), f"catalog path for {name}"
+            central_root, catalog.skills[name].get("path"), f"catalog path for {name}"
         )
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise SyncError(
