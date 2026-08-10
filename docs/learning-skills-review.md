@@ -1,6 +1,6 @@
 # 学习类 Skill 合并升级决策与评审记录
 
-本文记录学习类 Skill 在质量评估与合并升级阶段的已确认决策、待研究问题和后续实施边界。
+本文记录学习类 Skill 在质量评估与合并升级阶段的已确认决策、实现设计和后续迁移边界。
 除非另有明确记录，本文中的“目标状态”不表示相关 `SKILL.md`、脚本或消费仓库已经完成修改。
 
 ## 当前范围
@@ -36,28 +36,27 @@
 - `learn-by-practice` 不再自行保存对话提取脚本或对话提取流程；
 - `learn-by-practice` 如需学习记录或对话材料，应调用 `study-log` 或消费其产物，而不是维护第二套实现。
 
-以下实现细节尚未决定：
-
-- 两种输出模式的触发、默认路径、覆盖、Git 与保留政策已在 D16 确定；仓库外私有根目录的具体配置
-  方式仍待实现设计；
-- 现有脚本、参考文档和测试的物理迁移方案，以及共享提取内核的命令接口。
+两种输出模式的触发、默认路径、覆盖、Git 与保留政策在 D16 确定；自然语言路由、共享内核、仓库外
+私有根配置、安全写入和脚本／测试迁移边界在 D22 确定。具体代码尚未实现，但不存在待裁决的交互或
+所有权问题。
 
 ### D3：`study-companion` 与 `learn-by-practice` 合并升级
 
 `study-companion` 与 `learn-by-practice` 不再以两套互相竞争的主学习流程长期并存。
 目标是吸收双方有效能力，形成职责统一、状态一致、可支持不同学习场景的新学习流程。
 
-流程差异和目标行为已经由 D4–D16 逐项研究并经用户确认。当前尚未决定的是实现设计：
+流程差异、目标行为和实现设计已经由 D4–D23 逐项研究并经用户确认：
 
 - 合并后的唯一主 Skill 已在 D17 定名为 `guide-learning`，显示名为 “Guided Learning / 学习带练”；
-- 精简主入口与按需 references 的目标目录已经在 D18 确定；各 reference 的最终文本和具体 schema 仍待
-  实现前设计；
-- 教学微循环已在 D4 确定，检查题设计与纠错规则已在 D12 确定；关键节点划分的场景示例待实现设计；
+- 精简主入口与按需 references 的目标目录已经在 D18 确定；最小状态、练习、finding 与 mastery schema
+  已在 D20–D21 确定，最终 reference 文本属于实现工作；
+- 教学微循环已在 D4 确定，检查题设计与纠错规则已在 D12 确定；关键节点场景由 D23 的前向测试验证；
 - 微动作、综合验收与正式练习的衔接已在 D5 确定，提示梯度与 mastery 证据已在 D12–D13 确定；
-  最小练习契约的最终字段和具体场景模板仍待设计；
-- PlanA 的事实源角色和“不创建第二套通用档案树”已在 D6 确定；现有文件的精简迁移方式仍待设计；
+  最小练习契约、finding 和结课证据投影已在 D21 确定；
+- PlanA 的事实源角色和“不创建第二套通用档案树”已在 D6 确定；现有文件的一义映射与分阶段精简迁移
+  已在 D15、D19–D20 确定；
 - Session、Lesson、Program、mastery 和文章状态的分离已在 D6 确定，稀疏写入时机和所有权已在 D14
-  确定；具体 schema 仍待实现设计；
+  确定；具体逻辑 schema 已在 D20 确定；
 - PlanA 事实源映射与消费仓库适配职责已在 D15 确定；旧文件的分阶段迁移、兼容窗口和退役顺序已在
   D19 确定，具体变更仍须等待整体实现授权。
 
@@ -89,7 +88,7 @@
 
 这里的“探”是**讲解后的理解诊断**，不是要求学习者猜测尚未教授的事实。检查问题应能依据刚完成的
 讲解或已经确认的前置知识作答。这里的“做”是比后续正式练习更轻量的学习工件，用于巩固当前节点，
-不替代 `learn-by-practice` 的正式练习契约、作品评审和 mastery gate。
+不替代 D5、D7、D21 定义的正式练习契约、作品评审和 mastery gate。
 
 一次答疑只选用解决当前问题所需的讲解、追问或轻量检查，不强制生成全局图，也不强制跑完整微循环。
 
@@ -117,8 +116,8 @@
 正式练习开始前，Agent 先一次性展示完整的最小契约，让学习者独立完成。只有学习者明确表达卡住、
 希望降低难度或主动求助时，才重新进入微动作和渐进提示；验证发现问题时先报告证据和差距，不自动
 接管学习过程。
-综合验收题型、提示梯度和 mastery 证据已在 D12–D13 确定；最小契约的最终字段与具体场景模板仍待
-设计。测试与作品的默认所有权、契约授权和 Review 停止范围已在 D7 确定。
+综合验收题型、提示梯度和 mastery 证据已在 D12–D13 确定；最小契约字段、finding 生命周期和结课证据
+投影已在 D21 确定。测试与作品的默认所有权、契约授权和 Review 停止范围已在 D7 确定。
 
 Mastery 分三个可独立记录的维度，并由 lesson 目标预先声明需要哪些维度：
 
@@ -138,17 +137,17 @@ D13 确定。
   学习状态，也不自动安排后续课程；
 - **陪学 Session**：用户明确表达开始或继续一段学习时，执行快速恢复、D4 微循环、自然语言暂停与
   收尾，并保存最小恢复信息；
-- **持久 Course**：用户明确开展跨会话、多 lesson 学习时，才启用课程目标、证据维度、正式练习、
-  Review、mastery 和长期进度记录。
+- **持久 Course**：用户明确开展跨会话、多 Lesson 学习时，才启用 Program／Lesson 长期状态、逐目标
+  mastery 和长期进度记录。正式练习不专属于 Course；独立 Session 若在综合验收后仍有证据缺口，也可
+  按 D5、D7 进入一次受约束的练习，但不会因此自动创建持久 Lesson 或声明长期 mastery。
 
 状态按三个层级组织：
 
 ```text
-Program：长期目标、范围、候选课程顺序和预算
-  ↓
-Lesson：已授权学习单元、来源、目标、教学阶段和三维 mastery
-  ↓
-Session：本次会话、当前关键节点、唯一下一动作和短时中断快照
+Program：长期目标、范围、候选 Lesson 顺序和前台指针；已有预算时只引用其唯一来源
+  └─ Lesson：已授权学习单元、来源、目标、教学阶段和三维 mastery
+Session event：一次有实质增量的会话片段；可引用 Lesson，也可只引用独立主题
+Checkpoint：唯一可覆盖的精确恢复游标
 ```
 
 会话是否正在进行、Lesson 教学阶段、资料内部或阶段边界、三维 mastery，以及文章素材或草稿状态是
@@ -172,15 +171,16 @@ Session：本次会话、当前关键节点、唯一下一动作和短时中断�
 记录规模按 D6 的三种运行范围递增：
 
 - **一次答疑**默认零仓库写入；只有用户明确要求保存时，才生成紧凑记录；
-- **陪学 Session**结束时只追加一条简短 Session 事件，并更新唯一 Checkpoint；Session 事件保存日期、
-  所属 Lesson、覆盖范围、完成动作、证据或产物链接和未关闭问题，Checkpoint 只保存精确恢复位置、
-  唯一下一动作、当前阻塞项、最近有效证据和前进门槛；
+- **陪学 Session**结束时只追加一条简短 Session 事件；仍有恢复任务时更新唯一 Checkpoint，真正终态
+  则删除 Checkpoint 引用和无用游标。Session 事件保存日期、上下文（已有 Lesson 时为 Lesson 引用，
+  否则为短主题标签）、覆盖范围、完成动作、证据或产物链接和未关闭问题；保留的 Checkpoint 只保存
+  精确恢复位置、唯一下一动作、当前阻塞项、最近有效证据和前进门槛；
 - **持久 Course**使用轻量 Lesson 逻辑记录；需要独立文件时，以约 50–80 行作为非约束性精简目标，
   保存身份与来源范围、2–4 条目标、状态、核心产物、完成门槛、未关闭阻塞项、Session 事件索引和关闭
   时的三维 mastery 结果；练习契约、实验、Review 和 mastery 细节只在实际发生时增加条件片段。
 
-Program 至少保存课程目标与范围、Lesson 顺序或索引、当前活动 Lesson 指针和唯一 Checkpoint 引用；
-不得复制 Lesson 的详细结论、证据和开放问题。
+Program 保存课程目标与范围、候选 Lesson 短描述和已授权 Lesson 引用；当前活动 Lesson 指针与唯一
+Checkpoint 引用按 D20 的状态条件出现。它不得复制 Lesson 的详细结论、证据和开放问题。
 
 基础 Lesson 记录不再复制完整教学正文、逐题问答、完整测试输出、暂停快照、原始对话元数据、重复
 checklist 或 changelog。Program、Lesson 和 Session 可以是逻辑层级，不要求每层都新建独立文件；
@@ -377,8 +377,8 @@ Agent 已准备 benchmark harness，而学习者只负责预测、运行和解�
 
 状态分为四种职责，不因物理上共用一个文件而混淆：
 
-- **Program 控制面**：只保存长期范围、候选 Lesson 顺序或索引、当前活动 Lesson 和 Checkpoint 引用，
-  不复制 Lesson 的状态与证据；
+- **Program 控制面**：只保存长期范围、候选 Lesson 短描述、已授权 Lesson 引用，以及条件性的当前活动
+  或已冻结 Lesson 和 Checkpoint 引用，不复制 Lesson 的状态与证据；
 - **Lesson 证据账本**：保存来源、2–4 个目标、预先声明的 mastery 维度、当前教学阶段、正式练习契约、
   核心产物、required findings 和最终 mastery，不保存逐轮问答或精确会话游标；
 - **Session event**：每个具有实质增量的会话或暂停段最多追加一条简短历史摘要；
@@ -397,12 +397,14 @@ Agent 已准备 benchmark harness，而学习者只负责预测、运行和解�
 - 在会话边界或上述耐久 gate 上，为跨会话恢复而改变唯一下一动作；
 - Session 暂停、计划内收工或用户确认关闭 Lesson／Program。
 
-暂停与收工使用同一种最小事务：有实际进展时追加一条 Session event，并覆盖 Checkpoint；没有进展、
-证据和游标均未变化时零写。暂停或结束 Session 不把 Lesson 改成 `paused` 或 `complete`，也不自动成文、
-制卡、生成结构化 `study-log` 或导出原始对话。恢复时读取 Program、Lesson 和 Checkpoint 并做低成本
-drift 核验；没有 drift 时零写，drift 会改变范围、责任或下一动作时先让用户选择分支。
+暂停与收工使用同一种最小事务：有实际进展时追加一条 Session event；仍有恢复任务时覆盖 Checkpoint，
+真正终态则删除 Checkpoint 引用和无用游标；没有进展、证据和游标均未变化时零写。暂停或结束 Session
+不把 Lesson 改成 `paused` 或 `complete`，也不自动成文、制卡、生成结构化 `study-log` 或导出原始对话。
+恢复时读取 Program、Lesson 和 Checkpoint 并做低成本 drift 核验；没有 drift 时零写，drift 会改变范围、
+责任或下一动作时先让用户选择分支。
 
-新 Program／Lesson 及其状态路径须先获得授权；用户自然语言中足够具体的开始请求可以直接构成授权，
+新 Program／Lesson 及其 Agent-owned 状态／基础记录文件路径须先获得授权；用户自然语言中足够具体的
+开始请求可以直接构成授权，
 不再额外要求固定仪式。开课时只声明 Agent-owned 的状态与基础记录路径；若 D5 判断需要正式练习，
 再由 D7 的完整练习契约声明测试、rubric、fixture 和其他验收工件。已经授权的范围内，暂停、收工、
 Review、验证和 Checkpoint 更新可以自动执行，不逐次展示 diff。新增路径，扩大目标、范围、mastery
@@ -410,7 +412,8 @@ Review、验证和 Checkpoint 更新可以自动执行，不逐次展示 diff。
 Program，仍须按 D7、D10 取得相应确认。
 
 Lesson 达到 gate 后，Agent 先展示每项目标、所需维度、证据和非阻塞余项；用户确认后才一次写入最终
-状态、mastery 与 closure event，并把 Checkpoint 移到 Lesson 边界。不得自动启动下一 Lesson。已完成
+状态与 mastery，并把当段唯一 Session event 标记为 closure，再将 Checkpoint 移到 Lesson 边界。不得
+自动启动下一 Lesson。已完成
 Lesson 的一次补充答疑保持零写和 `complete`；当轮明确属于陪学 Session 时才追加补充事件。只有新证据
 推翻 mastery 或目标扩大时，才提议重开或另建 Lesson。
 
@@ -519,10 +522,11 @@ frontmatter `description` 必须在紧凑的一段中完成触发路由：
   对话提取、`memo-cards` 的制卡和 `english-coach` 的英语专项反馈；
 - 不写入 PlanA 路径、斜杠命令、固定开始语，也不承诺每轮练习、写日志、生成文章或建立档案。
 
-`study-companion` 与 `learn-by-practice` 在迁移完成后都退出活动 catalog、消费配置和发现目录。不得保留
-带 frontmatter 的 alias／redirect 包装，因为三个相近入口会产生重复触发和长期漂移。新 catalog 条目
-须保存两者的来源仓库、路径和固定提交作为 lineage。旧名称在原始对话、已完成 Lesson、历史决策和 Git
-历史中保持原样，不做全局替换。
+旧入口按三个明确时点退出：C2 将 `study-companion` 与 `learn-by-practice` 从活动 catalog 状态切为
+rollback-only；M3／M4 分别把它们移出 programming-lab／PlanA 的消费配置与发现目录；M5 才删除中央
+目录和 catalog 条目并登记 `retired_names`。任何阶段都不得保留带 frontmatter 的 alias／redirect 包装，
+因为三个相近入口会产生重复触发和长期漂移。新 catalog 条目须保存两者的来源仓库、路径和固定提交作为
+lineage。旧名称在原始对话、已完成 Lesson、历史决策和 Git 历史中保持原样，不做全局替换。
 
 ### D18：`guide-learning` 采用精简入口与按需 references
 
@@ -586,13 +590,14 @@ schema、场景与变体不在主入口重复。
 中央仓库尚未配置远端；由用户在分阶段迁移开始前创建公开仓库。本阶段不创建远端、不发布、不加入
 本地路径 submodule，也不因该前置条件暂停其余设计工作。
 
+中央实现先按 D23 的 C0–C3 在本地完成并验证；它不属于 M0–M5，也不要求远端提前存在。远端就绪后，
 迁移按以下阶段执行：
 
-1. **M0，发布中央来源**：远端就绪后推送已验证基线，并为迁移前基线和合并兼容版本保留 tag／固定
-   提交作为回滚锚点。
-2. **M1，中央兼容版本**：完成并验证 `guide-learning` 与升级后的 `study-log`；旧 `study-companion`
-   和 `learn-by-practice` 暂时保留在中央树中，仅供回滚，所有新消费配置都不得选择它们。catalog 和
-   materializer 增加同一互斥组，按 host 拒绝同时选择多个主学习入口。
+1. **M0，发布中央来源**：远端就绪后推送已经通过 C0–C3 验证的完整历史，并分别为中央实现前基线和
+   合并兼容版本保留 tag／固定提交作为回滚锚点。
+2. **M1，冻结迁移输入**：从远端全新克隆并复验兼容提交，确认 `guide-learning`、升级后的
+   `study-log`、两个 rollback-only 旧源码、catalog lineage／retired 提示和 materializer 行为与本地验证
+   一致；记录唯一中央提交供 M2–M4 固定引用，不在本阶段重新实现 Skill。
 3. **M2，消费仓库空管线**：PlanA 与 programming-lab 先分别提交 `.agent-skills` submodule、
    `.agent-skills.json`、生成目录／state／lock 忽略规则和安装校验说明；配置暂设 `"skills": {}`，不改变
    当时的 Skill 发现状态。
@@ -608,8 +613,9 @@ schema、场景与变体不在主入口重复。
    前向验证、PlanA 能从迁移时冻结的 Checkpoint 无漂移恢复并保存一次稀疏 Checkpoint，且 `study-log`
    两种模式均通过测试后，才删除两个旧目录与 catalog 条目。消费者随后升级中央指针并重新 materialize。
 
-每个消费仓库在任一时刻只能发现一个主学习 Skill。兼容窗口保留的是中央源码和固定提交，不是可发现
-的 alias wrapper。programming-lab 已完成的 Lesson 01／02、原始对话和历史命令冻结为 legacy evidence；
+每个消费配置跨所有 host 最多只能选择一个不同的主学习 Skill 名称；同一个 `guide-learning` 同时分发给
+Codex 与 Claude 合法。兼容窗口保留的是中央源码和固定提交，不是可发现的 alias wrapper。
+programming-lab 已完成的 Lesson 01／02、原始对话和历史命令冻结为 legacy evidence；
 不批量重写其中的旧 Skill 名称、旧绝对路径或已纳入哈希的正文，从 Lesson 03 起采用新结构。PlanA 则
 在迁移时的真实暂停点做无损状态迁移，不等待整个专项完成；Pass C-1 仅是本次设计时的基线。
 
@@ -621,29 +627,251 @@ M3 与 M4 都必须先把旧跟踪目录的删除、消费配置和活跃文档�
 若只是中央版本回归，优先回退 submodule 指针并重新 materialize。PlanA 的状态适配与子模块基础设施
 分开提交，允许只回退 schema 转换而不破坏中央接入。
 
+### D20：开场只投影最小状态，独立 Session 不强制创建 Lesson
+
+开场展示是既有逻辑状态的短投影，不是新的事实源，也不生成一份重复的“开课契约文件”。三种运行
+范围采用不同的最小展示：
+
+- **一次答疑**直接回答，默认不展示固定卡片、不创建 ID 或状态；只有来源、版本、假设或回答边界会
+  实质改变答案时，才用一句话说明；
+- **陪学 Session**开始或恢复时只展示当前上下文、精确恢复位置和唯一首动作；阻塞项、前进门槛、
+  drift 分支及首次建立的 Agent-owned 状态／基础记录文件路径均为条件字段；
+- **持久 Course**分开投影 Program 与 Lesson：首次只创建 Program 时，展示长期目标、范围、明确排除
+  项、候选 Lesson、Agent-owned Program 文件路径，以及实际创建 Checkpoint 时的路径和下一授权动作，
+  不虚构“当前 Lesson”；
+  激活 Lesson 时才展示其 2–4 个目标、各目标所需 mastery 维度、teaching spine 与事实权威、Lesson
+  专属证据目标、Agent-owned Lesson／event 文件路径、唯一首动作，以及“关闭本课需确认、下一课不
+  自动启动”的边界。用户一次请求同时授权二者时可以合并展示。
+
+正式练习的测试、rubric、fixture 和文件所有权不在开课时预加载；只有 D5 判断确实需要正式练习时，
+才按 D21 展示完整练习契约。足够具体的自然语言开始请求可以构成新 Program／Lesson 的授权；目标、
+范围、mastery、required gate、路径或所有权仍有重大歧义时才停下来确认。
+
+状态记录定义逻辑字段和写入事务，不规定固定 Markdown 模板。消费仓库可以把多个逻辑对象映射到一个
+文件，也可以分别保存，但同一语义只能有一个事实源。最小逻辑 schema 如下：
+
+| 对象 | 必填 | 条件字段 | 明确禁止 |
+| --- | --- | --- | --- |
+| Program | ID／标题、状态、目标范围、`candidate_lessons[]` 的有序短描述、`authorized_lesson_refs[]`（可为空） | `active_lesson_ref`、`suspended_lesson_ref`、`checkpoint_ref`、已有预算的唯一引用、连续推进授权、专项 parent／return 引用 | Lesson 证据与 finding、精确游标、Session 历史、实际工时明细、把候选描述写成已授权 Lesson |
+| Lesson | ID／能力标题、Program 引用、带角色与版本范围的来源、2–4 个目标及 required mastery 维度、阶段、本课专属证据目标 | 前置缺口、核心产物、已接受练习契约、durable findings、material assistance、event 索引、最终 mastery、无权威知识产物时的 3–6 行 fallback | 完整教学、逐题问答、命令输出、原始对话、暂停快照、逐轮 Review、重复 checklist／changelog、`paused` 状态 |
+| Session event | event ID／日期、Lesson 引用或独立主题标签、覆盖范围、实质完成动作 | 证据链接、未关闭问题、用户明确确认的时长 | 精确游标、完整会话摘要、逐轮问答、全部产物和 Lesson 状态副本 |
+| Checkpoint | 存在恢复任务时：前台上下文、精确语义位置、恰好一个下一动作、前进门槛 | 阻塞项、最近一项有效证据、专项返回点、随语义变化更新的 `as_of` | 完成内容长叙述、Session 历史、预算／cadence／隐私政策、finding 明细、多个下一动作、纯时间戳更新 |
+
+Program 状态使用 `planned | active | frozen | closed`；Lesson 阶段使用
+`teaching | synthesis | practice | review | mastery-gate | complete`。暂停 Session 不会把 Lesson 改成
+`paused`。独立 Session 可以只保存“主题标签＋event＋Checkpoint”，不自动升级为 Lesson；若后续需要
+长期目标、跨会话证据账本或正式 mastery，须由用户授权创建或并入 Course。
+
+`candidate_lessons[]` 只保存候选 ID／标题／顺序，不创建 Lesson，也不构成推进授权；只有
+`authorized_lesson_refs[]` 指向真实 Lesson；开放 Program 的两者至少一项非空。`active` Program 有前台
+Lesson 时使用 `active_lesson_ref`，正在等待下一课授权时它可以为 `none`。临时专项冻结原 Program 时，
+将原引用移入 `suspended_lesson_ref` 并保留其 `checkpoint_ref`／return capsule；`planned` 与 `closed`
+Program 的两个 Lesson 指针均为 `none`。`checkpoint_ref` 在已有可恢复上下文时必填；`planned` 尚未开始
+或 `closed` 且无返回任务时可以为 `none`。Lesson 边界等待用户决定时，Checkpoint 的唯一下一动作写成
+“等待授权下一 Lesson”；真正终态不伪造下一动作，而是移除 Checkpoint 引用。
+
+独立 Session 若进入正式练习，已接受的契约、测试或 rubric 可以作为练习工件单独保存并由 Checkpoint
+引用，尤其是在需要跨会话恢复或发生仓库写入时；它们不是新的 Session 状态层，也不会自动形成 Lesson
+或长期 mastery 账本。
+
+时间预算是条件字段，不是每个 Course 的固定开场问题。已有计划时只引用其唯一预算来源；普通 Course
+不为形式完整而追问预算。恢复已有状态只读且零写；新建状态、跨越耐久 gate、会话边界和关闭事务继续
+遵循 D10 与 D14。
+
+### D21：正式练习使用六块契约，Review 只维护稳定 finding
+
+综合验收仍有证据缺口且正式练习是最低充分路径时，Agent 一次性展示并请求接受以下六块：
+
+1. **为什么做**：目标 ID、缺失的 mastery 维度和现有证据缺口；
+2. **你交付什么**：任务与 learner-owned 核心产物；
+3. **怎样算通过**：带 ID 的可观察 acceptance，以及对应测试、rubric、命令或其他证据方法；
+4. **文件边界**：你写（learner-owned）、我维护（agent-owned）、我只读（read-only）、本次不动
+   （excluded）；
+5. **帮助如何影响证据**：允许自然语言求助；material hint 或 Agent 接管只影响对应范围，之后以无提示
+   同构新变式恢复独立证据；
+6. **非目标与完成门槛**：optional 单列；required acceptance 通过、required blocking／major finding
+   关闭，并满足已声明的解释、变式或实证要求。
+
+练习的最小持久数据包含：`id`、单调递增 `revision`、规范化内容 `digest`、目标与证据缺口、任务与
+交付、required `acceptance[]`、四类 scope、单列的 optional，以及绑定 `revision + digest` 的接受事件。
+每个 acceptance 至少保存 ID、可观察 criterion 和 evidence method；optional 使用同样形状但不进入 gate。
+每个 scope 条目至少保存相对路径／受限 pattern 或逻辑工件标识，以及该类别允许的操作；类别本身决定
+owner，操作只可从 read、create、modify、run、record 中取所需最小集合。任何目标、交付、acceptance、
+scope、optional 或 gate 的变化都生成新 revision／digest，并按 D7 重新授权，不能沿用旧接受事件。
+
+旧流程的 must-satisfy、代表案例、validation 和 completion definition 不再成为四套重复字段，而是合并
+进 required `acceptance[]`。代码练习在契约接受后由 Agent 建立验收工件；只有当验收目标是新增或待修
+行为、失败由预期缺口而非环境／fixture／harness 引起时，才把对应失败记为有效 expected red。不适合
+tests-first 的既有正确行为或非代码练习，改用基线、rubric、对照或其他可观察证据，并明确 expected red
+不适用。该动作属于已经授权的 Agent-owned 范围，不再要求第二次契约确认。
+
+每个 durable finding 只保存七类信息：
+
+```text
+ID；映射的目标／acceptance；严重度；责任人；状态；最小开启／终结证据；唯一下一动作
+```
+
+严重度为 `blocking | major | minor | suggestion`，状态为
+`open | closed | deferred | dismissed`。修改但尚未验证时仍为 `open`；`closed` 保存最小验证证据，
+`deferred`／`dismissed` 保存理由。同一根因只建一个 finding 并原地更新，不保存按轮复制的表或
+`learner-revised`、`needs-more-work` 等过程状态。required blocking／major 若要 deferred，须先由用户
+同意改变 gate。finding 是否 required 由其 `maps_to` 是否指向 required acceptance 或 required mastery
+维度唯一推导；契约外 observation 不得成为 required finding。`next_action` 只对 `open` 状态必填，进入
+终态后清空。Agent-owned 验收工件或环境故障由 Agent 自行处理，不伪装成 learner finding。
+
+一轮可以登记全部 findings，并以紧凑摘要全部向用户透明展示，但只激活最多三个 learner-owned 当前
+动作，按 blocking、major 和依赖顺序选择；Checkpoint 只指向其中第一个可执行动作。minor 和
+suggestion 默认不占当前动作槽、不阻塞结课。契约外 observation 明确保持在 gate 之外，除非用户同意
+扩大契约。
+
+material assistance 只按受影响范围覆盖保存：实际透露到的最高程度（自然语言）、受影响目标／
+acceptance／工件范围，以及 Agent 是否写入 learner-owned 核心工件。它不保存提示层号、轮数或提示全文；
+Agent 修复自己的测试、fixture 或记录不算 assistance。后续无提示新变式是否恢复独立证据，只写入对应
+mastery evidence，不在 assistance 中重复。
+
+结课展示一行一个“目标 × required mastery 维度”的矩阵，包含最小证据锚点与“充分／不足”；随后只列
+required blocking／major 未关闭数、assistance 影响是否已恢复、非阻塞余项和关闭建议。对于已授权
+Lesson，用户确认后才一次写入 final mastery，并在当段唯一 Session event 上标记 `closure`，随后移动到
+Lesson 边界 Checkpoint，不自动启动下一 Lesson；closure 不是额外的第二条 event。独立 Session 只展示
+并保存会话级 evidence、练习工件引用及带 `practice-closed` 标记的唯一 event，不写 final Lesson
+mastery；仍有后续恢复任务时才保留或覆盖 Checkpoint，真正终结时移除 Checkpoint。需要长期 mastery
+时先取得创建或并入 Lesson 的授权。
+
+### D22：`study-log` 只暴露自然语言模式，底层采用安全共享内核
+
+用户不需要知道脚本或参数。自然语言按以下意图路由：
+
+| 用户意图 | 模式与行为 |
+| --- | --- |
+| “整理学习记录、提取纠错／高价值问答、给制卡用” | `structured`；来源、边界和目标明确时直接生成新记录，已有逻辑记录先展示 diff 再确认 |
+| “保存原始对话、逐轮可见文本、用于审计或研究复盘” | `raw`；每次写入前确认来源、边界、partial／final、消息数、隐私和目标位置 |
+| “保存／存档这段对话” | 询问一次选择精炼学习记录，还是隐私风险更高的可追溯可见文本 |
+| “两种都要” | 分别生成；`raw` 仍单独确认 |
+
+`raw` 必须准确称为“可追溯可见文本对话”，不声称包含完整客户端 Session，也不声称已经匿名化；它默认
+排除 system、developer、reasoning、工具事件、客户端注入和附件正文。
+
+共享内核采用以下内部阶段，用户不需要记忆命令：
+
+```text
+list → preview → extract／render candidate → diff → atomic write
+```
+
+统一入口固定为 `scripts/study_log.py`。内部最小调用契约如下；具体 flag 拼写可以在实现时保持一致地
+选择，但不得省略所列输入、前置条件和输出：
+
+| 子命令 | 最小输入 | 输出／效果 |
+| --- | --- | --- |
+| `list` | provider（默认 auto）、规范化 project，date 可选 | 根会话候选、稳定 session ID、时间范围和消息数 |
+| `preview` | project 与 session ID 或显式 source | 稳定消息 ID、边界候选、隐私风险类别和 source SHA-256 |
+| `extract` | 已预览 source SHA-256、起止消息 ID、structured 清洗策略 | 仓库外临时的规范化可见消息及完整性告警，不直接写 structured 成品 |
+| `archive` | 已确认 source SHA-256、起止消息 ID、状态、目标／archive root、隐私决定；刷新／终结时必须再带 `archive_id` 与目标 SHA-256 | 新建时返回 archive ID 与规范目标；刷新／终结时原子更新指定 raw，或安全拒绝 |
+| `config archive-root get/set` | set 时为用户选择的绝对私有目录 | 读取或更新用户级配置，不修改消费仓库 |
+
+机器调用提供稳定 JSON 输出和错误码；结构化蒸馏仍由 Agent 完成，不塞进脚本。共享内核必须：
+
+- 自动发现 Claude Code 与 Codex 会话，并按规范化项目路径过滤根会话，修复 Windows Claude 路径映射
+  和旧 CWD 默认值；
+- 使用稳定消息 ID 作为首选边界；重复文本片段必须报歧义，不能任取第一个；
+- `structured` 临时提取最多容忍一个残缺尾行并显式告警，中间坏行仍失败；`raw` 始终严格失败；
+- 在预览与生成之间校验 source SHA-256，目标已存在时以已审阅目标 SHA-256 约束 overwrite；
+- 检查输出根 containment、符号链接／Windows junction 逃逸，并使用同目录临时文件原子替换；
+- 默认拒绝把 raw 写入仓库；用户坚持仓库内路径时先检查 Git 跟踪／忽略状态，绝不静默修改
+  `.gitignore`；
+- finalized raw 不覆盖；每个边界至多一个 partial，只有最终关闭时经 diff 和明确确认原位终结，不保存
+  每次刷新快照。
+
+私有 raw archive root 不设置隐式默认目录。首次真正保存 raw 时询问一次实际路径，随后保存在操作系统
+用户级配置中，而不是消费仓库配置中。解析优先级固定为：
+
+```text
+单次明确目标 > STUDY_LOG_ARCHIVE_ROOT > 用户级配置 > 缺失时安全停止并询问
+```
+
+默认布局为 `<private-root>/<project-name>-<path-hash>/<year>/...`，以路径 hash 区分同名仓库；partial／
+final 状态保存在元数据而不是文件名中。每条 raw 流使用稳定 `archive_id`，并至少保存 provider、project
+fingerprint、source session ID、起始消息 ID、当前结束消息 ID、`partial | final` 状态、source SHA-256、
+可见内容 SHA-256、目标前置 SHA-256 及清洗／脱敏策略版本。刷新 partial 必须保持 archive ID、source
+session 和起始消息不变，只可推进当前结束消息并更新哈希；改变起点或清洗身份必须新建 archive ID。
+`partial → final` 是一次经 diff 与确认的单向原子转换，final 不再覆盖。
+
+高置信度发现密码、令牌、私钥等凭据时，默认阻止 raw，直到用户缩小边界、改用 structured、采用可
+复现脱敏规则，或明确要求原样私存。公司代码、内部 API、未公开硬件／性能数据等专有内容触发显式警告
+和单独确认；若所有权或适用政策不清楚则安全停止。普通个人信息只警告并纳入同一确认卡。脱敏规则及其
+元数据必须可复现，不手工润色正文。
+
+现有 `study-log` 的跨 provider 发现、日期切片和临时工具摘要，与 `learn-by-practice` exporter 的规范化、
+phase、去重、语义／时间边界、哈希、严格解析和原子输出合并到这一内核。Exporter 参考与有效测试迁入
+`study-log` 并扩展 Claude／Windows／strict／overwrite 覆盖；固定学习档案初始化器不迁入。
+
+### D23：catalog 与验证采用机器可读替代关系，中央实现分四个独立边界
+
+catalog 在中央兼容版本固定升级为 `schema_version: 2`，支持多来源 lineage、生命周期、退役名称和选择
+互斥。机器可读形状至少包含顶层 `selection_groups`、`retired_names` 和 `skills[]`；每个 Skill 条目使用
+`lifecycle.state`，枚举仅为 `active | rollback-only`，并以 `groups[]` 声明所属选择组：
+
+- first-party 条目使用非空 `lineage[]`；每个来源保存仓库、原路径和 40 位固定提交，`guide-learning`
+  同时保存 `study-companion` 与 `learn-by-practice` 两条来源；external 条目继续保存官方 submodule 与 URL；
+- 活动条目标明 `active`；C2 中两个旧主学习入口标为 `rollback-only` 并提供
+  `replacement: guide-learning`，当前 catalog 中不可被新配置选择；
+- `selection_groups.primary-learning.max_distinct_per_config` 固定为 `1`；它允许同一个活动 Skill 同时
+  配置给 Codex 与 Claude，但一个消费配置不得选择两个不同的主学习入口；
+- M5 删除旧条目后，将旧名称移入机器可读 `retired_names` 映射，使 materializer 对旧配置给出替代建议，
+  而不是普通的 unknown Skill；这不是可发现 alias，也不保留旧 frontmatter。
+
+`replacement` 只允许出现在 rollback-only 条目或 `retired_names` 项中，并且沿替代链最终必须到达一个
+active Skill；活动名称、rollback-only 名称和 retired 名称不得重叠，替代链不得成环或悬空。validator
+必须检查这些约束以及 lineage、互斥组和现有路径规则；materializer 必须先拒绝 rollback-only／retired
+名称并显示最终 active 替代项，再拒绝跨 host 汇总后的互斥冲突，最后才构建复制计划。迁移兼容期只允许
+旧源码在中央树中供固定提交回滚，不允许同一消费仓库发现两个主学习入口。
+
+中央仓库验证面分为四层：
+
+1. **静态结构**：frontmatter、`agents/openai.yaml`、一级 references、catalog lineage／生命周期／互斥，
+   并禁止 `guide-learning` 含 PlanA 硬编码、斜杠命令或 JSONL 解析；
+2. **`study-log` 单元与安全测试**：两种 provider、Windows 项目映射、边界歧义、尾部残缺、raw strict、
+   source／target SHA-256 竞态、私有根、Git 拒绝、凭据／专有数据政策、稳定 archive ID、partial 终结和
+   临时文件清理；
+3. **`guide-learning` 前向测试**：一次答疑、独立 Session、持久 Course、未知知识不猜测、D4 微循环、
+   综合验收分流、带 revision／digest 的正式练习授权、material assistance、独立 Session 与 Lesson 的
+   不同关闭分支、暂停恢复、Lesson 关闭、临时专项和来源冲突；
+4. **集成测试**：活动与退役名称、同一 Skill 双 host、主入口互斥、空配置安全卸载，以及中央源码到两种
+   discovery 目录的 materialize／check。
+
+中央实现按四个可独立审查和回退的提交边界执行：**C0** 升级 catalog schema、validator、materializer
+与测试但不切换入口；**C1** 升级 `study-log` 并复制、改造 exporter 能力和测试，暂不破坏仍为 active
+的旧入口；**C2** 创建并验证 `guide-learning`，同时从旧所有者移除重复 exporter、把两个旧入口切为
+rollback-only；**C3** 更新中央说明和迁移基线并运行完整验证。任何一个边界失败都不进入消费仓库迁移。
+M0–M5 仍须等待公开远端就绪，并由用户另行授权启动。
+
 ## 当前禁止事项
 
-在用户确认最终实现设计并明确进入修改阶段前：
+在用户明确授权进入中央实现阶段前，以下中央仓库修改保持禁止：
 
 - 不修改 6 个学习类 Skill 的内容；
 - 不移动或删除 `study-log`、`learn-by-practice` 的脚本、参考资料和测试；
+- 不修改 catalog schema、validator、materializer 或其测试；
 - 不宣布任何旧 Skill 已被弃用；
-- 不修改 PlanA 或 programming-lab 的学习状态、进度、断点和文章；
-- 不创建、配置或推送 `agent-skills` 远端，也不在消费仓库添加本地路径 submodule；
-- 不把本文件中的候选设计解读为最终实现授权。
+- 不把已经确认的设计决定解读为开始修改 Skill、catalog 或工具的实现授权。
 
-## 下一阶段研究议程
+即使中央实现获得授权，以下外部与消费仓库动作仍持续禁止，直到公开远端已经由用户建立且用户另行
+明确授权启动 M0–M5：
 
-D1–D19 已完成角色、教学流程、证据门槛、状态写入、事实源、日志政策、最终身份、资源分层、退役与
-分阶段迁移的高层设计裁决。远端创建由用户另行完成，在用户通知就绪前不启动 M0–M5。
+- 不创建、配置或推送 `agent-skills` 远端；
+- 不修改 PlanA、programming-lab 或其他消费仓库的 submodule、Skill 配置、发现目录、文档或测试；
+- 不修改任何真实学习状态、进度、Checkpoint、文章或其他用户学习产物；
+- 不以本地路径 submodule、临时复制或提前 materialize 绕过独立迁移授权。
 
-下一阶段仍先完成实现前细化并由用户确认：
+## 设计完整性与下一阶段
 
-1. 开课契约、正式练习契约、Lesson、Session event、Checkpoint、finding 与 mastery 的最小 schema；
-2. `study-log` 共享提取内核的命令接口、私有 archive root 配置及脚本／测试的精确迁移清单；
-3. catalog 多来源 lineage、主学习互斥组和 materializer 旧名称错误提示的机器可读设计；
-4. 静态校验、脚本测试和覆盖三种运行范围、暂停恢复、正式练习、临时专项及两种日志模式的前向测试矩阵；
-5. 中央实现的提交边界和整体修改授权。消费仓库迁移在中央实现验证通过且公开远端就绪后另行启动。
+D1–D23 已完成本轮学习类 Skill 的职责边界、教学微循环、证据门槛、状态模型、事实源、日志策略、
+最终身份、资源分层、最小 schema、内部接口、catalog 替代关系、验证矩阵、实现提交边界、旧入口退役与
+分阶段迁移设计。当前没有仍需用户裁决的学习体验或实现方案缺口。
 
-每项继续先比较取舍、记录用户决定，再请求整体实现授权；未授权前不修改 Skill、catalog、同步工具或
-消费仓库。
+下一阶段是中央实现，不再是方案研究：依次完成 catalog／工具基础、`study-log`、`guide-learning` 和
+整体验证。开始修改 Skill、catalog 或同步工具前，仍需用户明确授权进入实现阶段。中央实现本身不依赖
+远端仓库；消费仓库迁移 M0–M5 则必须等待公开远端就绪，并由用户另行授权启动。
+
+本轮只完成 `guide-learning`、`study-log` 及两个旧主入口的退役／迁移方案。`english-coach`、
+`memo-cards`、`resource-planning` 保持独立的决定已经完成，但它们各自进一步的质量升级仍属于后续独立
+评审阶段，不构成当前中央实现的阻塞项。
