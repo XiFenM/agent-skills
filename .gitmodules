@@ -1,0 +1,9 @@
+[submodule "vendor/microsoft-playwright-cli"]
+	path = vendor/microsoft-playwright-cli
+	url = https://github.com/microsoft/playwright-cli.git
+[submodule "vendor/remotion-skills"]
+	path = vendor/remotion-skills
+	url = https://github.com/remotion-dev/skills.git
+[submodule "vendor/zenmux-skills"]
+	path = vendor/zenmux-skills
+	url = https://github.com/ZenMux/skills.git

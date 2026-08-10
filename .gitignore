@@ -1,0 +1,12 @@
+.venv/
+.uv-cache/
+.uv-python/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.agent-skills.lock
+.agent-skills.state.json
+.agent-skills.state.json.tmp-*
+.agent-skills-managed.json
+.*.agent-skills-tmp-*/
+.*.agent-skills-backup-*/

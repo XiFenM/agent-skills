@@ -1,0 +1,4 @@
+interface:
+  display_name: "Learn by Practice"
+  short_description: "Guide test-driven learning through practice and review"
+  default_prompt: "Use $learn-by-practice to teach me through explanation, agent-authored tests, test-driven practice, review, and documented mastery."

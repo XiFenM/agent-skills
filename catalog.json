@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "repository": "agent-skills",
+  "categories": {
+    "automation/browser": "浏览器自动化与网页测试",
+    "integration/zenmux": "ZenMux 配置、使用与资料查询",
+    "learning/coaching": "陪学、语言练习与交互式教学",
+    "learning/knowledge-management": "学习记录、记忆卡片与资源规划",
+    "media/video": "视频与媒体制作",
+    "workflow/content-production": "内容创作编排工作流"
+  },
+  "skills": [
+    {
+      "name": "creator-workflow",
+      "category": "workflow/content-production",
+      "kind": "first-party",
+      "path": "skills/creator-workflow",
+      "origin": {
+        "repository": "daily-work",
+        "path": ".agents/skills/creator-workflow",
+        "commit": "859e0d9e1791d6b471e4add920a4ac8ca1e0caf2"
+      },
+      "consumers": [
+        "daily-work"
+      ],
+      "migration": "verbatim",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "generalize-workflow",
+          "official-skill-routing-refresh"
+        ]
+      }
+    },
+    {
+      "name": "english-coach",
+      "category": "learning/coaching",
+      "kind": "first-party",
+      "path": "skills/english-coach",
+      "origin": {
+        "repository": "PlanA",
+        "path": ".claude/skills/english-coach",
+        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      },
+      "consumers": [
+        "PlanA"
+      ],
+      "migration": "verbatim",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "learning-workflow-boundary-review",
+          "consumer-relative-paths"
+        ]
+      }
+    },
+    {
+      "name": "learn-by-practice",
+      "category": "learning/coaching",
+      "kind": "first-party",
+      "path": "skills/learn-by-practice",
+      "origin": {
+        "repository": "programming-lab",
+        "path": "skills/learn-by-practice",
+        "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
+      },
+      "consumers": [
+        "programming-lab"
+      ],
+      "migration": "verbatim-plus-relocated-external-test",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "learning-workflow-boundary-review"
+        ]
+      }
+    },
+    {
+      "name": "memo-cards",
+      "category": "learning/knowledge-management",
+      "kind": "first-party",
+      "path": "skills/memo-cards",
+      "origin": {
+        "repository": "PlanA",
+        "path": ".claude/skills/memo-cards",
+        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      },
+      "consumers": [
+        "PlanA"
+      ],
+      "migration": "verbatim",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "learning-workflow-boundary-review",
+          "central-location-relative-link",
+          "consumer-relative-paths"
+        ]
+      }
+    },
+    {
+      "name": "resource-planning",
+      "category": "learning/knowledge-management",
+      "kind": "first-party",
+      "path": "skills/resource-planning",
+      "origin": {
+        "repository": "PlanA",
+        "path": ".claude/skills/resource-planning",
+        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      },
+      "consumers": [
+        "PlanA"
+      ],
+      "migration": "verbatim",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "learning-workflow-boundary-review",
+          "consumer-relative-paths"
+        ]
+      }
+    },
+    {
+      "name": "study-companion",
+      "category": "learning/coaching",
+      "kind": "first-party",
+      "path": "skills/study-companion",
+      "origin": {
+        "repository": "PlanA",
+        "path": ".claude/skills/study-companion",
+        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      },
+      "consumers": [
+        "PlanA"
+      ],
+      "migration": "verbatim",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "learning-workflow-boundary-review",
+          "consumer-relative-paths"
+        ]
+      }
+    },
+    {
+      "name": "study-log",
+      "category": "learning/knowledge-management",
+      "kind": "first-party",
+      "path": "skills/study-log",
+      "origin": {
+        "repository": "PlanA",
+        "path": ".claude/skills/study-log",
+        "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+      },
+      "consumers": [
+        "PlanA"
+      ],
+      "migration": "verbatim",
+      "review": {
+        "state": "pending",
+        "topics": [
+          "learning-workflow-boundary-review",
+          "consumer-relative-paths",
+          "cwd-dependent-script-defaults"
+        ]
+      }
+    },
+    {
+      "name": "playwright-cli",
+      "category": "automation/browser",
+      "kind": "external",
+      "path": "vendor/microsoft-playwright-cli/skills/playwright-cli",
+      "origin": {
+        "repository_url": "https://github.com/microsoft/playwright-cli.git",
+        "submodule": "vendor/microsoft-playwright-cli"
+      },
+      "consumers": [
+        "daily-work",
+        "PlanA"
+      ],
+      "migration": "official-reference-upstream-refresh",
+      "review": {
+        "state": "upstream-owned",
+        "topics": []
+      }
+    },
+    {
+      "name": "remotion-best-practices",
+      "category": "media/video",
+      "kind": "external",
+      "path": "vendor/remotion-skills/skills/remotion-best-practices",
+      "origin": {
+        "repository_url": "https://github.com/remotion-dev/skills.git",
+        "submodule": "vendor/remotion-skills"
+      },
+      "consumers": [
+        "daily-work"
+      ],
+      "migration": "official-reference-deduplicated",
+      "review": {
+        "state": "upstream-owned",
+        "topics": [
+          "old-entrypoint-calls-must-route-to-bundle"
+        ]
+      }
+    },
+    {
+      "name": "zenmux-context",
+      "category": "integration/zenmux",
+      "kind": "external",
+      "path": "vendor/zenmux-skills/skills/zenmux-context",
+      "origin": {
+        "repository_url": "https://github.com/ZenMux/skills.git",
+        "submodule": "vendor/zenmux-skills"
+      },
+      "consumers": [
+        "daily-work"
+      ],
+      "migration": "official-reference",
+      "review": {
+        "state": "upstream-owned",
+        "topics": []
+      }
+    },
+    {
+      "name": "zenmux-setup",
+      "category": "integration/zenmux",
+      "kind": "external",
+      "path": "vendor/zenmux-skills/skills/zenmux-setup",
+      "origin": {
+        "repository_url": "https://github.com/ZenMux/skills.git",
+        "submodule": "vendor/zenmux-skills"
+      },
+      "consumers": [
+        "daily-work"
+      ],
+      "migration": "official-reference",
+      "review": {
+        "state": "upstream-owned",
+        "topics": []
+      }
+    },
+    {
+      "name": "zenmux-usage",
+      "category": "integration/zenmux",
+      "kind": "external",
+      "path": "vendor/zenmux-skills/skills/zenmux-usage",
+      "origin": {
+        "repository_url": "https://github.com/ZenMux/skills.git",
+        "submodule": "vendor/zenmux-skills"
+      },
+      "consumers": [
+        "daily-work"
+      ],
+      "migration": "official-reference",
+      "review": {
+        "state": "upstream-owned",
+        "topics": []
+      }
+    }
+  ]
+}

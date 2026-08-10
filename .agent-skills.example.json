@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "source": ".agent-skills",
+  "skills": {
+    "study-companion": [
+      "codex",
+      "claude"
+    ],
+    "study-log": [
+      "codex",
+      "claude"
+    ]
+  }
+}
