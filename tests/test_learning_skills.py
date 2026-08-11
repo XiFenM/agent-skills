@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE_ROOT = ROOT / "skills" / "guide-learning"
-LEGACY_ROOT = ROOT / "skills" / "learn-by-practice"
+RETIRED_SKILL_NAMES = {"learn-by-practice", "study-companion"}
 
 REFERENCE_FILES = {
     "examples.md",
@@ -102,26 +102,16 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
     assert slash_command.search(combined) is None
 
 
-def test_legacy_learning_skill_no_longer_owns_dialogue_export() -> None:
-    assert list(ROOT.rglob("export_codex_dialogue.py")) == []
-    assert list(ROOT.rglob("dialogue-archive.md")) == []
+def test_retired_learning_skills_leave_no_runtime_entry_or_route() -> None:
+    skills_root = ROOT / "skills"
+    for name in RETIRED_SKILL_NAMES:
+        assert not (skills_root / name).exists()
 
-    legacy_text = "\n".join(
-        path.read_text(encoding="utf-8") for path in _text_files(LEGACY_ROOT)
+    assert list(skills_root.rglob("export_codex_dialogue.py")) == []
+    assert list(skills_root.rglob("dialogue-archive.md")) == []
+
+    active_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in _text_files(skills_root)
     )
-    assert "export_codex_dialogue.py" not in legacy_text
-    assert "dialogue-archive.md" not in legacy_text
-    assert "study-log" in (LEGACY_ROOT / "SKILL.md").read_text(encoding="utf-8")
-
-    normalized = legacy_text.lower()
-    for forbidden in (
-        "dialogues/",
-        'path("dialogues")',
-        '"dialogues",',
-        "post-hoc dialogue archive",
-        "raw dialogue",
-        "dialogue snapshot",
-        "dialogue index",
-        "not exported",
-    ):
-        assert forbidden not in normalized
+    for name in RETIRED_SKILL_NAMES:
+        assert name not in active_text

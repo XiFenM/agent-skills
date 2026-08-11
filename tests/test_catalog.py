@@ -52,27 +52,22 @@ class CatalogTests(unittest.TestCase):
             ],
             1,
         )
-        self.assertEqual(catalog["retired_names"], {})
+        self.assertEqual(
+            catalog["retired_names"],
+            {
+                "learn-by-practice": {"replacement": "guide-learning"},
+                "study-companion": {"replacement": "guide-learning"},
+            },
+        )
 
         primary = set()
         active_primary = set()
-        expected_rollback = {
-            "learn-by-practice": "guide-learning",
-            "study-companion": "guide-learning",
-        }
         for item in catalog["skills"]:
             with self.subTest(skill=item["name"]):
                 state = item["lifecycle"]["state"]
-                self.assertIn(state, {"active", "rollback-only"})
+                self.assertEqual(state, "active")
                 self.assertIsInstance(item["groups"], list)
-                if item["name"] in expected_rollback:
-                    self.assertEqual(state, "rollback-only")
-                    self.assertEqual(
-                        item["replacement"], expected_rollback[item["name"]]
-                    )
-                else:
-                    self.assertEqual(state, "active")
-                    self.assertNotIn("replacement", item)
+                self.assertNotIn("replacement", item)
                 if item["kind"] == "first-party":
                     self.assertTrue(item["lineage"])
                     self.assertNotIn("origin", item)
@@ -80,10 +75,7 @@ class CatalogTests(unittest.TestCase):
                     primary.add(item["name"])
                     if state == "active":
                         active_primary.add(item["name"])
-        self.assertEqual(
-            primary,
-            {"guide-learning", "learn-by-practice", "study-companion"},
-        )
+        self.assertEqual(primary, {"guide-learning"})
         self.assertEqual(active_primary, {"guide-learning"})
 
     def test_learning_upgrade_lineage_and_review_are_recorded(self) -> None:
@@ -110,20 +102,15 @@ class CatalogTests(unittest.TestCase):
             ],
         )
 
-        for legacy_name in ("learn-by-practice", "study-companion"):
-            with self.subTest(legacy=legacy_name):
-                legacy = by_name[legacy_name]
-                self.assertEqual(
-                    legacy["migration"],
-                    "rollback-source-merged-into-guide-learning",
-                )
-                self.assertEqual(
-                    legacy["review"],
-                    {
-                        "state": "implemented",
-                        "topics": ["merged-into-guide-learning"],
-                    },
-                )
+        self.assertNotIn("learn-by-practice", by_name)
+        self.assertNotIn("study-companion", by_name)
+        self.assertEqual(
+            catalog["retired_names"],
+            {
+                "learn-by-practice": {"replacement": "guide-learning"},
+                "study-companion": {"replacement": "guide-learning"},
+            },
+        )
 
         study_log = by_name["study-log"]
         self.assertEqual(study_log["review"]["state"], "implemented")
@@ -151,10 +138,8 @@ class CatalogTests(unittest.TestCase):
                 "creator-workflow",
                 "english-coach",
                 "guide-learning",
-                "learn-by-practice",
                 "memo-cards",
                 "resource-planning",
-                "study-companion",
                 "study-log",
             },
         )
@@ -213,11 +198,10 @@ class CatalogTests(unittest.TestCase):
     def test_validator_rejects_replacement_cycles_and_dangling_targets(self) -> None:
         root, original = self.catalog_fixture()
         catalog = deepcopy(original)
-        by_name = {item["name"]: item for item in catalog["skills"]}
-        by_name["learn-by-practice"]["lifecycle"] = {"state": "rollback-only"}
-        by_name["learn-by-practice"]["replacement"] = "study-companion"
-        by_name["study-companion"]["lifecycle"] = {"state": "rollback-only"}
-        by_name["study-companion"]["replacement"] = "learn-by-practice"
+        catalog["retired_names"] = {
+            "learn-by-practice": {"replacement": "study-companion"},
+            "study-companion": {"replacement": "learn-by-practice"},
+        }
         self.write_fixture_catalog(root, catalog)
         self.assertTrue(
             any(

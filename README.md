@@ -1,11 +1,11 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换与 PlanA 的 M4 双 host 切换均已完成并发布，只有中央旧入口删除 M5 仍需用户另行授权。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换与 PlanA 的 M4 双 host 切换均已完成并发布，M5 已获授权并进入中央旧入口退役与消费者指针升级阶段。
 
 ## 当前范围
 
-- [`skills/`](skills/) 中保留 8 个 first-party Skill 目录。其中 6 个为 active：`guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning`、`creator-workflow`。
-- `study-companion` 与 `learn-by-practice` 作为 rollback-only 源码保留，统一替代项为 `guide-learning`；新消费配置不能再选择这两个旧入口。
+- [`skills/`](skills/) 中保留 6 个 active first-party Skill：`guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning`、`creator-workflow`。
+- `study-companion` 与 `learn-by-practice` 已从中央源码树删除并登记为 retired name，统一替代项为 `guide-learning`；兼容源码仍可从 `learning-core-v1` 标签恢复，但不再提供可发现入口。
 - 5 个 external Skill 从 3 个官方 Git 子模块读取；不在本仓库复制第三方源码。
 - PlanA 的 PyTorch、SGLang、vLLM 源码子模块自带 Skill 不迁移、不登记。
 - Remotion 只暴露官方聚合入口 `remotion-best-practices`，不再保留功能重复的独立入口。
@@ -18,7 +18,7 @@
 
 ```text
 agent-skills/
-├── skills/                    # first-party Skill 的规范源码及回滚源码
+├── skills/                    # active first-party Skill 的规范源码
 ├── vendor/                    # 第三方官方仓库（Git submodule）
 ├── tools/                     # 清单校验与消费仓库同步工具
 ├── tests/                     # 仓库级测试
@@ -28,7 +28,7 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，M1 已将 `learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 冻结为唯一迁移输入，M2 已在 PlanA 与 programming-lab 接入空配置管线且未改变当时的 Skill 发现；M3 已在 programming-lab 完成并发布 Codex 单仓金丝雀切换，M4 已在 PlanA 完成并发布双 host 切换，M5 中央旧入口删除尚未开始。以下是消费配置的通用形状；programming-lab 当前只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`：
+消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，M1 已将 `learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 冻结为唯一迁移输入，M2 已在 PlanA 与 programming-lab 接入空配置管线且未改变当时的 Skill 发现；M3 已在 programming-lab 完成并发布 Codex 单仓金丝雀切换，M4 已在 PlanA 完成并发布双 host 切换，M5 已在中央完成旧入口退役，两个消费者将在本阶段后续升级到该中央提交。以下是消费配置的通用形状；programming-lab 当前只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`：
 
 ```json
 {
@@ -89,9 +89,9 @@ uv run --no-project python .agent-skills/tools/materialize_skills.py --repo . --
 
 ```powershell
 uv run --cache-dir .uv-cache --no-project python tools/validate_catalog.py
-uv run --cache-dir .uv-cache --no-project --with pytest python -m pytest tests skills/study-log/tests skills/learn-by-practice/tests -v
+uv run --cache-dir .uv-cache --no-project --with pytest python -m pytest tests skills/study-log/tests -v
 ```
 
-第二条命令同时覆盖仓库级测试、`study-log` 单元与安全测试，以及 rollback-only `learn-by-practice` 中仍保留的学习档案初始化器测试。
+第二条命令同时覆盖仓库级测试以及 `study-log` 单元与安全测试。
 
 第三方版本由 `.gitmodules` 与 Git submodule 指针共同固定。更新第三方来源时，应先审阅上游变更，再更新对应指针和运行校验。

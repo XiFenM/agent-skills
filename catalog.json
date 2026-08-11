@@ -6,7 +6,14 @@
       "max_distinct_per_config": 1
     }
   },
-  "retired_names": {},
+  "retired_names": {
+    "learn-by-practice": {
+      "replacement": "guide-learning"
+    },
+    "study-companion": {
+      "replacement": "guide-learning"
+    }
+  },
   "categories": {
     "automation/browser": "浏览器自动化与网页测试",
     "integration/zenmux": "ZenMux 配置、使用与资料查询",
@@ -106,36 +113,6 @@
       }
     },
     {
-      "name": "learn-by-practice",
-      "category": "learning/coaching",
-      "kind": "first-party",
-      "path": "skills/learn-by-practice",
-      "lineage": [
-        {
-          "repository": "programming-lab",
-          "path": "skills/learn-by-practice",
-          "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
-        }
-      ],
-      "lifecycle": {
-        "state": "rollback-only"
-      },
-      "replacement": "guide-learning",
-      "groups": [
-        "primary-learning"
-      ],
-      "consumers": [
-        "programming-lab"
-      ],
-      "migration": "rollback-source-merged-into-guide-learning",
-      "review": {
-        "state": "implemented",
-        "topics": [
-          "merged-into-guide-learning"
-        ]
-      }
-    },
-    {
       "name": "memo-cards",
       "category": "learning/knowledge-management",
       "kind": "first-party",
@@ -189,36 +166,6 @@
         "topics": [
           "learning-workflow-boundary-review",
           "consumer-relative-paths"
-        ]
-      }
-    },
-    {
-      "name": "study-companion",
-      "category": "learning/coaching",
-      "kind": "first-party",
-      "path": "skills/study-companion",
-      "lineage": [
-        {
-          "repository": "PlanA",
-          "path": ".claude/skills/study-companion",
-          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
-        }
-      ],
-      "lifecycle": {
-        "state": "rollback-only"
-      },
-      "replacement": "guide-learning",
-      "groups": [
-        "primary-learning"
-      ],
-      "consumers": [
-        "PlanA"
-      ],
-      "migration": "rollback-source-merged-into-guide-learning",
-      "review": {
-        "state": "implemented",
-        "topics": [
-          "merged-into-guide-learning"
         ]
       }
     },
