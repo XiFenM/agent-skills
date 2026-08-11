@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；消费仓库迁移仍未开始，需要用户另行授权。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换也已完成并发布，PlanA M4 与中央旧入口删除 M5 仍需用户另行授权。
 
 ## 当前范围
 
@@ -28,7 +28,7 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库迁移启动后，每个消费仓库将从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，M1 已将 `learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 冻结为唯一迁移输入，M2 已在 PlanA 与 programming-lab 接入空配置管线且未改变现有 Skill 发现；M3–M5 尚未开始。以下是后续切换获单独授权后的配置形状，不表示现有消费仓库已经启用中央 Skill：
+消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，M1 已将 `learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 冻结为唯一迁移输入，M2 已在 PlanA 与 programming-lab 接入空配置管线且未改变当时的 Skill 发现；M3 已在 programming-lab 完成并发布 Codex 单仓金丝雀切换，M4 PlanA 切换与 M5 中央旧入口删除尚未开始。以下是消费配置的通用形状；programming-lab 当前只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 尚未启用中央 Skill：
 
 ```json
 {
