@@ -2,7 +2,7 @@
   "version": 1,
   "source": ".agent-skills",
   "skills": {
-    "study-companion": [
+    "guide-learning": [
       "codex",
       "claude"
     ],

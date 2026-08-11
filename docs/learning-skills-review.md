@@ -1,7 +1,7 @@
 # 学习类 Skill 合并升级决策与评审记录
 
-本文记录学习类 Skill 在质量评估与合并升级阶段的已确认决策、实现设计和后续迁移边界。
-除非另有明确记录，本文中的“目标状态”不表示相关 `SKILL.md`、脚本或消费仓库已经完成修改。
+本文记录学习类 Skill 在质量评估与合并升级阶段的已确认决策、中央实现和后续迁移边界。
+用户已授权并完成 D23 定义的中央 C0–C3；因此本文所述 `guide-learning`、`study-log`、catalog 和中央验证状态已经落地。远端发布、消费仓库修改和 M0–M5 仍只是已确认设计，尚未获迁移授权或执行。
 
 ## 当前范围
 
@@ -37,8 +37,7 @@
 - `learn-by-practice` 如需学习记录或对话材料，应调用 `study-log` 或消费其产物，而不是维护第二套实现。
 
 两种输出模式的触发、默认路径、覆盖、Git 与保留政策在 D16 确定；自然语言路由、共享内核、仓库外
-私有根配置、安全写入和脚本／测试迁移边界在 D22 确定。具体代码尚未实现，但不存在待裁决的交互或
-所有权问题。
+私有根配置、安全写入和脚本／测试迁移边界在 D22 确定，并已在 C1–C2 实现和验证。
 
 ### D3：`study-companion` 与 `learn-by-practice` 合并升级
 
@@ -49,8 +48,8 @@
 
 - 合并后的唯一主 Skill 已在 D17 定名为 `guide-learning`，显示名为 “Guided Learning / 学习带练”；
 - 精简主入口与按需 references 的目标目录已经在 D18 确定；最小状态、练习、finding 与 mastery schema
-  已在 D20–D21 确定，最终 reference 文本属于实现工作；
-- 教学微循环已在 D4 确定，检查题设计与纠错规则已在 D12 确定；关键节点场景由 D23 的前向测试验证；
+  已在 D20–D21 确定，并已落实到 `guide-learning` 的主入口与一级 references；
+- 教学微循环已在 D4 确定，检查题设计与纠错规则已在 D12 确定；关键节点场景已纳入 D23 的中央验证；
 - 微动作、综合验收与正式练习的衔接已在 D5 确定，提示梯度与 mastery 证据已在 D12–D13 确定；
   最小练习契约、finding 和结课证据投影已在 D21 确定；
 - PlanA 的事实源角色和“不创建第二套通用档案树”已在 D6 确定；现有文件的一义映射与分阶段精简迁移
@@ -58,7 +57,7 @@
 - Session、Lesson、Program、mastery 和文章状态的分离已在 D6 确定，稀疏写入时机和所有权已在 D14
   确定；具体逻辑 schema 已在 D20 确定；
 - PlanA 事实源映射与消费仓库适配职责已在 D15 确定；旧文件的分阶段迁移、兼容窗口和退役顺序已在
-  D19 确定，具体变更仍须等待整体实现授权。
+  D19 确定。中央兼容状态已完成；PlanA 的具体变更仍须等待 M4 的独立迁移授权。
 
 ### D4：教学微循环采用“先讲关键节点，再检查理解”
 
@@ -575,8 +574,8 @@ schema、场景与变体不在主入口重复。
 - `learning-archive.md` 拆入 `state-records.md`、`repository-adaptation.md` 和 `source-authority.md`；
 - `practice-review-mastery.md` 保留文件名但按 D5、D7、D12、D13 大幅重写；
 - `dialogue-archive.md`、`export_codex_dialogue.py` 及其有效测试迁入唯一所有者 `study-log`；
-- 316 行 Lesson 模板、固定 archive index 和 `init_learning_archive.py` 退出，不提供替代的固定档案树；
-- 初始化器测试随已退出脚本删除；exporter 测试迁往 `study-log`，不得在两个 Skill 中保留副本。
+- 316 行 Lesson 模板、固定 archive index 和 `init_learning_archive.py` 在 M5 随旧目录退出，不提供替代的固定档案树；
+- 初始化器测试在 M5 随已退出脚本删除；exporter 测试迁往 `study-log`，不得在两个 Skill 中保留副本。
 
 静态结构检查和教学行为前向测试属于中央仓库级验证面，不进入运行时 Skill 目录。至少验证 frontmatter
 与 `agents/openai.yaml` 一致、所有一级 reference 可达、主入口无 PlanA 路径／斜杠命令／JSONL 解析，
@@ -587,10 +586,10 @@ schema、场景与变体不在主入口重复。
 
 正式中央远端确定为公开的 `XiFenM/agent-skills`。消费仓库的 `.gitmodules` 使用相对 URL
 `../agent-skills.git`，使其随父仓库继承 SSH 或 HTTPS 协议，并允许公开消费仓库匿名递归克隆。当前
-中央仓库尚未配置远端；由用户在分阶段迁移开始前创建公开仓库。本阶段不创建远端、不发布、不加入
-本地路径 submodule，也不因该前置条件暂停其余设计工作。
+中央仓库尚未配置远端；由用户在分阶段迁移开始前创建公开仓库。C0–C3 没有创建远端、发布或加入
+本地路径 submodule，也没有因该前置条件暂停中央实现。
 
-中央实现先按 D23 的 C0–C3 在本地完成并验证；它不属于 M0–M5，也不要求远端提前存在。远端就绪后，
+中央实现已按 D23 的 C0–C3 在本地完成并验证；它不属于 M0–M5，也不要求远端提前存在。远端就绪后，
 迁移按以下阶段执行：
 
 1. **M0，发布中央来源**：远端就绪后推送已经通过 C0–C3 验证的完整历史，并分别为中央实现前基线和
@@ -757,8 +756,8 @@ mastery；仍有后续恢复任务时才保留或覆盖 Checkpoint，真正终�
 list → preview → extract／render candidate → diff → atomic write
 ```
 
-统一入口固定为 `scripts/study_log.py`。内部最小调用契约如下；具体 flag 拼写可以在实现时保持一致地
-选择，但不得省略所列输入、前置条件和输出：
+统一入口固定为 `scripts/study_log.py`。已实现的内部最小调用契约如下；具体 flag 拼写以脚本为准，
+不得省略所列输入、前置条件和输出：
 
 | 子命令 | 最小输入 | 输出／效果 |
 | --- | --- | --- |
@@ -838,40 +837,32 @@ active Skill；活动名称、rollback-only 名称和 retired 名称不得重叠
 4. **集成测试**：活动与退役名称、同一 Skill 双 host、主入口互斥、空配置安全卸载，以及中央源码到两种
    discovery 目录的 materialize／check。
 
-中央实现按四个可独立审查和回退的提交边界执行：**C0** 升级 catalog schema、validator、materializer
-与测试但不切换入口；**C1** 升级 `study-log` 并复制、改造 exporter 能力和测试，暂不破坏仍为 active
+中央实现已经按四个可独立审查和回退的提交边界完成：**C0** 升级 catalog schema、validator、materializer
+与测试但不切换入口；**C1** 升级 `study-log` 并复制、改造 exporter 能力和测试，暂不破坏当时仍为 active
 的旧入口；**C2** 创建并验证 `guide-learning`，同时从旧所有者移除重复 exporter、把两个旧入口切为
-rollback-only；**C3** 更新中央说明和迁移基线并运行完整验证。任何一个边界失败都不进入消费仓库迁移。
+rollback-only；**C3** 更新中央说明和迁移基线并运行完整验证。C0–C3 不包含任何消费仓库迁移。
 M0–M5 仍须等待公开远端就绪，并由用户另行授权启动。
 
-## 当前禁止事项
+## 后续仍禁止事项
 
-在用户明确授权进入中央实现阶段前，以下中央仓库修改保持禁止：
-
-- 不修改 6 个学习类 Skill 的内容；
-- 不移动或删除 `study-log`、`learn-by-practice` 的脚本、参考资料和测试；
-- 不修改 catalog schema、validator、materializer 或其测试；
-- 不宣布任何旧 Skill 已被弃用；
-- 不把已经确认的设计决定解读为开始修改 Skill、catalog 或工具的实现授权。
-
-即使中央实现获得授权，以下外部与消费仓库动作仍持续禁止，直到公开远端已经由用户建立且用户另行
-明确授权启动 M0–M5：
+中央 C0–C3 已获用户授权并完成。以下外部与消费仓库动作仍持续禁止，直到公开远端已经由用户建立且
+用户另行明确授权启动 M0–M5：
 
 - 不创建、配置或推送 `agent-skills` 远端；
 - 不修改 PlanA、programming-lab 或其他消费仓库的 submodule、Skill 配置、发现目录、文档或测试；
 - 不修改任何真实学习状态、进度、Checkpoint、文章或其他用户学习产物；
 - 不以本地路径 submodule、临时复制或提前 materialize 绕过独立迁移授权。
 
-## 设计完整性与下一阶段
+## 完成状态与后续边界
 
 D1–D23 已完成本轮学习类 Skill 的职责边界、教学微循环、证据门槛、状态模型、事实源、日志策略、
 最终身份、资源分层、最小 schema、内部接口、catalog 替代关系、验证矩阵、实现提交边界、旧入口退役与
 分阶段迁移设计。当前没有仍需用户裁决的学习体验或实现方案缺口。
 
-下一阶段是中央实现，不再是方案研究：依次完成 catalog／工具基础、`study-log`、`guide-learning` 和
-整体验证。开始修改 Skill、catalog 或同步工具前，仍需用户明确授权进入实现阶段。中央实现本身不依赖
-远端仓库；消费仓库迁移 M0–M5 则必须等待公开远端就绪，并由用户另行授权启动。
+中央 C0–C3 已完成 catalog／工具基础、`study-log`、`guide-learning`、旧入口 rollback-only 切换、中央文档
+和整体验证。下一阶段不是继续修改中央学习核心，而是在公开远端就绪且用户另行授权后执行 M0–M5；
+在此之前不创建或推送远端，也不修改任何消费仓库。
 
-本轮只完成 `guide-learning`、`study-log` 及两个旧主入口的退役／迁移方案。`english-coach`、
-`memo-cards`、`resource-planning` 保持独立的决定已经完成，但它们各自进一步的质量升级仍属于后续独立
-评审阶段，不构成当前中央实现的阻塞项。
+本轮中央实现只覆盖 `guide-learning`、`study-log` 及两个旧主入口的 rollback-only 兼容状态；旧入口从
+消费仓库退役仍属于 M3–M5。`english-coach`、`memo-cards`、`resource-planning` 保持独立的决定已经完成，
+但它们各自进一步的质量升级仍属于后续独立评审阶段，不构成当前学习核心的阻塞项。

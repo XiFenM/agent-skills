@@ -1,21 +1,24 @@
 # Agent Skills
 
-这是三个学习/工作主仓库的 Skill 规范源。第一阶段只做迁移、分类、来源固定和可重复校验；质量评分、功能合并及内容升级会在后续逐项讨论并经确认后进行。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验；消费仓库迁移以及中央远端的创建、配置和推送尚未开始，仍需用户另行授权。
 
 ## 当前范围
 
-- 7 个自创 Skill 保存在 [`skills/`](skills/)；迁移时保留原内容。
-- 5 个第三方 Skill 从 3 个官方 Git 子模块读取；不在本仓库复制第三方源码。
+- [`skills/`](skills/) 中保留 8 个 first-party Skill 目录。其中 6 个为 active：`guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning`、`creator-workflow`。
+- `study-companion` 与 `learn-by-practice` 作为 rollback-only 源码保留，统一替代项为 `guide-learning`；新消费配置不能再选择这两个旧入口。
+- 5 个 external Skill 从 3 个官方 Git 子模块读取；不在本仓库复制第三方源码。
 - PlanA 的 PyTorch、SGLang、vLLM 源码子模块自带 Skill 不迁移、不登记。
 - Remotion 只暴露官方聚合入口 `remotion-best-practices`，不再保留功能重复的独立入口。
 
-完整来源、分类、状态和消费仓库记录在 [`catalog.json`](catalog.json)，迁移边界及已知问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的已确认合并方向和待研究问题记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
+完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
+
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D23 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
 
 ## 目录
 
 ```text
 agent-skills/
-├── skills/                    # 自创 Skill 的唯一规范副本
+├── skills/                    # first-party Skill 的规范源码及回滚源码
 ├── vendor/                    # 第三方官方仓库（Git submodule）
 ├── tools/                     # 清单校验与消费仓库同步工具
 ├── tests/                     # 仓库级测试
@@ -25,14 +28,15 @@ agent-skills/
 
 ## 消费方式
 
-后续每个消费仓库把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`：
+消费仓库迁移启动后，每个消费仓库将从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。当前远端尚未创建或配置，M0–M5 也尚未开始；以下是迁移获单独授权后的配置形状，不表示现有消费仓库已经切换：
 
 ```json
 {
   "version": 1,
   "source": ".agent-skills",
   "skills": {
-    "study-companion": ["codex", "claude"]
+    "guide-learning": ["codex", "claude"],
+    "study-log": ["codex", "claude"]
   }
 }
 ```
@@ -84,8 +88,10 @@ uv run --no-project python .agent-skills/tools/materialize_skills.py --repo . --
 ## 本仓库校验
 
 ```powershell
-uv run --no-project python tools/validate_catalog.py
-uv run --no-project python -m unittest discover -s tests -v
+uv run --cache-dir .uv-cache --no-project python tools/validate_catalog.py
+uv run --cache-dir .uv-cache --no-project --with pytest python -m pytest tests skills/study-log/tests skills/learn-by-practice/tests -v
 ```
+
+第二条命令同时覆盖仓库级测试、`study-log` 单元与安全测试，以及 rollback-only `learn-by-practice` 中仍保留的学习档案初始化器测试。
 
 第三方版本由 `.gitmodules` 与 Git submodule 指针共同固定。更新第三方来源时，应先审阅上游变更，再更新对应指针和运行校验。
