@@ -1,7 +1,7 @@
 # 学习类 Skill 合并升级决策与评审记录
 
 本文记录学习类 Skill 在质量评估与合并升级阶段的已确认决策、中央实现和后续迁移边界。
-用户已授权并完成 D23 定义的中央 C0–C3；因此本文所述 `guide-learning`、`study-log`、catalog 和中央验证状态已经落地。2026-08-11 又经单独授权完成 M0 中央发布；消费仓库修改和 M1–M5 仍只是已确认设计，尚未获迁移授权或执行。
+用户已授权并完成 D23 定义的中央 C0–C3；因此本文所述 `guide-learning`、`study-log`、catalog 和中央验证状态已经落地。2026-08-11 又经单独授权完成 M0 中央发布与 M1 迁移输入冻结；消费仓库修改和 M2–M5 仍只是已确认设计，尚未获迁移授权或执行。
 
 ## 当前范围
 
@@ -594,9 +594,10 @@ schema、场景与变体不在主入口重复。
 
 1. **M0，发布中央来源（已完成）**：已推送通过 C0–C3 验证的完整历史；
    `learning-core-pre-implementation` 固定中央实现前基线，`learning-core-v1` 固定合并兼容版本。
-2. **M1，冻结迁移输入**：从远端全新克隆并复验兼容提交，确认 `guide-learning`、升级后的
-   `study-log`、两个 rollback-only 旧源码、catalog lineage／retired 提示和 materializer 行为与本地验证
-   一致；记录唯一中央提交供 M2–M4 固定引用，不在本阶段重新实现 Skill。
+2. **M1，冻结迁移输入（已完成）**：已从远端全新递归克隆并复验 `learning-core-v1`，确认
+   `guide-learning`、升级后的 `study-log`、两个 rollback-only 旧源码、catalog、三个官方子模块及
+   materializer 行为与本地验证一致；M2–M4 唯一固定输入为
+   `b2afd92854d57a375fdf990028c31561118cf8ec`，本阶段没有重新实现 Skill 或修改真实消费仓库。
 3. **M2，消费仓库空管线**：PlanA 与 programming-lab 先分别提交 `.agent-skills` submodule、
    `.agent-skills.json`、生成目录／state／lock 忽略规则和安装校验说明；配置暂设 `"skills": {}`，不改变
    当时的 Skill 发现状态。
@@ -841,12 +842,12 @@ active Skill；活动名称、rollback-only 名称和 retired 名称不得重叠
 与测试但不切换入口；**C1** 升级 `study-log` 并复制、改造 exporter 能力和测试，暂不破坏当时仍为 active
 的旧入口；**C2** 创建并验证 `guide-learning`，同时从旧所有者移除重复 exporter、把两个旧入口切为
 rollback-only；**C3** 更新中央说明和迁移基线并运行完整验证。C0–C3 不包含任何消费仓库迁移。
-M0 已经完成；M1–M5 仍须由用户另行授权启动。
+M0–M1 已经完成；M2–M5 仍须由用户另行授权启动。
 
 ## 后续仍禁止事项
 
-中央 C0–C3 与 M0 已获用户授权并完成。以下消费仓库动作仍持续禁止，直到用户另行明确授权启动
-M1–M5：
+中央 C0–C3 与 M0–M1 已获用户授权并完成。以下消费仓库动作仍持续禁止，直到用户另行明确授权启动
+M2–M5：
 
 - 不修改 PlanA、programming-lab 或其他消费仓库的 submodule、Skill 配置、发现目录、文档或测试；
 - 不修改任何真实学习状态、进度、Checkpoint、文章或其他用户学习产物；
@@ -859,8 +860,8 @@ D1–D23 已完成本轮学习类 Skill 的职责边界、教学微循环、证�
 分阶段迁移设计。当前没有仍需用户裁决的学习体验或实现方案缺口。
 
 中央 C0–C3 已完成 catalog／工具基础、`study-log`、`guide-learning`、旧入口 rollback-only 切换、中央文档
-和整体验证，M0 已完成公开远端发布。下一阶段是在用户另行授权后执行 M1–M5；在此之前不修改任何
-消费仓库。
+和整体验证，M0 已完成公开远端发布，M1 已冻结并复验唯一迁移输入。下一阶段是在用户另行授权后执行
+M2–M5；在此之前不修改任何消费仓库。
 
 本轮中央实现只覆盖 `guide-learning`、`study-log` 及两个旧主入口的 rollback-only 兼容状态；旧入口从
 消费仓库退役仍属于 M3–M5。`english-coach`、`memo-cards`、`resource-planning` 保持独立的决定已经完成，

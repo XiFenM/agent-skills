@@ -28,7 +28,7 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库迁移启动后，每个消费仓库将从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，并保留 `learning-core-pre-implementation` 与 `learning-core-v1` 两个回滚标签；M1–M5 尚未开始。以下是消费迁移获单独授权后的配置形状，不表示现有消费仓库已经切换：
+消费仓库迁移启动后，每个消费仓库将从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，M1 已从远端复验并将 `learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 冻结为 M2–M4 的唯一迁移输入；M2–M5 尚未开始。以下是消费迁移获单独授权后的配置形状，不表示现有消费仓库已经切换：
 
 ```json
 {

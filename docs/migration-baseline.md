@@ -51,7 +51,8 @@ ZenMux 官方仓库中当前还有其他 Skill，但它们不是三个主仓库�
 - `learn-by-practice` 中重复的对话 exporter、相关 reference 与重复测试已经移除；固定学习档案初始化器及其测试仅作为 rollback-only 回滚源码继续保留。
 - `catalog.json` 已升级至 schema v2，记录 first-party lineage、生命周期、替代项和 `primary-learning` 选择组。新配置不能选择 rollback-only 入口；一个配置跨 Codex 与 Claude 最多选择一个不同的主学习 Skill。
 - 5 个 external Skill 仍由 3 个官方 Git 子模块固定，不复制第三方源码。
-- C0–C3 只完成中央仓库实现与验证。2026-08-11 经用户另行授权完成 M0：公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills) 已配置并发布，`learning-core-pre-implementation` 固定实现前基线，`learning-core-v1` 固定通过验证的兼容版本。后续 M1–M5 尚未开始，仍需用户另行授权。
+- C0–C3 只完成中央仓库实现与验证。2026-08-11 经用户另行授权完成 M0：公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills) 已配置并发布，`learning-core-pre-implementation` 固定实现前基线，`learning-core-v1` 固定通过验证的兼容版本。
+- 2026-08-11 完成 M1 迁移输入冻结：从公开远端全新递归克隆 `learning-core-v1`，确认三个官方子模块均位于登记 gitlink，中央验证保持 `82 passed, 2 skipped, 40 subtests passed`，三个相关 Skill 与 catalog 校验通过；独立合成消费仓库中的四个发现副本可 materialize 并通过 `--check`，rollback-only 名称会拒绝并提示 `guide-learning`。M2–M4 唯一输入固定为 `b2afd92854d57a375fdf990028c31561118cf8ec`；验证未读取或修改真实消费仓库。M2–M5 尚未开始，仍需用户另行授权。
 
 ## 当前已知但暂不修复
 
