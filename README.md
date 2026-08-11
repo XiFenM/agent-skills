@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换与 PlanA 的 M4 双 host 切换均已完成并发布，M5 已获授权并进入中央旧入口退役与消费者指针升级阶段。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。
 
 ## 当前范围
 
@@ -28,7 +28,7 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0 已完成中央发布，M1 已将 `learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 冻结为唯一迁移输入，M2 已在 PlanA 与 programming-lab 接入空配置管线且未改变当时的 Skill 发现；M3 已在 programming-lab 完成并发布 Codex 单仓金丝雀切换，M4 已在 PlanA 完成并发布双 host 切换，M5 已在中央完成旧入口退役，两个消费者将在本阶段后续升级到该中央提交。以下是消费配置的通用形状；programming-lab 当前只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`：
+消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者当前都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。以下是消费配置的通用形状：
 
 ```json
 {
