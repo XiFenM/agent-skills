@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。`english-coach`、`memo-cards` 与 `resource-planning` 现进一步采用中央通用核心、严格消费配置和受管上下文；消费仓库适配仍作为独立迁移阶段处理。
 
 ## 当前范围
 
@@ -12,7 +12,7 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D23 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D39 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
 
 ## 目录
 
@@ -28,18 +28,33 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者当前都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。以下是消费配置的通用形状：
+消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者当前都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。
+
+不需要消费环境配置的仓库可以继续使用 version 1。需要为自创 Skill 提供仓库事实、素材 collection、输出目标或 adapter 时，使用 version 2，并让索引只引用严格 JSON 配置：
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "source": ".agent-skills",
   "skills": {
+    "english-coach": ["codex", "claude"],
     "guide-learning": ["codex", "claude"],
+    "memo-cards": ["codex", "claude"],
+    "resource-planning": ["codex", "claude"],
     "study-log": ["codex", "claude"]
+  },
+  "config": {
+    "repository": ".agent-skills-config/repository.json",
+    "skills": {
+      "english-coach": ".agent-skills-config/english-coach.json",
+      "memo-cards": ".agent-skills-config/memo-cards.json",
+      "resource-planning": ".agent-skills-config/resource-planning.json"
+    }
   }
 }
 ```
+
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。配置只能声明环境事实，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
 新 clone 或更新子模块后，先递归初始化中央仓库及其第三方子模块：
 
@@ -72,7 +87,7 @@ uv run --no-project python .agent-skills/tools/materialize_skills.py --repo . --
 /.agent-skills.lock
 ```
 
-中央子模块必须处于已有提交且工作树干净的状态；工具同时记录中央提交和每个 Skill 的内容摘要。它不会拉取远端、更新子模块、提交、跟随链接，或覆盖未经 state 与目录 marker 共同证明属于它的同名目录。
+中央子模块必须处于已有提交且工作树干净的状态；工具同时记录中央提交、每个 Skill 的源码摘要、消费配置摘要和生成上下文摘要。version 2 会在每个已配置的生成副本中写入逐字节确定的 `.agent-skills-context.json`；配置变化后必须重新 materialize。工具不会拉取远端、更新子模块、提交、跟随链接，或覆盖未经 state 与目录 marker 共同证明属于它的同名目录。
 
 常用操作：
 
@@ -89,9 +104,9 @@ uv run --no-project python .agent-skills/tools/materialize_skills.py --repo . --
 
 ```powershell
 uv run --cache-dir .uv-cache --no-project python tools/validate_catalog.py
-uv run --cache-dir .uv-cache --no-project --with pytest python -m pytest tests skills/study-log/tests -v
+uv run --cache-dir .uv-cache --no-project --with pytest python -m pytest tests skills -v
 ```
 
-第二条命令同时覆盖仓库级测试以及 `study-log` 单元与安全测试。
+第二条命令同时覆盖仓库级测试以及全部 first-party Skill 的单元与安全测试。
 
 第三方版本由 `.gitmodules` 与 Git submodule 指针共同固定。更新第三方来源时，应先审阅上游变更，再更新对应指针和运行校验。

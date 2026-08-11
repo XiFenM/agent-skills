@@ -1,8 +1,20 @@
 {
-  "version": 1,
+  "version": 2,
   "source": ".agent-skills",
   "skills": {
+    "english-coach": [
+      "codex",
+      "claude"
+    ],
     "guide-learning": [
+      "codex",
+      "claude"
+    ],
+    "memo-cards": [
+      "codex",
+      "claude"
+    ],
+    "resource-planning": [
       "codex",
       "claude"
     ],
@@ -10,5 +22,13 @@
       "codex",
       "claude"
     ]
+  },
+  "config": {
+    "repository": ".agent-skills-config/repository.json",
+    "skills": {
+      "english-coach": ".agent-skills-config/english-coach.json",
+      "memo-cards": ".agent-skills-config/memo-cards.json",
+      "resource-planning": ".agent-skills-config/resource-planning.json"
+    }
   }
 }

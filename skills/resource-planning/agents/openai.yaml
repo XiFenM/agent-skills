@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resource Planning"
+  short_description: "证据化研究、增量刷新与安全评审受管学习及工作资料组合"
+  default_prompt: "Use $resource-planning to research or review resources with evidence and a safe, exact preview."

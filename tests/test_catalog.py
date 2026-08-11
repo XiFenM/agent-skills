@@ -27,6 +27,15 @@ class CatalogTests(unittest.TestCase):
                 f"---\nname: {item['name']}\ndescription: Fixture.\n---\n",
                 encoding="utf-8",
             )
+            context = item.get("context")
+            if isinstance(context, dict):
+                validator = skill / context["validator"]
+                validator.parent.mkdir(parents=True, exist_ok=True)
+                validator.write_text(
+                    "def validate_materialized_context(repository_config, skill_config):\n"
+                    "    return {}\n",
+                    encoding="utf-8",
+                )
         (root / "catalog.json").write_text(
             json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -123,6 +132,20 @@ class CatalogTests(unittest.TestCase):
             },
             study_log["lineage"],
         )
+
+        configurable = {
+            "english-coach": "scripts/context_config.py",
+            "memo-cards": "scripts/memo_cards.py",
+            "resource-planning": "scripts/resource_planning.py",
+        }
+        for name, validator in configurable.items():
+            with self.subTest(configurable=name):
+                self.assertEqual(by_name[name]["context"], {"validator": validator})
+                self.assertEqual(
+                    by_name[name]["migration"],
+                    "generalized-configurable-upgrade",
+                )
+                self.assertEqual(by_name[name]["review"]["state"], "implemented")
 
     def test_expected_migration_boundary(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))

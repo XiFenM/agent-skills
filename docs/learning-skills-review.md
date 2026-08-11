@@ -878,3 +878,507 @@ M0–M5 至此完成；后续工作回到各独立 Skill 的质量评审，不�
 发现目录和中央源码树退出，旧名称只保留为指向 `guide-learning` 的机器可读 retired mapping，兼容源码由
 `learning-core-v1` 标签保存。`english-coach`、`memo-cards`、`resource-planning` 保持独立的决定已经完成，
 但它们各自进一步的质量升级仍属于后续独立评审阶段，不构成当前学习核心的阻塞项。
+
+## 后续独立 Skill 质量评审（2026-08-11）
+
+### D24：`english-coach` 采用窄触发、支架优先与默认零写入
+
+`english-coach` 继续作为独立 Skill，但后续升级必须遵守以下已确认基础边界：
+
+- **窄触发**：仅当用户实际使用英语，或以自然语言明确要求英语反馈、英语练习或英语回顾时激活。
+  纯中文技术学习、普通技术讨论和仓库维护不自动追加英语反馈；与 `guide-learning` 同时适用时，前者只
+  负责语言层，后者继续拥有技术教学流程。
+- **支架优先**：英语回顾默认先提供 3–5 个与当前材料直接相关的核心表达支架，再进入主动表达和模拟
+  对话；完整中英翻译范本不再默认展开，只在用户明确需要时提供。
+- **默认零写入**：聊天反馈和英语回顾默认只存在于当前交互中，不自动创建或修改英语日志、卡片、
+  学习记录或其他文件。需要持久化时再按具体目标取得授权；日志保存、`study-log` 素材提取与
+  `memo-cards` 制卡是彼此独立的显式交接，不得由一次普通反馈隐式连锁触发。
+
+此前已确认的自然语言交互偏好继续适用：升级后的 Skill 不保留 `/skip`、`/deep`、`/中文`、`/shadow`
+或 `/quiz` 等快捷命令，等价控制全部通过正常对话表达。D24 只记录设计决策，尚未修改
+`skills/english-coach`、消费仓库适配或 catalog 的 pending review 状态；其余教学细节、跨 Skill 接口和
+验证方案继续共同评审后再实施。
+
+### D25：`english-coach` 采用低打扰反馈、混合纠错与技术语义分流
+
+在 D24 的窄触发、支架优先和默认零写入基础上，交互细节进一步确定为：
+
+- **Ambient feedback 保持低打扰**：先完成用户当前的技术、学习或工作请求，再处理用户本人实际写出或
+  说出的英语自然语言；代码、报错、引用、专有名词和 Agent 自己生成的文本不作为纠错样本。默认最多
+  指出一个最高影响问题，并只在确有复用价值时补充一个词块；输入自然时保持安静，不固定追加
+  “no changes” 占位反馈。
+- **英语回顾采用混合纠错节奏**：标准回顾默认覆盖三个已学技术点，再做一次综合或迁移表达，约
+  10–15 分钟，并允许用户用自然语言缩短、延长或随时停止。影响含义或命中本轮目标的问题立即纠正；
+  轻微语法、节奏和低优先级问题延迟到两三轮后或收尾集中反馈。卡顿时按
+  `关键词 → 句首 → 句型骨架 → 完整示范 → 延迟换一种说法` 逐级增加帮助，不把立即逐字复读当作掌握。
+  收尾先由学习者作短总结，再按需提供 shadowing 范本。
+- **技术语义与语言评价严格分开**：技术内容正确但英语不自然时只改语言；英语造成技术含义歧义时先
+  澄清原意。高置信度技术错误只能先给一句独立警示并停止把错误结论用作英语范本；需要重新讲解、
+  查证、练习或改变 mastery 时，先询问是否交给 `guide-learning`。`english-coach` 不修改 Lesson、
+  Checkpoint、mastery、技术进度或学习时数，也不把语言卡顿记为技术理解失败。
+
+D25 同样只记录已确认设计，不修改 Skill 实现或消费仓库文件。
+
+### D26：自创 Skill 统一采用中央通用核心与消费环境可配置层
+
+`english-coach` 不采用“中央核心 + PlanA 特例”的封闭结构，而采用可服务任意仓库或运行环境的两层架构：
+
+- **中央通用核心**拥有不可因消费环境改变的触发、工作流、职责边界、安全规则、默认降级和验证语义；
+- **消费环境可配置层**只提供该环境的学习者画像、目标语域、素材入口、路径映射、格式、工具能力和
+  其他合法偏好，不复制或覆盖中央行为规则；缺少配置时核心仍能进行纯对话工作，并安全降级为零写入；
+- PlanA 只是第一个配置实例，不在中央 Skill 中获得专用分支。后续其他自创 Skill 也应遵循同一原则，
+  具体配置格式、发现协议和校验方式在实现前统一设计，而不是每个 Skill 各自发明适配机制。
+
+`english-coach` 的素材读取权限同时确定为：明确开始英语回顾后，可直接使用当前可见对话，以及唯一、
+已跟踪、与本次主题明确匹配的结构化学习记录；出现多个候选、本地修改、未跟踪文件、跨会话来源或
+客户端历史时必须先确认。历史会话发现和提取始终交给 `study-log`，英语回顾本身不隐含该权限。
+
+PlanA 的 `英语/ai-chat-prompt.md` 确认退出，不再作为无 Skill 平台的并列行为规范或生成兼容产物。
+退役操作、引用清理和历史保留方式要在 `english-coach` 实施方案获确认后一起执行；D26 当前仍只记录
+决策，不删除该文件，也不修改 Skill、消费配置或 catalog review 状态。
+
+### D27：配置采用统一索引、受管上下文与三级授权边界
+
+中央通用核心与消费环境配置层采用以下统一架构，作为 `english-coach` 及后续自创 Skill 的共同基础：
+
+- **索引与内容分离**：消费仓库使用 `.agent-skills.json` 选择 Skill、host 并引用配置；仓库级公共事实与
+  各 Skill 配置分别保存在 `.agent-skills-config/repository.json` 和
+  `.agent-skills-config/<skill-name>.json`。每个配置文件采用带版本和 Skill 身份的严格 schema，只允许
+  声明该 Skill 已登记的环境事实与偏好，拒绝未知字段。`english-coach` 可配置学习者水平、目标语域、
+  反馈重点、允许使用的结构化记录种类和安全路径模式，以及获得当次保存授权后可使用的日志路径与格式；
+  不得用任意 prompt、命令或配置字段覆盖触发、工作流、安全、隐私和默认零写入规则。复杂的人类可读
+  仓库说明可以由配置安全引用，但只能补充环境事实，不能成为第二份行为规范。
+- **生成受管上下文**：materializer 负责校验配置身份、版本、UTF-8、仓库内安全相对路径、链接／特殊
+  文件和未知字段，并在 Codex 与 Claude 的生成 Skill 副本中写入逐字节一致的保留上下文快照
+  `.agent-skills-context.json`。中央源码、消费配置和上下文摘要共同进入受管状态与完整性检查；配置变化后
+  必须重新 materialize，`--check` 应能报告漂移。没有配置或没有经过 materializer 时，Skill 只运行
+  中央通用核心，保持纯对话、零写入且不猜测消费仓库路径。
+- **三类权限分开**：可提交的公共环境配置只保存适合进入仓库的事实；用户私有运行配置保存仓库外原始
+  档案根等不能提交的信息；保存、覆盖、制卡、付费生成、发布、提交和推送等动作始终属于当次任务授权，
+  不得由任何静态配置预先授予。优先级为“中央不可变约束 > 用户当前明确指令／授权 > 环境配置 >
+  中央安全默认值”。`AGENTS.md`、`CLAUDE.md` 等入口只保留面向人的路由说明，不复制行为规则或机器路径；
+  官方外部 Skill 继续原样引用上游，不注入这套自创 Skill 配置协议。
+
+D27 只锁定配置架构和权限边界，尚未升级 `.agent-skills.json`、materializer、catalog、`english-coach`
+或 PlanA。配置协议基础、Skill 改写、PlanA 实例与旧 prompt 退役必须在后续实施阶段分别验证并经用户授权。
+
+### D28：`memo-cards` 采用通用质量核心、Markji 单一适配与受管生成产物
+
+`memo-cards` 的产品边界与质量方向确定为：
+
+- **通用核心、单一现役后端**：中央核心使用后端无关的卡片语义，负责显式触发、素材准入、原子化、
+  事实状态、去重／冲突、预览和写入授权；第一版只实现 Markji 适配，不为尚不存在的第二个后端建设
+  插件系统。PlanA 已完全以墨墨记忆卡为主，实施时清理仍把 Anki／cloze 写成现役事实的旧说明，
+  不保留双后端分支。
+- **严格素材与精选默认**：正式卡片只接收稳定、可追溯、已经核验且适合反复强化的结论；raw 对话、
+  `[遗留]`、未作答题、猜测、冲突和未核验的时效事实只能进入 blocked preview。默认从候选中精选，
+  全量转换必须由用户明确提出。每张原子卡只考一个回忆目标；需要较长回答的技术面试内容使用独立的
+  综合口述卡，不把多个可独立考查的目标塞入普通原子卡。
+- **受管生成、当次授权**：`cards/` 中由本 Skill 生成的目标是 generated-only 产物，但创建、刷新和覆盖
+  仍须来自当次明确制卡请求，不能由学习收尾、`english-coach` 或其他 Skill 自动连锁触发。产物保存最小
+  来源锚点／摘要、逻辑卡片身份和模板版本；来源范围变化、来源漂移或检测到人工修改时，必须展示
+  add／change／remove／duplicate／conflict 差异并再次确认。幂等只承诺同一已批准候选集和同一适配版本
+  的本地产物稳定渲染，不承诺重复导入 Markji 后仍自动去重。
+- **PlanA 产物形态**：当前继续使用便于 Git 审阅的 Markdown 文档，每种卡型包含一个带表头的 TSV
+  代码块。它应准确称为供粘贴进 Markji 下载表格的导入暂存文档，而不是可直接上传的 TSV 文件。
+
+D28 只记录已确认方案；尚未修改 `memo-cards`、PlanA 的 Anki／Markji 重复事实、消费配置、历史卡片或
+catalog review 状态。
+
+### D29：Markji 适配固定为 3.8+ 精简兼容面
+
+第一版 Markji 适配采用以下已确认兼容边界：
+
+- 最低客户端版本为 `3.8.00`，默认支持答案线、行内／整行样式、`ans/...` 选择题、KaTeX 公式和
+  已明确提供的公共链接；Markji 挖空作为可选卡型，不作为默认生成方式。
+- Audio、图片和卡片引用依赖已有 Markji ID，第一版只能消费用户明确提供的 ID，不负责上传资产、发现
+  ID 或自动建立跨卡引用。
+- 官方内容语法 PDF／Markdown 作为本地评审证据保留，不整份复制进公开中央仓库。中央 Skill 只保存
+  自行整理的最小兼容规范、官方来源链接、查阅日期与适配版本；PlanA 不再维护另一份会漂移的完整副本。
+- 内容语法文档不等于表格导入规范；Markji 模板、字段顺序、TSV staging 和导入步骤继续由适配层的
+  独立合同定义。由于官方文档未定义通用转义机制，验证器除 tab、裸换行和列数外，还必须检查
+  `[T#`、`[F#`、`[Choice#`、`[P#` 等保留语法碰撞，无法证明安全时停止而不是猜测转义。
+
+D29 只记录兼容方案，不复制第三方文档，也不修改现有模板、卡片或 Skill 实现。
+
+### D30：PlanA 英语采用 8–12 张软目标而非每日硬上限
+
+卡片生成数量与 Markji 实际安排的每日复习量分开处理。中央 `memo-cards` 通用核心不设置数量上限；
+PlanA 英语在完成素材准入、原子化和去重后，默认以每个学习日 `8–12` 张**新增逻辑卡片**作为工作量
+提示，而不是硬性截断或必须凑满的配额；刷新既有逻辑卡片不占新增数量：
+
+- 所有 A 级高价值卡必须保留，不能因为达到数量目标而静默丢弃；强 B 级候选超过软目标时，预览应区分
+  “建议本批导入”与“可延后导入”，展示总量与负担，并由用户决定全部导入或分批处理。
+- 合格素材少于 8 张时按实际质量产出，不为凑数制造低价值卡；用户明确要求完整转换时，输出全部通过
+  质量门槛且完成去重的卡片，不受软目标约束。
+- 软目标只约束 PlanA 英语的默认精选体验，不进入中央通用质量规则，也不替代 Markji 自己的复习调度。
+  数量选择本身也不构成创建、刷新、覆盖或导入授权。
+
+D30 只修订评审方案；尚未修改 PlanA 英语指引、`memo-cards`、历史卡片或任何 Markji 数据。
+
+### D31：卡片采用稳定语义身份、渐进接管与扩展后的 Markji 模板集
+
+`memo-cards` 的卡片身份、历史产物刷新和第一版模板边界进一步确定为：
+
+- **稳定逻辑身份**：一张卡由领域、稳定回忆目标、考查方式和事实范围共同确定；学习日期、来源路径、
+  题面措辞、例句和场景不进入身份。同一目标跨日复发时保留 canonical 卡、提高优先级且不占 D30 的
+  新增数量；只有含义、产出方向、考查能力或版本范围真正不同时才建立新卡。A 级卡超过 12 张时仍全部
+  进入本批预览与可导入集合，分批只是用户可选项，不自动延后 A 级卡。
+- **渐进接管历史产物**：机器元数据放在同一 Markdown 的 YAML frontmatter，不向 Markji TSV 增加
+  身份或 hash 列；最小内容包括 schema、adapter／模板版本、来源摘要与 fingerprint、逻辑卡 ID、单卡
+  内容摘要和受管正文摘要。现有无 manifest 的文件保持 legacy，不批量改写；只有用户明确刷新某个目标
+  时，才展示 adoption diff 并经确认转成受管产物。人工修改、来源漂移、模板升级、拟删除卡片或预览后
+  目标／来源变化都会使写入停止并要求重新确认；无语义差异时零写入。
+- **跨日复发不自动改旧文件**：再次出现只抑制重复新行并报告 canonical 卡；只有新证据实质改善题面、
+  答案、边界或例句时，才单独提议刷新旧目标。当前任务对新日制卡的授权不自动授权跨文件改写。
+- **补齐 Markji 模板**：在现有纠错、选择、Q&A 和技术 Q&A 基础上，增加无真实错误时使用的主动产出
+  模板、2／3／4 选项辨析变体、仅用于上下文可唯一确定 1–3 个词或词形的可选挖空模板，以及用 3–5 个
+  评分锚点支持 45–90 秒回答的综合口述模板。挖空与公式只是渲染提示，不另造语义卡型。
+- **合法表达不伪造错误**：语法成立但不够地道或语域不合适的表达不得进入带红叉的纠错卡；只有存在
+  稳定、可迁移的使用边界时才生成 B 级辨析卡，否则不进入正式卡片。
+
+D31 只记录已确认方案；尚未为历史文件加入 manifest，也未新增模板、刷新卡片或修改 Skill。
+
+### D32：技术卡采用双时效范围、三层学习结构与独立研究生命周期
+
+技术制卡不再把版本、学习层级和生命周期混成单一“卡型”，而采用三个正交维度：
+
+- **常青与固定版本快照并存**：只有不依赖内部符号、默认值、目录、具体版本或单一 commit 的稳定概念
+  才能标为常青；函数／类／目录名、进程数、路由公式、特定 codegen 行为、源码观察和仅由固定 commit
+  支撑的架构结论默认归为 `产品版本 @ commit` 快照。不确定时先归快照，取得稳定接口或跨版本证据后
+  才能提升为常青。软件升级时为改变的事实建立后继卡，不用新答案静默覆盖旧版本问题；与当前项目、
+  面试目标或学习基线仍有关的旧快照继续保留，其余归档而不是删除。
+- **原子、机制、综合口述分层**：原子卡只考一个判断、映射、前提或单一对比轴；机制卡允许一条不可拆的
+  2–5 步闭合因果链；综合口述卡组合 2–5 张原子／机制子卡，形成 45–90 秒回答和 3–5 个评分锚点。
+  综合卡不得引入子卡未核验的新事实；精确源码符号应从常青机制中拆成版本快照。任一子卡发生实质漂移
+  时，依赖它的机制卡和综合卡一起进入复核。
+- **研究项与个人误区分流**：生命周期采用 `candidate/research → active → review → active 或 archived`。
+  未验证观察、疑似 bug 和能力猜想不进入正常 Markji 复习，交回 `guide-learning` 继续验证；可以把
+  “确认此类结论需要哪些证据”制成常青方法卡，但不得把未决结论伪装成事实卡。只有反复出现、能预测
+  未来错误的技术误区才进入独立个人误区集合并指向规范主卡；一次性措辞错误只吸收到客观辨析卡中。
+- **本地状态不冒充远端状态**：`review` 与 `archived` 只约束本地受管暂存、预览和后续建议；Skill 不得
+  声称已暂停、替换或删除 Markji 中的远端卡片，相关操作仍需用户在 Markji 中手动完成。
+
+现有 PyTorch 卡中被后续文章实质纠正的结论应在明确刷新时进入复核或建立后继卡；现有 vLLM 卡则应视为
+有效的 `v0.26.0 @ 568afb3a` 快照，而不是无范围的“当前 vLLM”。D32 当前只记录方案，不刷新这些历史
+卡片，也不更改 Markji 数据。
+
+### D33：跨 Skill 只传无授权素材包，制卡采用风险分级确认与派生 inventory
+
+`memo-cards` 与其他 Skill 的交接、当次授权和消费配置边界确定为：
+
+- **bundle 只传素材与边界**：统一 envelope 可以保存 schema、生产者／预期消费者、逻辑仓库／主题范围、
+  带版本或 fingerprint 的来源引用、稳定条目、事实状态和 blocked 原因；不得包含 `authorized: true`、
+  写入命令、任意 prompt、私有 archive root、绝对目标路径或自动执行标记。`guide-learning` 只交已核验
+  学习证据，`study-log` 只交 structured 内容且 raw 永不制卡，`english-coach` 只交真实语言错误、主动
+  表达与稳定辨析候选。bundle 到达、上游建议和静态配置都不触发 `memo-cards`，仍需用户自然语言明确
+  提出制卡。
+- **显式请求加风险分级确认**：只要求查看候选时保持纯预览；用户明确指定清晰来源、新目标并要求创建／
+  保存时，该请求本身可以授权当次写入，不强制无风险任务再做一次形式化确认。受管目标无语义变化时
+  零写入并报告 `no-op`。legacy adoption、人工漂移、来源范围变化、模板升级、删除、事实冲突、跨文件
+  刷新或目标变化必须展示精确 diff 并再次确认；预览后 source、target、template 或 candidate digest
+  改变时，旧授权失效并重新预览。
+- **多产物请求仍保持独立事务**：用户一次明确要求保存学习记录并制卡时，可以一次点名两个目标并授权；
+  内部仍分别校验、分别写入，任一上游失败后不得继续依赖其结果写下游，也不得顺带导入 Markji、提交
+  或推送。
+- **配置只保存环境事实**：PlanA 配置拥有允许的输入／输出 collection、路径模式、Markji profile、英语
+  `8–12` 软目标和受管卡片扫描范围；不能关闭中央质量门槛、放宽安全校验、注入任意模板／prompt 或
+  预先授予写权限。`.agent-skills-context.json` 只是 materializer 生成的受管快照，不成为另一事实源。
+- **inventory 从受管产物派生**：第一版不建立中央卡片索引；只扫描消费配置允许的 `cards/` 范围内各
+  Markdown manifest，得到 canonical inventory。legacy 文件仅参与保守重复提示，明确 adoption 前不
+  进入自动刷新或确定性去重；未配置的其他仓库不参与跨库去重。
+
+D33 当前只记录协议；尚未实现 bundle schema、消费配置、materializer context 或任何跨 Skill 自动化，
+现有 `english-coach` 与 `memo-cards` 中违反这些边界的旧自动链路留待分别实施时清理。
+
+### D34：`memo-cards` 采用精简入口、按需参考、单一模板资产与确定性工具
+
+未来实施固定为以下最小结构：`SKILL.md`、`agents/openai.yaml`、四份一级 reference、一个 Markji 模板
+注册资产、一个标准库 Python 工具和一组测试。四份 reference 分别拥有卡片质量／身份模型、受管产物／
+diff／CAS 合同、Markji 3.8 精简兼容面和 Markdown＋TSV 暂存合同；不新增 README、CHANGELOG、示例
+大全、完整第三方文档或 PlanA 专属模板副本。
+
+- **入口保持精简**：`SKILL.md` 只保留窄触发、授权、来源范围解析、候选分流、预览／风险确认／写入流程、
+  按需 reference 路由和职责边界；PlanA 路径、模板列序、完整语法、manifest 字段、hash 算法和大段示例
+  均不进入入口。
+- **Agent 与工具分工**：Agent 负责素材价值、事实状态、语义等价、A／B／C 评级、常青／快照判断以及
+  题面、答案、例句和口述锚点；工具不得替代这些语义判断。单一 `memo_cards.py` 使用 `prepare`、
+  `verify`、`publish` 子命令，独占逻辑 ID、模板占位符／列序、TSV 与保留语法校验、manifest／hash、
+  inventory、确定性 diff、legacy adoption、路径安全、CAS 和原子写入；Agent 不临时手写这些脆弱结果。
+- **模板只有一个事实源**：`assets/markji-3.8-templates.json` 保存注册模板 ID／版本、有序字段、字段类型
+  和模板正文；工具断言字段顺序与 `{{...}}` 出现顺序一致，并按需输出供用户复制的模板，不再维护并行
+  Markdown 模板。官方 PDF／MD 仍只作为外部评审证据。
+- **manifest 可审计且可稳定解析**：同一暂存 Markdown 的 frontmatter 保存完整身份四元组而不只保存
+  ID／hash；实现可采用 JSON 作为 YAML 子集的严格格式，使标准库稳定解析且不向 TSV 增列。相同输入、
+  候选和模板必须逐字节稳定，不写仅用于制造 churn 的生成时间。
+- **验证覆盖完整安全面**：单元测试覆盖模板注册、TSV／reserved syntax、身份与软目标、manifest／
+  稳定渲染、diff／接管、CAS／原子失败、路径／链接逃逸；完成后再用两个全新 Agent 分别处理合成英语
+  日志和技术材料，且不给它们泄露预期结论，以验证可迁移行为。
+
+D34 完成 `memo-cards` 的方案级质量评审；当前仍不修改 Skill、模板、配置、历史卡片或 Markji 数据，
+实施须在后续单独授权后进行。
+
+### D35：`resource-planning` 采用专题研究、按需刷新与组合评审三模式
+
+`resource-planning` 保留为一个独立 Skill，但中央通用核心不再把固定周更和月底评审写死，而使用三种
+共享资源身份与证据模型、同时严格隔离副作用的显式模式：
+
+- **`research`／专题研究**：围绕用户当前问题搜索、比较和推荐资料，默认只在对话中预览；保存研究简报
+  需要当次明确授权，保存结果也不自动进入长期候选池。
+- **`refresh`／按需增量刷新**：从上次成功覆盖终点或用户指定起点扫描到本次截止点，生成一份候选快照；
+  周日等日历节奏只可作为消费环境提醒，不是中央运行前置。不能为了补缺伪造未实际执行的历史报告，
+  也不能因发现候选而修改稳定课程。
+- **`review`／资源组合评审**：只处理已经进入候选池且经过适当冷却的待评资源，决定晋级、延后、拒绝、
+  替代或标记过时；不再要求“当月至少三份周报”，日历月末只作默认提醒。任何稳定资源组合变化仍须
+  先展示逐项建议与精确编辑集，再由用户拍板；晋级不会自动启动学习。
+
+三种模式绝不自动串联：research 结果不自动入池，refresh 候选不自动晋级，review 结果不自动交给
+`guide-learning`。组合评审禁止广泛搜索和发现新候选，但可以重新打开候选已经登记的一手／官方来源，
+对撤稿、链接可用性、作者归属、版本／后继关系和关键主张做最小定向复核；复核中意外发现的新资料只可
+登记为后续 observation，不能偷渡进本次晋级。无法完成必要复核时标记待验证并延后，而不是猜测晋级。
+
+PlanA 可以继续使用 `YYYY-Wxx` 报告名、周日／月末提醒和自身展示格式，但这些都属于消费配置。实际三份
+已提交报告 W18、W26、W32 保持历史原样；后两份补缺约 8 周和 6.5 周的事实作为 `refresh` 设计依据，
+当前不重写报告、不执行未曾闭环的历史月评，也不修改 Skill。
+
+### D36：资源候选采用两层身份、claim 级证据与软决策负担
+
+`resource-planning` 的候选质量模型确定为：
+
+- **作品身份与具体版本分离**：`work_id` 标识稳定作品／项目线，优先使用 DOI、去版本号的 arXiv ID、
+  GitHub `owner/repo` 或官方源原生 ID；`revision_key` 标识 tag、commit、arXiv vN、出版／接收状态等
+  具体版本。标题、板块、报告期、镜像 URL、宣传名称和别名不产生新身份。论文、代码、博客等不同资源
+  即使讨论同一主题也不直接合并，而通过 `version_of`、`updates`、`successor_to`、`complements` 或
+  `conflicts_with` 关系连接；`replace` 是用户确认后的课程组合动作，不是资源天然关系。
+- **跨报告去重按身份和关系判断**：原生 ID、规范 URL 或已登记 alias 的精确命中可以自动归并；仅标题／
+  语义相似时只能标为 `possible_duplicate`，不得自动合并。同一资源的新 release、接收或获奖是版本／
+  状态增量，不伪装为新资源；一个资源跨多个模块只保存一次并附多个映射。无实质增量的复发只更新
+  `last_seen`／来源报告；是否需要刷新、替代或补充稳定组合另行评估。
+- **每个关键主张独立绑定证据**：来源角色区分发现线索／索引、规范性一手来源、第一方工程观察、独立
+  验证和教学／综述；“官方”不等于整篇材料自动可信。影响推荐或晋级的 claim 必须记录直接证据、来源
+  角色、版本／硬件／配置范围以及 `verified | qualified | unverified | conflict`。搜索摘要、Trending、
+  新闻和社交媒体只负责发现，不能单独支撑稳定晋级。
+- **时间与覆盖范围可审计**：分别记录事件／发布或状态变化时间、实际核验时间和有效范围；易变接口、
+  支持状态与最新 benchmark 在推荐／晋级时最小复核，固定版本历史不因变旧而自动失效。每次 refresh
+  按来源或查询族输出 `covered | no-hit | blocked | skipped`；局部失败不得表述为全局无更新，也不得
+  推进失败来源的覆盖游标。
+- **硬门槛先于排序**：身份、一手锚点、窗口内事件或明确更新关系、配置范围、技术实质、重复／后继
+  判断、关键 claim 证据与冲突状态未过门槛时，不得靠分数补回。通过后分别展示目标相关性、相对现有
+  组合的信息增量、持久性及学习／维护成本，不再使用简单 yes 总票制或 star 数硬阈值。
+- **数量只控制本轮决策负担**：PlanA 默认以 5 个 decision units 作为组合评审的软注意力目标，0 个
+  完全正常，重大替代或同分边界可以超过 5。所有过门槛但未进入本轮的候选明确列为
+  `qualified-deferred` 并说明原因；一项若需要两个独立课程编辑动作就计为两个 decision units，不能用
+  “Top 5”静默丢弃其他强候选。
+
+D36 只记录候选模型；当前不接管 legacy 周报、不建立 registry、不重新核验历史条目，也不修改任何稳定
+课程或 Skill 实现。
+
+### D37：资源治理采用单一 registry、保守接管与可恢复发布事务
+
+每个消费仓库使用一个受管 registry 作为资源治理的唯一机器事实源；稳定学习指引继续拥有实际课程内容，
+两者不互相复制职责。registry 保存资源与版本、claim／evidence、原子 decision-unit 候选、候选当前状态与
+最小不可变决策事件、逐来源／查询族覆盖游标，以及 refresh run 对报告的引用与摘要。Markdown 报告只是带
+`run_id` 与 registry generation／digest 的不可变人类可读快照，不拥有当前候选状态、游标或评审结果，
+也不得从历史报告反向推导当前 registry。第一版不建立独立 review ledger；如需评审回执，只能从
+registry 派生，不成为第二事实源。所有持久 lifecycle transition 与用户裁决都形成有序不可变 event；
+event 序列是状态权威，`current_state` 只是 `reduce(events)` 的受校验投影。`verify`、`prepare`、
+`publish`、`recover` 任一入口发现二者不一致都必须停止，不能猜测选择其中一份。
+
+- **候选状态区分资格、批准与真正应用**：候选生命周期允许
+  `draft -> blocked | qualified`；`qualified -> approved | blocked | deferred | rejected | superseded`；
+  `blocked -> draft | qualified | rejected | superseded`；
+  `deferred -> qualified | blocked | rejected | superseded`；`approved -> applied`；
+  `applied -> stale | superseded`。`ready` 仅由
+  `review_after` 与当前时间派生，`qualified-deferred` 只是当轮展示标签，二者均不落成额外状态。
+  `approved -> applied` 只适用于 `add`、`annotate` 及 `replace` 的新资源／映射一侧；registry-only 的
+  延后、拒绝或 supersede 裁决成功发布后，当前状态分别保持 `deferred`、`rejected` 或 `superseded`。
+  `retire` 成功后旧资源／课程映射从 `applied` 进入 `stale`；`replace` 使新资源／映射进入 `applied`、
+  旧映射从 `applied` 进入 `superseded`，不得把全部参与条目统一归约为 `applied`。
+  `approved` 是绑定单次 `preview_digest` 的过渡与不可变决策事件，不是可长期复用的授权；用户确认形成
+  仅限同一 `txn_id + preview_digest + decision units` 的 approval envelope。完整回滚后的同一事务重试
+  和成功后的幂等检查仍可使用该 envelope，但不得跨事务、跨目标或在 CAS 漂移后复用。只有已确认的
+  课程编辑集全部成功写入并通过验证后，当前状态才进入 `applied`；发布前漂移时 envelope 失效、registry
+  保持批准前状态并重新预览。`refresh` 和独立 research brief 永不产生候选 `approved`／`applied`。
+- **legacy 采用保守接管**：W18、W26、W32 保持原样，不补 manifest、不追加状态，也不把历史“晋级
+  候选”自动变成当前 backlog。首次接管只提取可证明的身份、版本关系、来源与保守重复提示。中央核心
+  要求每个尚无成功 cursor 的来源／查询族都有显式 bootstrap 窗口，但不写死天数；PlanA 的消费默认值
+  为以实际截止点向前 30 天，并与 W32、稳定学习指引及 registry 中已接管身份去重。新增来源也独立使用
+  该 bootstrap，用户明确指定的窗口优先。更早覆盖标为置信度未知，不伪造 legacy 的逐来源游标。只有
+  某来源／查询族在本轮完整成功覆盖后，才为它建立或推进 cursor；失败来源保持原位置。
+- **晋级预览绑定精确编辑集**：一次 review batch 的预览必须列出每个 decision unit、精确目标文件与
+  slot、`add | replace | annotate | retire` 动作、计数／预算变化、必须保留的学习状态、逐文件 diff，
+  并对候选、配置／adapter 版本和排序后的 before／after 文件摘要计算 `preview_digest`。用户确认的是
+  该 digest；任一输入或目标变化都使确认失效并要求重新预览。
+- **写面保持必要且不制造并行日志**：发布只更新 registry、确实发生课程组合变化的学习指引，以及消费
+  配置明确要求且由该变化派生的模块进度投影。历史报告永不回写；不强制为现有指引新建 Changelog，
+  不创建实际不存在的“月度评审日志”。总进度表只在配置声明且资料总数确实需要同步时更新；替代或注解
+  默认保留原 slot、完成状态、日期和学习证据。Leetcode 等不同 schema 使用独立 adapter，不能套用
+  统一红／黄／绿表格规则。资料晋级不等于开始学习，也不得修改 Lesson、Checkpoint 或 mastery。
+- **多文件发布可恢复且幂等**：发布前对全部读取依赖与目标执行 CAS，在事务临时区准备完整 after bytes、
+  验证结果与 rollback journal 后才原子替换。任一步失败都恢复原字节；进程中断后必须先恢复或完成遗留
+  事务，不能直接启动新事务。`txn_id` 由已确认 decision units 与 `preview_digest` 确定，同一事务重试
+  必须得到全量 no-op，不能重复分配 ID 或增加计数；后续撤销使用新的补偿决策，不改写历史。Git stage、
+  commit 与 push 均不属于发布事务，仍分别需要用户明确授权。
+
+D37 只记录 registry、legacy bootstrap 与发布合同；当前不创建 registry、不补扫最近 30 天、不修改历史
+周报、稳定学习指引、进度、Skill 或消费配置，也不执行任何 Git 发布操作。
+
+### D38：消费配置采用结构化 source/query 目录、声明式 adapter 与分层安全降级
+
+`resource-planning` 继续使用 D27 的统一配置架构：`.agent-skills.json` 只选择 Skill／host 并引用配置，
+仓库级公共事实放在 `.agent-skills-config/repository.json`，本 Skill 的环境映射放在严格校验的
+`.agent-skills-config/resource-planning.json`。中央核心不认识 PlanA 的来源、八个模块、关键词、日历、
+图标、路径或报告格式；PlanA 的 30 天 bootstrap 和 5 个 decision units 软目标都属于消费偏好。
+
+- **source 与 query 由一个静态机器目录唯一拥有**：`sources[]` 使用稳定 `source_id`、受支持的来源类型、
+  规范 locator、多模块映射、来源角色提示、启用状态和提醒偏好；共享来源只登记一次。URL 更新不更换
+  `source_id`，来源拆分／合并必须显式迁移，不能静默继承 cursor。`queries[]` 使用稳定 `query_id`、
+  provider-neutral 的 all／any／exclude terms、领域／资源类型范围和模块映射；不接受任意 prompt、shell、
+  工具命令、页面选择器、凭据或私有令牌。配置中的“官方／第一方”只提示来源角色，不能跳过 D36 的
+  claim 级证据门槛。cursor、last seen、candidate、run 和裁决状态只进入 D37 registry，不进入静态配置。
+- **README 与模块订阅清单退为人类投影**：实施接管后，结构化 source/query 目录成为 source/query 静态
+  定义的唯一事实源；D37 registry 继续独占动态治理状态。README §5 和各模块 `学习指引.md §长期订阅`
+  只保留便于阅读的投影、说明或导航，不再互相声明权威，
+  也不再由 Agent 解析 Markdown 来猜稳定 ID、来源类型或 cursor。现有 Markdown 在正式迁移前仍保持原样；
+  迁移必须通过单独授权、对照预览和一致性验证，不能因本决策自动重写。
+- **事实引用与临时 overlay 不复制计划正文**：配置通过稳定 fact ID 引用长期目标、当前焦点、目标岗位和
+  学习预算等已跟踪事实文件；module portfolio／progress 路径只在模块条目中声明一次。临时专项（例如
+  JD 冲刺）使用带 ID、事实引用、适用范围、优先级和有效期的 overlay，只影响相关性排序，不覆盖长期
+  主计划、不修改 Lesson／Checkpoint，也不自动扩大搜索范围。每次 research／refresh／review 明确记录
+  实际启用的 overlay；缺失或过期时不得猜测沿用。
+- **模块与投影只使用中央白名单 adapter**：每个 `modules[]` 条目声明稳定 module ID、显示名／别名、
+  portfolio 路径、可选 progress projection、报告分组，以及中央登记的 adapter ID／version。配置只可
+  声明 heading／anchor、ID policy、合法动作和状态／优先级词表，不能注入解析代码、模板逻辑或行为规范。
+  精确课程内容归 `学习指引.md`，动态候选治理归 registry，扫描定义归静态目录；Leetcode 等不同 schema
+  使用独立 adapter，不能被通用红／黄／绿投影强行改写。
+- **按失败层级安全降级**：无配置、未 materialize 或 schema 非法时，只允许用户主题驱动的 `research`
+  对话预览，禁止持久 refresh／review、registry／报告写入和路径猜测。配置有效但单个 source／query 因
+  联网、登录或页面失败时，其余项可继续；失败项记 `blocked` 且不推进 cursor，明确无命中才记
+  `no-hit`，未选择才记 `skipped`。缺 portfolio、匹配 adapter 或该候选 required hard-gate fact 时可以
+  保留 observation，但受影响 candidate 不能通过门槛、获批或应用；可选 fact 缺失只披露不确定性并降低
+  排序置信度，不阻塞无关候选。registry／报告目标不安全时退化为零写预览。
+- **配置路径和权限保持最小可信面**：仓库事实文件必须是 UTF-8、Git tracked regular file；若配置声明
+  目录／collection，其解析结果也只能包含 Git tracked regular files。拒绝绝对路径、`..`、符号链接／
+  junction、未知字段、重复 ID、未跟踪文件及穿过 gitlink／submodule 的路径。manual／私有渠道默认只作
+  discovery signal，内容由用户当次提供或通过仓库外私有运行配置获取。
+  source／config／adapter／目标摘要都进入 D37 的 preview digest 与 CAS。静态配置永不预授权启动付费
+  网络操作、写入、覆盖、接管 legacy、晋级、发布、提交或推送，也不得保存 approval token 或已确认摘要。
+
+D38 当前只确定消费配置合同；尚未升级 `.agent-skills.json`、materializer、context snapshot、Skill、
+README §5、模块订阅清单或任何 PlanA 文件，也未读取或接管未跟踪文件。
+
+### D39：`resource-planning` 采用三份按需参考、单一确定性工具与无泄漏前向验证
+
+未来实施固定为以下最小 Skill 包：
+
+```text
+resource-planning/
+├── SKILL.md
+├── agents/openai.yaml
+├── references/
+│   ├── resource-model.md
+│   ├── evidence-and-ranking.md
+│   └── registry-and-publishing.md
+├── scripts/resource_planning.py
+└── tests/test_resource_planning.py
+```
+
+不新增 `assets/`、README、CHANGELOG、示例大全、独立 schema 文件、adapter manifest、review ledger、
+中央 registry 样本或 PlanA 模板副本。只有将来出现体量较大、几乎不含逻辑且直接复制进产物的稳定模板，
+才重新评估 `assets/`。
+
+- **入口只拥有路由与最短公共流程**：frontmatter 精确覆盖专题资料研究、受管来源刷新和资源组合评审；
+  `SKILL.md` 只保存三模式路由、默认副作用、最短授权流程、与 `guide-learning` 的边界、工具调用顺序和
+  reference 路由。`research` 的普通比较只加载 `evidence-and-ranking.md`，需要结构化身份时再加载
+  `resource-model.md`；`refresh`／`review` 读取三份 reference，任何 registry、报告或课程组合写入前都
+  必须读取 `registry-and-publishing.md`。三模式不再另建重复的 mode reference。
+- **三份 reference 各自只有一个职责**：`resource-model.md` 只定义 `work_id + revision_key`、关系、
+  claim、候选状态／事件与不变量；`evidence-and-ranking.md` 只指导 Agent 判断来源角色、技术实质、冲突、
+  信息增量、持久性、成本与 decision-unit 顺序，不复制 schema；`registry-and-publishing.md` 统一拥有
+  D37／D38 的 registry、消费配置映射、cursor、不可变报告、preview digest、CAS、事务恢复、legacy
+  bootstrap 与路径安全。超过 100 行的 reference 在顶部提供目录，所有引用保持 SKILL 一级可达。
+- **Agent 独占语义判断与用户沟通**：Agent 决定研究问题、搜索策略、来源／claim 含义、语义重复、资源
+  关系、硬门槛是否满足、目标相关性、信息增量、成本、排序、课程编辑建议和人类可读理由；展示完整预览
+  并取得用户对精确 decision units 的自然语言确认。Agent 不手写稳定 ID、状态跃迁、cursor、digest、
+  registry merge 或多文件事务，也不把搜索摘要当成已核验事实。
+- **单一标准库工具独占脆弱确定性操作**：`resource_planning.py` 提供 `verify`、`prepare`、`publish`、
+  `recover` 四个子命令。`verify` 只读检查配置、registry、派生 ready、cursor 与未完成事务；`prepare`
+  接收 Agent 已完成语义判断的 proposal 与 `operation_kind`，规范化精确原生 ID，并在仓库零写入的前提
+  下生成 after bytes、完整 diff、全依赖摘要、`preview_digest` 与 `txn_id`。所有将写入的 event、状态、
+  generation 和报告／registry bytes 都必须在 `prepare` 时完整确定并进入 digest；`publish` 不得临时追加
+  timestamp、用户文本、actor 或重新计算的 generation。`publish` 只接受与 operation 和预览逐字节匹配、
+  绑定同一事务的 execution envelope，重验全量 CAS 后执行可恢复原子发布：`research-brief` 只保存明确
+  授权的独立简报，不入 registry／候选池；`refresh` 写 run、coverage、cursor、候选资格事件与不可变报告，
+  不产生 `approved`／`applied`；`review` 才消费逐项 approval envelope，需要课程投影的成功动作记录
+  `approved -> applied`，registry-only 的 defer／reject／supersede 则写入对应 outcome。`recover` 只机械
+  处理现有 journal，不接收新候选、不重新分配 slot 或推断新编辑集。工具不提供 `--yes`、`--force`、
+  `--skip-cas`、`--accept-latest`，也不联网、不调用 shell／Git、不判断技术真伪、不做语义近似合并或
+  代替用户决定课程价值。
+- **恢复协议只有可证明的机械分支**：journal 只保存事务 phase、精确目标、before／after bytes 或受校验
+  临时文件、摘要与已完成替换集合。新 publish 遇到未完成 journal 必须停止；全部目标已经是 after bytes
+  时，必须先重验 journal 完整性、全部 after digests 与 adapter postconditions，成功后才完成收尾；只
+  出现 journal 可证明的 before／after 混合时按替换逆序恢复全部 before bytes，任一目标既不是 before
+  也不是 after 时停止并报告人工冲突。发布顺序固定为投影先、registry 最后：refresh 先写不可变报告，
+  review 先写指引／必要进度投影，最后才替换声明 current state／cursor／`applied` 的 registry。后验验证
+  失败保留 journal 并回滚，不能留下 registry 已声称成功而投影未完成的状态。成功后删除 journal；业务
+  撤销使用新的补偿 decision，不把 recovery journal 变成第二事实源。
+- **配置／adapter schema 只实现一次**：字段、adapter allowlist 与 context 校验由
+  `resource_planning.py` 的只读接口唯一拥有；materializer 调用同一实现来验证并生成受管 context，
+  不复制资源规划字段规则。运行时工具只消费 materializer 已验证、已纳入 digest 的 context／allowlist，
+  不自行调用 Git 判断 tracked 状态。该集成会涉及 materializer 及其测试，但必须作为后续实施的明确
+  提交边界，不借本次方案评审提前修改基础设施。
+- **验证覆盖结构、安全与真实迁移行为**：单元测试覆盖精确身份／alias、`possible_duplicate` 不自动合并、
+  claim 结构、合法与非法状态跃迁（含复核失败回到 blocked、retire 进入 stale、replace 的新旧分流）、
+  派生 ready、`approved != applied`、局部失败与逐源 cursor、单一
+  registry、事件归约与 `current_state` 一致、不可变报告、配置化 bootstrap 窗口与 decision-unit 软目标、
+  无配置时不暗设 30 天、用户窗口优先、新来源独立 bootstrap、稳定渲染／零 churn、preview 后任一依赖
+  漂移、每个原子替换点的故障／恢复／幂等、registry 最后替换、路径／链接逃逸、未授权目标、journal
+  篡改和第三态目标。测试还必须封死 socket／HTTP、subprocess／Git 调用，并断言 refresh 不覆盖历史
+  报告且不产生 `approved`／`applied`、review 不回写报告、blocked／skipped 不推进 cursor、特殊 adapter
+  不产生未声明的通用进度投影。Skill 内可用 30 与 5 作为合成配置值，但不得硬编码 PlanA 路径、W18／
+  W26／W32 或八模块事实；真实 PlanA 首次接管另属消费仓库集成验证。根级结构测试另检查精确文件树、
+  三份 reference 均由 `SKILL.md` 一级链接、入口少于 500 行、`agents/openai.yaml` 字段和中央运行时文本
+  不含 PlanA 或消费路径。
+
+实施完成后使用两个全新 Agent 做无答案泄漏的前向验证：一个在无配置仓库中完成证据化专题研究且零写入；
+另一个在合成 PlanA 型仓库中完成首次 refresh 与一次 review，覆盖 blocked 来源、legacy 重复、新 revision、
+超过 5 个 decision units、预览后目标漂移和事务中断。验证任务只提供 Skill 与原始场景，不泄漏设计结论，
+不访问真实网络或生产数据。
+
+D39 完成 `resource-planning` 的方案级质量评审；当前仍不修改 Skill、materializer、配置、registry、
+README §5、历史周报、学习指引或进度，也不执行首次 refresh、发布、提交或推送。未来实施必须另行授权，
+并按配置基础设施、中央 Skill／工具、PlanA 接管和前向验证拆分为可独立审查与回滚的阶段。
+
+## D24–D39 实施记录（2026-08-11）
+
+用户随后单独授权实施三项学习辅助 Skill。中央仓库现已完成 `english-coach`、`memo-cards` 与
+`resource-planning` 的通用核心、严格配置 validator、metadata、按需 reference／确定性工具及安全测试，
+并为 materializer 增加向后兼容的 version 2 配置索引和受管上下文。三项中央运行时不含 PlanA 路径、
+历史周报、八模块或旧英语 prompt 分支；静态配置仍不构成保存、覆盖、制卡、付费、发布、提交或推送授权。
+
+最终中央验证为 `197 passed, 4 skipped, 46 subtests passed`；四个跳过项均是当前 Windows 环境缺少
+符号链接／junction 权限的防护用例。catalog 校验为 11 Skills（6 first-party、5 official external），三项
+Skill 的结构校验均通过。四个隔离的前向场景还分别覆盖英语制卡、技术卡多层依赖、无配置专题研究以及
+受管 refresh／review／中断恢复；过程中发现的 GBK CLI 输出、复核状态 churn、漏 coverage、跨模块写入、
+历史报告完整性和读写重叠问题均已修复并原场景复测通过。
+
+本记录只表示中央实现已形成可提交候选。PlanA 的 version 2 配置、旧 prompt／资源 SOP 退役、资源 slot
+标记、registry bootstrap、历史卡片渐进接管、中央子模块升级与重新 materialize 仍是后续消费适配阶段；
+当前未修改消费仓库、未提交、未推送。
+
+## 延期待办：`creator-workflow` 质量评审、通用化升级与 `daily-work` 适配迁移
+
+`creator-workflow` 是当前唯一尚未完成方案级质量评审的 first-party Skill。按用户决定，本项暂缓到三个
+学习类 Skill 的升级实施完成之后，不与当前学习类改造交叉推进。后续工作必须依次覆盖：
+
+1. 只读审计中央 `skills/creator-workflow`、`daily-work` 的实际创作流程、入口、第三方官方 Skill 路由、
+   产物写面与真实使用证据，区分可复用核心、消费环境事实和应退役的专用约定；
+2. 与用户共同完成质量评审和升级方案设计，目标同样采用“中央通用核心＋严格消费配置层”，并确定触发、
+   工作流阶段、授权、状态／产物所有权、失败恢复、官方 Skill 交接和验证门槛；
+3. 在单独授权后升级中央 Skill、metadata、references／scripts／tests、catalog review 状态和配置协议，
+   不把 `daily-work` 路径、品牌、频道、模板或发布凭据硬编码进中央核心；
+4. 再单独实施 `daily-work` 适配迁移：新增消费配置与事实映射、清理旧行为副本、升级中央子模块指针、
+   materialize／check 两个 host 所需入口，并保持用户工作产物与无关未提交改动不变；
+5. 运行中央单元／结构测试、合成前向验证和 `daily-work` 集成验证，通过后才建议提交与推送。
+
+当前只登记待办，不开始 `creator-workflow` 评审，不修改该 Skill、`daily-work`、其子模块指针或生成入口。

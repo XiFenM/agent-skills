@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -17,8 +18,9 @@ import subprocess
 import sys
 import uuid
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 
 try:
@@ -33,6 +35,7 @@ DEFAULT_CONFIG = ".agent-skills.json"
 STATE_FILE = ".agent-skills.state.json"
 LOCK_FILE = ".agent-skills.lock"
 MARKER_FILE = ".agent-skills-managed.json"
+CONTEXT_FILE = ".agent-skills-context.json"
 TARGET_ROOTS = {
     "codex": Path(".agents/skills"),
     "claude": Path(".claude/skills"),
@@ -57,6 +60,18 @@ class DesiredTarget:
     target: Path
     target_relative: str
     digest: str
+    source_digest: str
+    context_digest: str | None
+    context: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class ConsumerConfig:
+    selected: dict[str, list[str]]
+    source_relative: str
+    config_relative: str
+    config_digest: str
+    contexts: dict[str, dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -100,6 +115,10 @@ def _absolute(path: Path) -> Path:
 
 
 def _same_path(left: Path, right: Path) -> bool:
+    try:
+        return os.path.samefile(left, right)
+    except (FileNotFoundError, OSError, ValueError):
+        pass
     return os.path.normcase(os.fspath(_absolute(left))) == os.path.normcase(
         os.fspath(_absolute(right))
     )
@@ -110,12 +129,21 @@ def _load_json(path: Path, *, missing: Any = None) -> Any:
         if missing is not None:
             return missing
         raise SyncError(f"missing file: {path}")
+    return _load_json_with_bytes(path)[0]
+
+
+def _load_json_with_bytes(path: Path) -> tuple[Any, bytes]:
     if _is_link_or_junction(path) or not path.is_file():
         raise SyncError(f"expected a regular JSON file: {path}")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        return json.loads(raw.decode("utf-8")), raw
     except json.JSONDecodeError as exc:
         raise SyncError(f"invalid JSON in {path}: {exc}") from exc
+    except UnicodeError as exc:
+        raise SyncError(f"JSON file is not valid UTF-8: {path}") from exc
+    except OSError as exc:
+        raise SyncError(f"cannot read JSON file {path}: {exc}") from exc
 
 
 def _assert_components_are_real(base: Path, relative: Path, label: str) -> None:
@@ -129,9 +157,35 @@ def _assert_components_are_real(base: Path, relative: Path, label: str) -> None:
 def _resolve_under(base: Path, raw_path: Any, label: str) -> tuple[Path, str]:
     if not isinstance(raw_path, str) or not raw_path:
         raise SyncError(f"{label} must be a non-empty relative path")
-    relative = Path(raw_path)
-    if relative.is_absolute() or ".." in relative.parts:
+    if "\\" in raw_path:
+        raise SyncError(f"{label} must use forward slashes: {raw_path!r}")
+    posix = PurePosixPath(raw_path)
+    if (
+        posix.is_absolute()
+        or ".." in posix.parts
+        or posix.as_posix() != raw_path
+        or raw_path in {"", "."}
+    ):
         raise SyncError(f"{label} must stay inside {base}: {raw_path!r}")
+    reserved = {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *(f"com{number}" for number in range(1, 10)),
+        *(f"lpt{number}" for number in range(1, 10)),
+    }
+    for part in posix.parts:
+        if (
+            any(character in part for character in ':<>"|?*')
+            or any(ord(character) < 32 for character in part)
+            or part.endswith((".", " "))
+            or part.split(".", 1)[0].lower() in reserved
+        ):
+            raise SyncError(
+                f"{label} contains a platform-unsafe path component: {raw_path!r}"
+            )
+    relative = Path(*posix.parts)
 
     normalized_base = _absolute(base)
     candidate = _absolute(normalized_base / relative)
@@ -144,6 +198,44 @@ def _resolve_under(base: Path, raw_path: Any, label: str) -> tuple[Path, str]:
 
     _assert_components_are_real(normalized_base, relative, label)
     return candidate, relative.as_posix()
+
+
+def _relative_paths_overlap(left: str, right: str) -> bool:
+    # Treat path identity with the strictest supported consumer semantics.
+    # A config that is disjoint only by case on Linux would alias protected
+    # inputs after the same repository is used on Windows.
+    left_path = PurePosixPath(
+        *(part.casefold() for part in PurePosixPath(left).parts)
+    )
+    right_path = PurePosixPath(
+        *(part.casefold() for part in PurePosixPath(right).parts)
+    )
+    if left_path == right_path:
+        return True
+    try:
+        left_path.relative_to(right_path)
+        return True
+    except ValueError:
+        pass
+    try:
+        right_path.relative_to(left_path)
+        return True
+    except ValueError:
+        return False
+
+
+def _assert_context_writes_disjoint(
+    contexts: dict[str, dict[str, Any]],
+    protected_roots: dict[str, str],
+) -> None:
+    for skill, wrapper in sorted(contexts.items()):
+        for write_path in wrapper["allowlist"]["write_paths"]:
+            for protected_path, protected_label in sorted(protected_roots.items()):
+                if _relative_paths_overlap(write_path, protected_path):
+                    raise SyncError(
+                        f"{skill} write path {write_path!r} overlaps protected "
+                        f"{protected_label} {protected_path!r}"
+                    )
 
 
 def _walk_regular_files(
@@ -183,6 +275,8 @@ def _walk_regular_files(
                 if managed_copy:
                     continue
                 raise SyncError(f"source Skill contains reserved marker file: {path}")
+            if name == CONTEXT_FILE and not managed_copy:
+                raise SyncError(f"source Skill contains reserved context file: {path}")
             if _is_link_or_junction(path):
                 raise SyncError(f"Skill trees may not contain links or junctions: {path}")
             try:
@@ -194,16 +288,113 @@ def _walk_regular_files(
             yield path, path.relative_to(root)
 
 
-def skill_digest(root: Path, *, managed_copy: bool = False) -> str:
+def _digest_entries(entries: list[tuple[str, bytes]]) -> str:
     digest = hashlib.sha256()
-    for path, relative in _walk_regular_files(root, managed_copy=managed_copy):
-        relative_bytes = relative.as_posix().encode("utf-8")
-        content = path.read_bytes()
+    for relative, content in sorted(entries, key=lambda item: item[0]):
+        relative_bytes = relative.encode("utf-8")
         digest.update(len(relative_bytes).to_bytes(8, "big"))
         digest.update(relative_bytes)
         digest.update(len(content).to_bytes(8, "big"))
         digest.update(content)
     return digest.hexdigest()
+
+
+def skill_digest(root: Path, *, managed_copy: bool = False) -> str:
+    entries = [
+        (relative.as_posix(), path.read_bytes())
+        for path, relative in _walk_regular_files(root, managed_copy=managed_copy)
+    ]
+    return _digest_entries(entries)
+
+
+def _skill_digest_with_context(root: Path, context_bytes: bytes | None) -> str:
+    entries = [
+        (relative.as_posix(), path.read_bytes())
+        for path, relative in _walk_regular_files(root)
+    ]
+    if context_bytes is not None:
+        entries.append((CONTEXT_FILE, context_bytes))
+    return _digest_entries(entries)
+
+
+def _git_worktree_root(path: Path) -> Path:
+    current = _absolute(path)
+    while True:
+        if _path_present(current / ".git"):
+            return current
+        if current.parent == current:
+            raise SyncError(f"Skill source is not inside a Git worktree: {path}")
+        current = current.parent
+
+
+def _assert_source_is_tracked(source: Path, expected_worktree: Path) -> None:
+    worktree = _git_worktree_root(source)
+    if not _same_path(worktree, expected_worktree):
+        raise SyncError(
+            f"Skill source is bound to unexpected Git worktree: {worktree}; "
+            f"expected {expected_worktree}"
+        )
+    reported = _absolute(Path(_run_git(worktree, "rev-parse", "--show-toplevel").strip()))
+    if not _same_path(worktree, reported):
+        raise SyncError(
+            f"Skill source Git boundary is ambiguous: {worktree} != {reported}"
+        )
+    try:
+        relative_root = source.relative_to(worktree).as_posix()
+    except ValueError as exc:
+        raise SyncError(f"Skill source escapes its Git worktree: {source}") from exc
+    tracked, gitlinks, intent_to_add = _git_index(worktree)
+    prefix = "" if relative_root == "." else relative_root.rstrip("/") + "/"
+    tracked_under = {
+        path for path in tracked if not prefix or path.startswith(prefix)
+    }
+    gitlinks_under = {
+        path for path in gitlinks if not prefix or path.startswith(prefix)
+    }
+    intent_under = {
+        path for path in intent_to_add if not prefix or path.startswith(prefix)
+    }
+    if gitlinks_under:
+        raise SyncError(
+            f"Skill source contains nested Git submodules: {', '.join(sorted(gitlinks_under))}"
+        )
+    if intent_under:
+        raise SyncError(
+            "Skill source contains intent-to-add paths: "
+            + ", ".join(sorted(intent_under)[:5])
+        )
+    present = {
+        prefix + relative.as_posix() if prefix else relative.as_posix()
+        for _path, relative in _walk_regular_files(source)
+    }
+    untracked = sorted(present - tracked_under)
+    missing = sorted(tracked_under - present)
+    if untracked or missing:
+        details: list[str] = []
+        if untracked:
+            details.append("untracked=" + ", ".join(untracked[:5]))
+        if missing:
+            details.append("missing-or-excluded=" + ", ".join(missing[:5]))
+        raise SyncError(
+            f"Skill source must match its Git index exactly ({'; '.join(details)})"
+        )
+
+
+def _json_bytes(value: Any) -> bytes:
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
 
 
 def _copy_ignore(_directory: str, names: list[str]) -> set[str]:
@@ -273,6 +464,19 @@ def _catalog_policy(central_root: Path) -> CatalogPolicy:
         name = _validated_name(entry.get("name"), f"catalog Skill {position} name")
         if name in index:
             raise SyncError(f"catalog contains duplicate Skill {name!r}")
+        kind = entry.get("kind")
+        if kind not in {"first-party", "external"}:
+            raise SyncError(
+                f"catalog Skill {name!r} kind must be first-party or external"
+            )
+        if kind == "external":
+            origin = entry.get("origin")
+            if not isinstance(origin, dict) or not isinstance(
+                origin.get("submodule"), str
+            ):
+                raise SyncError(
+                    f"catalog external Skill {name!r} must declare origin.submodule"
+                )
 
         lifecycle = entry.get("lifecycle")
         state = lifecycle.get("state") if isinstance(lifecycle, dict) else None
@@ -300,6 +504,29 @@ def _catalog_policy(central_root: Path) -> CatalogPolicy:
                 f"catalog Skill {name!r} uses unknown selection groups: "
                 + ", ".join(unknown_groups)
             )
+
+        context_policy = entry.get("context")
+        if context_policy is not None:
+            if entry.get("kind") != "first-party":
+                raise SyncError(
+                    f"catalog Skill {name!r} context validators are first-party only"
+                )
+            if not isinstance(context_policy, dict) or set(context_policy) != {
+                "validator"
+            }:
+                raise SyncError(
+                    f"catalog Skill {name!r} context must contain only validator"
+                )
+            validator = context_policy.get("validator")
+            if not isinstance(validator, str) or not validator.endswith(".py"):
+                raise SyncError(
+                    f"catalog Skill {name!r} context.validator must be a Python path"
+                )
+            validator_path = Path(validator)
+            if validator_path.is_absolute() or ".." in validator_path.parts:
+                raise SyncError(
+                    f"catalog Skill {name!r} context.validator must stay in its Skill"
+                )
         index[name] = entry
 
     overlap = sorted(set(index) & set(retired_names))
@@ -352,26 +579,25 @@ def _active_replacement(name: str, catalog: CatalogPolicy) -> str:
         cursor = catalog.replacements[cursor]
 
 
-def _read_config(
-    repo: Path, config_path: Path, central_root: Path
-) -> tuple[dict[str, list[str]], str]:
-    config = _load_json(config_path)
-    if not isinstance(config, dict) or config.get("version") != 1:
-        raise SyncError(f"{config_path} must use version 1")
+def _file_under(repo: Path, path: Path, label: str) -> tuple[Path, str]:
+    repo = _absolute(repo)
+    path = _absolute(path)
+    try:
+        common = Path(os.path.commonpath([repo, path]))
+    except ValueError as exc:
+        raise SyncError(f"{label} escapes {repo}: {path}") from exc
+    if not _same_path(common, repo):
+        raise SyncError(f"{label} escapes {repo}: {path}")
+    relative = Path(os.path.relpath(path, repo))
+    _assert_components_are_real(repo, relative, label)
+    if not _path_present(path) or _is_link_or_junction(path) or not path.is_file():
+        raise SyncError(f"{label} must be a regular file inside {repo}: {path}")
+    return path, relative.as_posix()
 
-    configured_source, source_relative = _resolve_under(
-        repo, config.get("source"), f"{config_path.name}.source"
-    )
-    if not _same_path(configured_source, central_root):
-        raise SyncError(
-            f"configured source resolves to {configured_source}, but this tool is running "
-            f"from {_absolute(central_root)}"
-        )
 
-    selected = config.get("skills")
+def _normalized_selected(selected: Any, config_path: Path) -> dict[str, list[str]]:
     if not isinstance(selected, dict):
         raise SyncError(f"{config_path}.skills must be an object")
-
     normalized: dict[str, list[str]] = {}
     for raw_name, hosts in selected.items():
         name = _validated_name(raw_name, "selected Skill name")
@@ -385,16 +611,541 @@ def _read_config(
         if unknown_hosts:
             raise SyncError(f"{name}: unknown hosts: {', '.join(unknown_hosts)}")
         normalized[name] = sorted(hosts)
-    return normalized, source_relative
+    return normalized
+
+
+def _git_index(repo: Path) -> tuple[set[str], set[str], set[str]]:
+    output = _run_git(repo, "-c", "core.quotePath=false", "ls-files", "--stage", "-z")
+    tracked: set[str] = set()
+    gitlinks: set[str] = set()
+    for raw_record in output.split("\0"):
+        if not raw_record:
+            continue
+        try:
+            metadata, raw_path = raw_record.split("\t", 1)
+            mode, _object_name, stage = metadata.split()
+        except ValueError as exc:
+            raise SyncError(f"Git returned malformed index data for {repo}") from exc
+        normalized = Path(raw_path).as_posix()
+        if stage != "0":
+            raise SyncError(
+                f"Git index has an unresolved merge stage for {normalized}: {stage}"
+            )
+        if mode == "160000":
+            gitlinks.add(normalized)
+        else:
+            tracked.add(normalized)
+    intent_to_add = {
+        Path(path).as_posix()
+        for path in _run_git(
+            repo,
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--name-only",
+            "--diff-filter=A",
+            "-z",
+        ).split("\0")
+        if path
+    }
+    return tracked, gitlinks, intent_to_add
+
+
+def _crosses_gitlink(relative: str, gitlinks: set[str]) -> bool:
+    return any(relative == link or relative.startswith(link + "/") for link in gitlinks)
+
+
+def _declared_path(
+    repo: Path,
+    raw_path: Any,
+    label: str,
+    *,
+    gitlinks: set[str],
+) -> tuple[Path, str]:
+    path, relative = _resolve_under(repo, raw_path, label)
+    if _crosses_gitlink(relative, gitlinks):
+        raise SyncError(f"{label} crosses a Git submodule: {relative}")
+    return path, relative
+
+
+def _tracked_file(
+    repo: Path,
+    raw_path: Any,
+    label: str,
+    *,
+    tracked: set[str],
+    gitlinks: set[str],
+    intent_to_add: set[str],
+) -> str:
+    path, relative = _declared_path(repo, raw_path, label, gitlinks=gitlinks)
+    if relative not in tracked:
+        raise SyncError(f"{label} must be a Git tracked regular file: {relative}")
+    if relative in intent_to_add:
+        raise SyncError(f"{label} must not be intent-to-add: {relative}")
+    if not _path_present(path) or _is_link_or_junction(path) or not path.is_file():
+        raise SyncError(f"{label} must be a real regular file: {relative}")
+    _validate_utf8_file(path, label)
+    return relative
+
+
+def _validate_utf8_file(path: Path, label: str) -> None:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            while handle.read(1024 * 1024):
+                pass
+    except UnicodeError as exc:
+        raise SyncError(f"{label} must be valid UTF-8: {path}") from exc
+    except OSError as exc:
+        raise SyncError(f"cannot read {label} as UTF-8: {path}: {exc}") from exc
+
+
+def _tracked_collection(
+    repo: Path,
+    raw_path: Any,
+    label: str,
+    *,
+    tracked: set[str],
+    gitlinks: set[str],
+    intent_to_add: set[str],
+) -> tuple[str, list[str]]:
+    path, relative = _declared_path(repo, raw_path, label, gitlinks=gitlinks)
+    if not _path_present(path) or _is_link_or_junction(path) or not path.is_dir():
+        raise SyncError(f"{label} must be a real directory: {relative}")
+    prefix = relative.rstrip("/") + "/"
+    members = sorted(item for item in tracked if item.startswith(prefix))
+    if not members:
+        raise SyncError(
+            f"{label} must use the Git index's exact path casing and contain at "
+            f"least one tracked member: {relative}"
+        )
+    intent_members = sorted(item for item in intent_to_add if item.startswith(prefix))
+    if intent_members:
+        raise SyncError(
+            f"{label} contains intent-to-add members: {', '.join(intent_members[:5])}"
+        )
+    for member in members:
+        member_path, normalized = _declared_path(
+            repo, member, f"{label} member", gitlinks=gitlinks
+        )
+        if normalized != member or not member_path.is_file():
+            raise SyncError(f"{label} contains a non-regular tracked entry: {member}")
+        _validate_utf8_file(member_path, f"{label} member")
+    return relative, members
+
+
+def _write_path(
+    repo: Path,
+    raw_path: Any,
+    label: str,
+    *,
+    tracked: set[str],
+    gitlinks: set[str],
+    intent_to_add: set[str],
+) -> str:
+    path, relative = _declared_path(repo, raw_path, label, gitlinks=gitlinks)
+    if _path_present(path):
+        if _is_link_or_junction(path):
+            raise SyncError(f"{label} must not be a link or junction: {relative}")
+        mode = path.lstat().st_mode
+        if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+            raise SyncError(f"{label} is a special filesystem entry: {relative}")
+        if stat.S_ISREG(mode):
+            if relative not in tracked:
+                raise SyncError(
+                    f"{label} existing file must be Git tracked: {relative}"
+                )
+            if relative in intent_to_add:
+                raise SyncError(f"{label} must not be intent-to-add: {relative}")
+            _validate_utf8_file(path, label)
+    return relative
+
+
+def _repository_config(
+    repo: Path,
+    path: Path,
+    relative: str,
+    *,
+    tracked: set[str],
+    gitlinks: set[str],
+) -> tuple[dict[str, Any], str]:
+    if relative not in tracked:
+        raise SyncError(f"repository config must be Git tracked: {relative}")
+    raw, raw_bytes = _load_json_with_bytes(path)
+    allowed = {"schema", "repository_id", "language", "timezone", "facts"}
+    if not isinstance(raw, dict) or set(raw) - allowed:
+        raise SyncError(f"{relative} has unknown repository config fields")
+    if raw.get("schema") != "agent-skills.repository/v1":
+        raise SyncError(f"{relative}.schema must be agent-skills.repository/v1")
+    repository_id = _validated_name(raw.get("repository_id"), "repository_id")
+    language = raw.get("language")
+    timezone = raw.get("timezone")
+    if language is not None and (not isinstance(language, str) or not language):
+        raise SyncError(f"{relative}.language must be a non-empty string")
+    if timezone is not None and (not isinstance(timezone, str) or not timezone):
+        raise SyncError(f"{relative}.timezone must be a non-empty string")
+    facts = raw.get("facts", {})
+    if not isinstance(facts, dict):
+        raise SyncError(f"{relative}.facts must be an object")
+    normalized_facts: dict[str, dict[str, str]] = {}
+    for raw_id, raw_fact in facts.items():
+        fact_id = _validated_name(raw_id, "repository fact ID")
+        if not isinstance(raw_fact, dict) or not set(raw_fact) <= {
+            "path",
+            "section",
+            "description",
+        }:
+            raise SyncError(f"repository fact {fact_id!r} has unknown fields")
+        _fact_absolute, fact_path = _declared_path(
+            repo,
+            raw_fact.get("path"),
+            f"repository fact {fact_id!r}.path",
+            gitlinks=gitlinks,
+        )
+        normalized_fact = {"path": fact_path}
+        for field in ("section", "description"):
+            value = raw_fact.get(field)
+            if value is not None:
+                if not isinstance(value, str) or not value:
+                    raise SyncError(
+                        f"repository fact {fact_id!r}.{field} must be a non-empty string"
+                    )
+                normalized_fact[field] = value
+        normalized_facts[fact_id] = normalized_fact
+    normalized: dict[str, Any] = {
+        "schema": "agent-skills.repository/v1",
+        "repository_id": repository_id,
+        "facts": dict(sorted(normalized_facts.items())),
+    }
+    if language is not None:
+        normalized["language"] = language
+    if timezone is not None:
+        normalized["timezone"] = timezone
+    return normalized, _sha256_bytes(raw_bytes)
+
+
+def _context_validator(skill_root: Path, entry: dict[str, Any], name: str):
+    policy = entry.get("context")
+    if not isinstance(policy, dict):
+        raise SyncError(f"Skill {name!r} does not support consumer context")
+    validator_path, validator_relative = _resolve_under(
+        skill_root,
+        policy.get("validator"),
+        f"context validator for {name}",
+    )
+    if (
+        not _path_present(validator_path)
+        or _is_link_or_junction(validator_path)
+        or not validator_path.is_file()
+    ):
+        raise SyncError(
+            f"context validator for {name!r} is unavailable: {validator_relative}"
+        )
+    module_name = f"_agent_skills_context_{name.replace('-', '_')}_{uuid.uuid4().hex}"
+    spec = importlib.util.spec_from_file_location(module_name, validator_path)
+    if spec is None or spec.loader is None:
+        raise SyncError(f"cannot load context validator for {name!r}")
+    module = importlib.util.module_from_spec(spec)
+    old_dont_write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    previous_module = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        raise SyncError(f"context validator for {name!r} failed to load: {exc}") from exc
+    finally:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
+        sys.dont_write_bytecode = old_dont_write_bytecode
+    validator = getattr(module, "validate_materialized_context", None)
+    if not callable(validator):
+        raise SyncError(
+            f"context validator for {name!r} must expose validate_materialized_context"
+        )
+    return validator
+
+
+def _materialized_context(
+    repo: Path,
+    central_root: Path,
+    name: str,
+    entry: dict[str, Any],
+    repository: dict[str, Any],
+    repository_relative: str,
+    repository_digest: str,
+    skill_config_path: Path,
+    skill_config_relative: str,
+    *,
+    tracked: set[str],
+    gitlinks: set[str],
+    intent_to_add: set[str],
+) -> tuple[dict[str, Any], list[str]]:
+    if skill_config_relative not in tracked:
+        raise SyncError(f"Skill config must be Git tracked: {skill_config_relative}")
+    if skill_config_relative in intent_to_add:
+        raise SyncError(f"Skill config must not be intent-to-add: {skill_config_relative}")
+    skill_config, skill_config_bytes = _load_json_with_bytes(skill_config_path)
+    if not isinstance(skill_config, dict):
+        raise SyncError(f"{skill_config_relative} must be a JSON object")
+    if skill_config.get("skill") != name:
+        raise SyncError(
+            f"{skill_config_relative}.skill must match selected Skill {name!r}"
+        )
+    schema = skill_config.get("schema")
+    if not isinstance(schema, str) or not schema:
+        raise SyncError(f"{skill_config_relative}.schema must be a non-empty string")
+
+    skill_root, _ = _resolve_under(
+        central_root, entry.get("path"), f"catalog path for {name}"
+    )
+    validator = _context_validator(skill_root, entry, name)
+    try:
+        result = validator(deepcopy(repository), deepcopy(skill_config))
+    except Exception as exc:
+        raise SyncError(f"invalid context config for {name!r}: {exc}") from exc
+    expected_keys = {"context", "tracked_files", "tracked_collections", "write_paths"}
+    if not isinstance(result, dict) or set(result) != expected_keys:
+        raise SyncError(
+            f"context validator for {name!r} must return exactly "
+            + ", ".join(sorted(expected_keys))
+        )
+    if not isinstance(result["context"], dict):
+        raise SyncError(f"context validator for {name!r} context must be an object")
+    for field in ("tracked_files", "tracked_collections", "write_paths"):
+        values = result[field]
+        if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+            raise SyncError(f"context validator for {name!r} {field} must be a string array")
+        if len(values) != len(set(values)):
+            raise SyncError(f"context validator for {name!r} {field} has duplicates")
+
+    explicit_tracked = {
+        _tracked_file(
+            repo,
+            raw_path,
+            f"{name} tracked file",
+            tracked=tracked,
+            gitlinks=gitlinks,
+            intent_to_add=intent_to_add,
+        )
+        for raw_path in result["tracked_files"]
+    }
+    declared_tracked = sorted(explicit_tracked)
+    normalized_collections: list[str] = []
+    for raw_path in result["tracked_collections"]:
+        collection, members = _tracked_collection(
+            repo,
+            raw_path,
+            f"{name} tracked collection",
+            tracked=tracked,
+            gitlinks=gitlinks,
+            intent_to_add=intent_to_add,
+        )
+        normalized_collections.append(collection)
+        explicit_tracked.update(members)
+    normalized_writes = sorted(
+        {
+            _write_path(
+                repo,
+                raw_path,
+                f"{name} write path",
+                tracked=tracked,
+                gitlinks=gitlinks,
+                intent_to_add=intent_to_add,
+            )
+            for raw_path in result["write_paths"]
+        }
+    )
+
+    skill_config_digest = _sha256_bytes(skill_config_bytes)
+    wrapper = {
+        "version": 1,
+        "manager": "agent-skills",
+        "skill": name,
+        "repository_id": repository["repository_id"],
+        "sources": {
+            "repository": {
+                "path": repository_relative,
+                "digest": repository_digest,
+            },
+            "skill": {
+                "path": skill_config_relative,
+                "digest": skill_config_digest,
+            },
+        },
+        "context": result["context"],
+        "allowlist": {
+            "tracked_files": sorted(explicit_tracked),
+            "tracked_collections": sorted(normalized_collections),
+            "write_paths": normalized_writes,
+        },
+    }
+    try:
+        _json_bytes(wrapper)
+    except (TypeError, ValueError) as exc:
+        raise SyncError(f"context validator for {name!r} returned non-JSON data") from exc
+    return wrapper, declared_tracked
+
+
+def _read_config(
+    repo: Path,
+    config_path: Path,
+    central_root: Path,
+    catalog: CatalogPolicy,
+) -> ConsumerConfig:
+    config_path, config_relative = _file_under(repo, config_path, "consumer config")
+    config, config_bytes = _load_json_with_bytes(config_path)
+    if not isinstance(config, dict):
+        raise SyncError(f"{config_path} must be a JSON object")
+    version = config.get("version")
+    if version == 1:
+        if set(config) != {"version", "source", "skills"}:
+            raise SyncError(f"{config_path} version 1 has unknown fields")
+    elif version == 2:
+        if set(config) != {"version", "source", "skills", "config"}:
+            raise SyncError(f"{config_path} version 2 has unknown fields")
+    else:
+        raise SyncError(f"{config_path} must use version 1 or 2")
+
+    configured_source, source_relative = _resolve_under(
+        repo, config.get("source"), f"{config_path.name}.source"
+    )
+    if not _same_path(configured_source, central_root):
+        raise SyncError(
+            f"configured source resolves to {configured_source}, but this tool is running "
+            f"from {_absolute(central_root)}"
+        )
+    selected = _normalized_selected(config.get("skills"), config_path)
+    contexts: dict[str, dict[str, Any]] = {}
+    declared_tracked_by_skill: dict[str, list[str]] = {}
+    protected_context_paths: dict[str, str] = {
+        config_relative: "consumer config",
+        STATE_FILE: "materializer state",
+        LOCK_FILE: "materializer lock",
+    }
+
+    if version == 2:
+        raw_context = config.get("config")
+        if not isinstance(raw_context, dict) or set(raw_context) != {
+            "repository",
+            "skills",
+        }:
+            raise SyncError(
+                f"{config_path}.config must contain exactly repository and skills"
+            )
+        raw_skill_configs = raw_context.get("skills")
+        if not isinstance(raw_skill_configs, dict):
+            raise SyncError(f"{config_path}.config.skills must be an object")
+        configured_names = {
+            _validated_name(name, "configured Skill context name")
+            for name in raw_skill_configs
+        }
+        if configured_names != set(raw_skill_configs):
+            raise SyncError(f"{config_path}.config.skills contains invalid names")
+        unselected = sorted(configured_names - set(selected))
+        if unselected:
+            raise SyncError(
+                "Skill context configured for unselected Skills: " + ", ".join(unselected)
+            )
+        tracked, gitlinks, intent_to_add = _git_index(repo)
+        if config_relative not in tracked:
+            raise SyncError(f"version 2 consumer config must be Git tracked: {config_relative}")
+        if config_relative in intent_to_add:
+            raise SyncError(
+                f"version 2 consumer config must not be intent-to-add: {config_relative}"
+            )
+        if configured_names:
+            repository_path, repository_relative = _declared_path(
+                repo,
+                raw_context.get("repository"),
+                "repository config",
+                gitlinks=gitlinks,
+            )
+            if (
+                not _path_present(repository_path)
+                or _is_link_or_junction(repository_path)
+                or not repository_path.is_file()
+            ):
+                raise SyncError(
+                    f"repository config must be a regular file: {repository_relative}"
+                )
+            if repository_relative in intent_to_add:
+                raise SyncError(
+                    f"repository config must not be intent-to-add: {repository_relative}"
+                )
+            repository, repository_digest = _repository_config(
+                repo,
+                repository_path,
+                repository_relative,
+                tracked=tracked,
+                gitlinks=gitlinks,
+            )
+            protected_context_paths[repository_relative] = "repository config"
+            for name in sorted(configured_names):
+                entry = catalog.skills.get(name)
+                if entry is None:
+                    raise SyncError(f"unknown Skill context in {config_path.name}: {name}")
+                skill_config_path, skill_config_relative = _declared_path(
+                    repo,
+                    raw_skill_configs[name],
+                    f"config for {name}",
+                    gitlinks=gitlinks,
+                )
+                if (
+                    not _path_present(skill_config_path)
+                    or _is_link_or_junction(skill_config_path)
+                    or not skill_config_path.is_file()
+                ):
+                    raise SyncError(
+                        f"Skill config must be a regular file: {skill_config_relative}"
+                    )
+                protected_context_paths[skill_config_relative] = (
+                    f"Skill config for {name!r}"
+                )
+                context, declared_tracked = _materialized_context(
+                    repo,
+                    central_root,
+                    name,
+                    entry,
+                    repository,
+                    repository_relative,
+                    repository_digest,
+                    skill_config_path,
+                    skill_config_relative,
+                    tracked=tracked,
+                    gitlinks=gitlinks,
+                    intent_to_add=intent_to_add,
+                )
+                contexts[name] = context
+                declared_tracked_by_skill[name] = declared_tracked
+        elif raw_context.get("repository") is not None:
+            raise SyncError(
+                f"{config_path}.config.repository must be null when no Skill contexts exist"
+            )
+
+        for name, paths in declared_tracked_by_skill.items():
+            for path in paths:
+                protected_context_paths[path] = f"{name} explicit tracked fact"
+        _assert_context_writes_disjoint(contexts, protected_context_paths)
+
+    return ConsumerConfig(
+        selected=selected,
+        source_relative=source_relative,
+        config_relative=config_relative,
+        config_digest=_sha256_bytes(config_bytes),
+        contexts=contexts,
+    )
 
 
 def build_plan(
     repo: Path, central_root: Path, config_path: Path
-) -> tuple[list[DesiredTarget], str]:
+) -> tuple[list[DesiredTarget], ConsumerConfig]:
     repo = _absolute(repo)
     central_root = _absolute(central_root)
-    selected, source_relative = _read_config(repo, config_path, central_root)
     catalog = _catalog_policy(central_root)
+    consumer = _read_config(repo, config_path, central_root, catalog)
+    selected = consumer.selected
     desired: list[DesiredTarget] = []
 
     # Reject non-selectable names before group checks or any source-tree work so
@@ -433,15 +1184,34 @@ def build_plan(
             )
 
     for name in sorted(selected):
+        entry = catalog.skills[name]
         source, source_path = _resolve_under(
-            central_root, catalog.skills[name].get("path"), f"catalog path for {name}"
+            central_root, entry.get("path"), f"catalog path for {name}"
         )
         if not source.is_dir() or not (source / "SKILL.md").is_file():
             raise SyncError(
                 f"source for {name} is unavailable at {source_path}; run "
                 "git submodule update --init --recursive in the consumer repository"
             )
-        digest = skill_digest(source)
+        if entry.get("kind") == "first-party":
+            expected_worktree = central_root
+        else:
+            origin = entry.get("origin")
+            if not isinstance(origin, dict):
+                raise SyncError(f"external Skill {name!r} has no origin policy")
+            expected_worktree, _ = _resolve_under(
+                central_root,
+                origin.get("submodule"),
+                f"catalog submodule for {name}",
+            )
+        _assert_source_is_tracked(source, expected_worktree)
+        source_digest = skill_digest(source)
+        context = consumer.contexts.get(name)
+        context_bytes = _json_bytes(context) if context is not None else None
+        context_digest = (
+            _sha256_bytes(context_bytes) if context_bytes is not None else None
+        )
+        digest = _skill_digest_with_context(source, context_bytes)
 
         for host in selected[name]:
             target_relative_path = TARGET_ROOTS[host] / name
@@ -459,9 +1229,17 @@ def build_plan(
                     target=target,
                     target_relative=target_relative,
                     digest=digest,
+                    source_digest=source_digest,
+                    context_digest=context_digest,
+                    context=context,
                 )
             )
-    return desired, source_relative
+    materialized_roots = {
+        item.target_relative: f"materialized Skill target {item.skill!r}/{item.host}"
+        for item in desired
+    }
+    _assert_context_writes_disjoint(consumer.contexts, materialized_roots)
+    return desired, consumer
 
 
 def _run_git(root: Path, *arguments: str) -> str:
@@ -479,6 +1257,7 @@ def _run_git(root: Path, *arguments: str) -> str:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=15,
         )
     except FileNotFoundError as exc:
@@ -535,7 +1314,22 @@ def _validate_record(record: Any, label: str) -> dict[str, Any]:
     digest = record.get("digest")
     if not _valid_digest(digest):
         raise SyncError(f"{label}.digest must be a lowercase SHA-256 hex digest")
-    return {"skill": name, "host": host, "source": source, "digest": digest}
+    normalized = {"skill": name, "host": host, "source": source, "digest": digest}
+    if "source_digest" in record:
+        source_digest = record.get("source_digest")
+        if not _valid_digest(source_digest):
+            raise SyncError(
+                f"{label}.source_digest must be a lowercase SHA-256 hex digest"
+            )
+        normalized["source_digest"] = source_digest
+    if "context_digest" in record:
+        context_digest = record.get("context_digest")
+        if context_digest is not None and not _valid_digest(context_digest):
+            raise SyncError(
+                f"{label}.context_digest must be a lowercase SHA-256 digest or null"
+            )
+        normalized["context_digest"] = context_digest
+    return normalized
 
 
 def _marker_for_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -552,6 +1346,8 @@ def _state_record(item: DesiredTarget) -> dict[str, Any]:
         "host": item.host,
         "source": item.source_relative,
         "digest": item.digest,
+        "source_digest": item.source_digest,
+        "context_digest": item.context_digest,
     }
 
 
@@ -565,6 +1361,8 @@ def _state(repo: Path) -> tuple[dict[str, Any], bool]:
             "manager": "agent-skills",
             "source": None,
             "source_commit": None,
+            "config": None,
+            "config_digest": None,
             "managed": {},
         },
     )
@@ -580,6 +1378,12 @@ def _state(repo: Path) -> tuple[dict[str, Any], bool]:
         raise SyncError(f"{path}.source_commit must be a string or null")
     if not isinstance(state.get("managed"), dict):
         raise SyncError(f"{path}.managed must be an object")
+    if state.get("config") is not None and not isinstance(state.get("config"), str):
+        raise SyncError(f"{path}.config must be a string or null")
+    if state.get("config_digest") is not None and not _valid_digest(
+        state.get("config_digest")
+    ):
+        raise SyncError(f"{path}.config_digest must be a SHA-256 digest or null")
     return state, exists
 
 
@@ -731,7 +1535,8 @@ def _check_locked(
     repo: Path, central_root: Path, config_path: Path
 ) -> list[str]:
     source_commit = _source_commit(central_root)
-    desired, source_relative = build_plan(repo, central_root, config_path)
+    desired, consumer = build_plan(repo, central_root, config_path)
+    source_relative = consumer.source_relative
     if _source_commit(central_root) != source_commit:
         raise SyncError("central source changed while the materialization plan was built")
 
@@ -749,6 +1554,16 @@ def _check_locked(
             errors.append(
                 f"state central commit is {state.get('source_commit')!r}; "
                 f"expected {source_commit!r}"
+            )
+        if state.get("config") != consumer.config_relative:
+            errors.append(
+                f"state config is {state.get('config')!r}; "
+                f"expected {consumer.config_relative!r}"
+            )
+        if state.get("config_digest") != consumer.config_digest:
+            errors.append(
+                f"state config digest is {state.get('config_digest')!r}; "
+                f"expected {consumer.config_digest!r}"
             )
 
     try:
@@ -796,6 +1611,11 @@ def _check_locked(
             errors.append(f"stale managed target in state: {relative}")
             if _path_present(target):
                 errors.append(f"stale generated Skill still exists: {relative}")
+    refreshed_desired, refreshed_consumer = build_plan(repo, central_root, config_path)
+    if refreshed_desired != desired or refreshed_consumer != consumer:
+        errors.append("central source or consumer context changed while checking")
+    if _source_commit(central_root) != source_commit:
+        errors.append("central source commit changed while checking")
     return errors
 
 
@@ -807,9 +1627,7 @@ def check(repo: Path, central_root: Path, config_path: Path) -> list[str]:
 
 
 def _write_json(path: Path, value: Any) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    path.write_bytes(_json_bytes(value))
 
 
 def _remove_readonly(function, path: str, _error_info) -> None:
@@ -843,7 +1661,8 @@ def _synchronize_locked(
     dry_run: bool,
 ) -> list[str]:
     source_commit = _source_commit(central_root)
-    desired, source_relative = build_plan(repo, central_root, config_path)
+    desired, consumer = build_plan(repo, central_root, config_path)
+    source_relative = consumer.source_relative
     old_state, _state_exists = _state(repo)
     stale = _preflight(repo, desired, old_state, source_relative)
 
@@ -874,15 +1693,24 @@ def _synchronize_locked(
                 symlinks=True,
                 ignore=_copy_ignore,
             )
-            staged_digest = skill_digest(stage)
+            if item.context is not None:
+                _write_json(stage / CONTEXT_FILE, item.context)
+            staged_digest = skill_digest(stage, managed_copy=True)
             if staged_digest != item.digest:
                 raise SyncError(
                     f"staged copy changed while reading {item.skill}: "
                     f"{staged_digest[:12]} != {item.digest[:12]}"
                 )
-            if skill_digest(item.source) != item.digest:
+            if skill_digest(item.source) != item.source_digest:
                 raise SyncError(f"source Skill changed while copying: {item.source}")
 
+        refreshed_desired, refreshed_consumer = build_plan(
+            repo, central_root, config_path
+        )
+        if refreshed_desired != desired or refreshed_consumer != consumer:
+            raise SyncError(
+                "central source or consumer context changed while Skills were staged"
+            )
         if _source_commit(central_root) != source_commit:
             raise SyncError("central source changed while Skills were being staged")
 
@@ -929,6 +1757,8 @@ def _synchronize_locked(
             "manager": "agent-skills",
             "source": source_relative,
             "source_commit": source_commit,
+            "config": consumer.config_relative,
+            "config_digest": consumer.config_digest,
             "managed": {
                 item.target_relative: _state_record(item)
                 for item in sorted(desired, key=lambda entry: entry.target_relative)

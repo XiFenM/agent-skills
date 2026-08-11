@@ -47,7 +47,8 @@
         "state": "pending",
         "topics": [
           "generalize-workflow",
-          "official-skill-routing-refresh"
+          "official-skill-routing-refresh",
+          "daily-work-adaptation-migration"
         ]
       }
     },
@@ -63,6 +64,9 @@
           "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
         }
       ],
+      "context": {
+        "validator": "scripts/context_config.py"
+      },
       "lifecycle": {
         "state": "active"
       },
@@ -70,12 +74,13 @@
       "consumers": [
         "PlanA"
       ],
-      "migration": "verbatim",
+      "migration": "generalized-configurable-upgrade",
       "review": {
-        "state": "pending",
+        "state": "implemented",
         "topics": [
-          "learning-workflow-boundary-review",
-          "consumer-relative-paths"
+          "generic-managed-context",
+          "narrow-trigger-zero-write",
+          "scaffold-first-review"
         ]
       }
     },
@@ -124,6 +129,9 @@
           "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
         }
       ],
+      "context": {
+        "validator": "scripts/memo_cards.py"
+      },
       "lifecycle": {
         "state": "active"
       },
@@ -131,13 +139,13 @@
       "consumers": [
         "PlanA"
       ],
-      "migration": "verbatim",
+      "migration": "generalized-configurable-upgrade",
       "review": {
-        "state": "pending",
+        "state": "implemented",
         "topics": [
-          "learning-workflow-boundary-review",
-          "central-location-relative-link",
-          "consumer-relative-paths"
+          "managed-markji-staging",
+          "deterministic-artifacts-and-cas",
+          "source-and-inventory-safety"
         ]
       }
     },
@@ -153,6 +161,9 @@
           "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
         }
       ],
+      "context": {
+        "validator": "scripts/resource_planning.py"
+      },
       "lifecycle": {
         "state": "active"
       },
@@ -160,12 +171,13 @@
       "consumers": [
         "PlanA"
       ],
-      "migration": "verbatim",
+      "migration": "generalized-configurable-upgrade",
       "review": {
-        "state": "pending",
+        "state": "implemented",
         "topics": [
-          "learning-workflow-boundary-review",
-          "consumer-relative-paths"
+          "evidence-governance",
+          "single-registry-recoverable-publish",
+          "consumer-config-adapters"
         ]
       }
     },

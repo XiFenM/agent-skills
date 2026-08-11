@@ -1,0 +1,4 @@
+interface:
+  display_name: "English Coach / 英语教练"
+  short_description: "低打扰英语反馈、支架式复盘、混合纠错与技术语义分流"
+  default_prompt: "使用 $english-coach 帮我用英语复盘刚学过的内容，先给表达支架，再带我主动表达。"

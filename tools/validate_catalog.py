@@ -338,7 +338,31 @@ def validate(root: Path = ROOT) -> list[str]:
             if "origin" in entry:
                 errors.append(f"{name}: first-party provenance must use lineage, not origin")
             _validate_lineage(name, entry, errors)
+            context = entry.get("context")
+            if context is not None:
+                if not isinstance(context, dict) or set(context) != {"validator"}:
+                    errors.append(f"{name}: context must contain only validator")
+                elif skill_dir is not None:
+                    validator = context.get("validator")
+                    if not isinstance(validator, str) or not validator.endswith(".py"):
+                        errors.append(f"{name}: context.validator must be a Python path")
+                    else:
+                        try:
+                            validator_path, _ = _relative_directory(
+                                skill_dir,
+                                validator,
+                                f"{name}.context.validator",
+                            )
+                        except ValueError as exc:
+                            errors.append(str(exc))
+                        else:
+                            if not validator_path.is_file():
+                                errors.append(
+                                    f"{name}: context validator does not exist: {validator}"
+                                )
         elif kind == "external":
+            if "context" in entry:
+                errors.append(f"{name}: external Skills cannot declare context validators")
             if "lineage" in entry:
                 errors.append(f"{name}: external provenance must use origin, not lineage")
             origin = entry.get("origin")

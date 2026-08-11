@@ -1,6 +1,6 @@
 # Skill 迁移与升级基线
 
-本文件保留 2026-08-10 第一阶段的迁移事实，并记录 2026-08-11 已获授权的中央学习核心升级结果。历史记录不表示对应 Skill 仍处于当时的生命周期状态；消费仓库迁移和远端操作不在中央实现授权内。
+本文件保留 2026-08-10 第一阶段的迁移事实，并记录 2026-08-11 已获授权的中央学习核心及后续三项学习辅助 Skill 升级结果。历史记录不表示对应 Skill 仍处于当时的生命周期状态；每一轮消费适配、提交和远端操作仍按各自授权边界执行。
 
 ## 2026-08-10：第一阶段迁移事实
 
@@ -58,11 +58,20 @@ ZenMux 官方仓库中当前还有其他 Skill，但它们不是三个主仓库�
 - 2026-08-11 完成 M4 PlanA 切换并发布：原子提交 `f7e267d22cc626e4c79aeeac918ebb217d34be8e` 继续把 `.agent-skills` 固定在 `b2afd92854d57a375fdf990028c31561118cf8ec`，移除两棵受 Git 跟踪的旧发现副本，并把 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli` 同时分发给 Codex 和 Claude。PlanA 的流程、唯一稀疏 Checkpoint、学习偏好及入口文档已改为中央行为规范的仓库适配；提交后 materialize 生成 12 个带 marker 的受管入口且 `--check` 通过，12 个生成 Skill 的结构校验及 `study-log` 的 `41 passed, 1 skipped` 通过（跳过项是 Windows 无目录符号链接权限的环境用例）。全新会话从 Pass C-1 唯一下一动作零写恢复且无 drift；Program、Lesson、证据、进度文件及无关未跟踪用户工作均未触碰。
 - 2026-08-11 完成 M5 并发布：中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb` 删除两个 rollback-only 旧目录，把 `learn-by-practice` 与 `study-companion` 移入 `retired_names` 并继续指向 `guide-learning`，同时只把 `english-coach` 中唯一的旧入口名称机械替换为 `guide-learning`；catalog 校验为 11 Skills（6 first-party、5 external），完整测试为 `78 passed, 2 skipped, 34 subtests passed`，6 个 active first-party Skill 结构校验通过。programming-lab 提交 `a9dac09c744d94f11d20f8a6ee85404899a14099` 与 PlanA 提交 `272e68cfc82cd91b26af12e46bb87609ea7bfb92` 均把 `.agent-skills` 固定到该中央提交并重新 materialize：前者保持 2 个 Codex 入口，后者保持 12 个双 host 入口，state、marker 与 `--check` 全部一致。两仓库的 `study-log` 均为 `41 passed, 1 skipped`，programming-lab 默认 CPU 测试为 `10 passed`；全新只读恢复分别停在 Lesson 03 授权边界和 Pass C-1 唯一下一动作，均零写且不依赖旧入口。三个仓库均已推送并与远端 `main` 同步；历史学习证据、PlanA 无关未跟踪用户工作和 `learning-core-v1` 标签未改变。
 
+## 2026-08-11：三项学习辅助 Skill 中央升级
+
+- `english-coach` 已落实 D24–D27：只在用户实际使用英语或明确要求时激活，采用低打扰随行反馈、支架优先回顾、混合纠错、技术语义分流与默认零写入；中央入口不再包含 PlanA 路径或旧 prompt 分支。
+- `memo-cards` 已落实 D28–D34：中央核心只服务受管 Markji 3.8+ 暂存产物，采用稳定逻辑身份、严格素材门槛、单一模板 registry、派生 inventory、风险分级确认、预览 digest、来源／目标 CAS 与原子发布；原 PlanA 相对链接模板已退出中央源码。
+- `resource-planning` 已落实 D35–D39：`research-brief`、`refresh`、`review` 三模式隔离，资源身份／claim 证据／coverage cursor／候选事件归入单一 registry，并由 `verify`、`prepare`、`publish`、`recover` 管理可恢复的多文件事务。
+- 三项 Skill 均登记严格的 `validate_materialized_context`。materializer 继续兼容 version 1，并新增 version 2 配置索引、公共 repository facts、逐 Skill 配置、Git-tracked UTF-8 collection 展开和逐副本 `.agent-skills-context.json`；中央源码、消费配置和生成上下文均进入摘要与漂移检查。
+- 最终中央验证为 `197 passed, 4 skipped, 46 subtests passed`，catalog 与三项 Skill 结构校验通过；隔离的英语制卡、技术依赖卡、无配置 research 和受管 refresh／review 前向场景均通过。跳过项只涉及当前 Windows 环境缺少链接／junction 权限的防护用例。
+- `creator-workflow` 的通用化质量评审、升级方案和 `daily-work` 适配迁移已明确延期，不与本轮学习类实施混合。
+- 本节只记录中央实现边界。PlanA 的 version 2 配置、旧英语 prompt／旧资源 SOP 退役、历史卡片渐进接管、资源 registry bootstrap 及首次真实 refresh／review 均属于后续消费适配；本轮不批量改写历史学习产物或用户未跟踪工作。
+
 ## 当前已知但暂不修复
 
-1. `memo-cards/references/tech-qa-template.md` 使用 `../../../../英语/cards/_templates.md`；它从中央源码位置不能独立解析，但 M4 已验证 PlanA 两棵生成目录都按原挂载深度正确解析到 `英语/cards/_templates.md`。该消费仓库耦合留待 `memo-cards` 独立质量评审，不在迁移中改写。
-2. 除已完成运行时路径适配的 `study-log` 外，来自 PlanA 的独立 Skill 仍广泛依赖消费仓库中的 `英语/`、`计划/`、`README.md`、`{module}/` 等相对路径；M4 已通过保持原发现深度并明确仓库适配职责验证现有调用，但进一步通用化仍属于各 Skill 的独立质量评审。
-3. `creator-workflow` 仍绑定当前创作目录约定；后续共同抽象为通用工作流。
-4. `creator-workflow` 仍写有“`remotion-best-practices` 加窄域 Remotion Skill”的旧路由；去重后只有聚合入口，需在后续通用化时一起修正。
+1. PlanA 当前发布版本仍固定 M5 中央提交并使用 version 1 索引；在后续消费适配完成前，不会获得本轮三项通用核心和受管上下文。
+2. 历史卡片、旧周报和稳定资源组合保持原样；只有用户以后明确刷新或接管具体目标时，才按新 manifest／registry 合同渐进迁移。
+3. `creator-workflow` 仍绑定当前创作目录约定；其通用化评审、旧 Remotion 路由修正和 `daily-work` 适配已经登记为延期事项。
 
-这些问题不阻塞当前学习核心；它们将在相应 Skill 的后续独立评审或消费仓库迁移中处理。
+这些问题不阻塞当前中央学习核心；它们将在相应消费仓库适配或延期评审中处理。

@@ -64,6 +64,7 @@ class MaterializeTests(unittest.TestCase):
                 "skills": [
                     {
                         "name": "demo-skill",
+                        "kind": "first-party",
                         "path": "skills/demo-skill",
                         "lifecycle": {"state": "active"},
                         "groups": [],
@@ -87,6 +88,100 @@ class MaterializeTests(unittest.TestCase):
                 "source": source,
                 "skills": skills,
             },
+        )
+
+    def enable_context_fixture(self) -> None:
+        validator = self.central / "skills" / "demo-skill" / "scripts" / "context.py"
+        validator.parent.mkdir()
+        validator.write_text(
+            """from __future__ import annotations
+
+def validate_materialized_context(repository_config, skill_config):
+    if repository_config.get("schema") != "agent-skills.repository/v1":
+        raise ValueError("bad repository schema")
+    allowed = {"schema", "skill", "input_path", "collection", "output_path"}
+    if set(skill_config) != allowed:
+        raise ValueError("unknown demo config fields")
+    if skill_config["schema"] != "agent-skills.demo-skill/v1":
+        raise ValueError("bad demo schema")
+    if skill_config["skill"] != "demo-skill":
+        raise ValueError("bad demo identity")
+    return {
+        "context": {
+            "input_path": skill_config["input_path"],
+            "output_path": skill_config["output_path"],
+        },
+        "tracked_files": [
+            repository_config["facts"]["goal"]["path"],
+            skill_config["input_path"],
+        ],
+        "tracked_collections": [skill_config["collection"]],
+        "write_paths": [skill_config["output_path"]],
+    }
+""",
+            encoding="utf-8",
+        )
+        catalog = self.read_catalog()
+        entry = catalog["skills"][0]
+        entry["kind"] = "first-party"
+        entry["context"] = {"validator": "scripts/context.py"}
+        self.write_catalog(catalog)
+        self.commit_central("add context validator")
+
+        facts = self.repo / "facts"
+        collection = self.repo / "records"
+        facts.mkdir()
+        collection.mkdir()
+        (facts / "goal.md").write_text("goal\n", encoding="utf-8")
+        (facts / "input.md").write_text("input\n", encoding="utf-8")
+        (facts / "unused.md").write_text("unused\n", encoding="utf-8")
+        (collection / "one.md").write_text("one\n", encoding="utf-8")
+        write_json(
+            self.repo / ".agent-skills-config" / "repository.json",
+            {
+                "schema": "agent-skills.repository/v1",
+                "repository_id": "fixture-repo",
+                "language": "en",
+                "timezone": "UTC",
+                "facts": {
+                    "goal": {"path": "facts/goal.md", "section": "Goal"},
+                    "unused": {"path": "facts/unused.md"},
+                },
+            },
+        )
+        write_json(
+            self.repo / ".agent-skills-config" / "demo-skill.json",
+            {
+                "schema": "agent-skills.demo-skill/v1",
+                "skill": "demo-skill",
+                "input_path": "facts/input.md",
+                "collection": "records",
+                "output_path": "generated/output.md",
+            },
+        )
+        write_json(
+            self.config,
+            {
+                "version": 2,
+                "source": ".agent-skills",
+                "skills": {"demo-skill": ["codex", "claude"]},
+                "config": {
+                    "repository": ".agent-skills-config/repository.json",
+                    "skills": {
+                        "demo-skill": ".agent-skills-config/demo-skill.json"
+                    },
+                },
+            },
+        )
+        git(self.repo, "init", "-q")
+        git(
+            self.repo,
+            "add",
+            ".agent-skills.json",
+            ".agent-skills-config",
+            "facts/goal.md",
+            "facts/input.md",
+            "records",
         )
 
     def read_catalog(self) -> dict[str, object]:
@@ -114,6 +209,7 @@ class MaterializeTests(unittest.TestCase):
         catalog = self.read_catalog()
         entry: dict[str, object] = {
             "name": name,
+            "kind": "first-party",
             "path": f"skills/{name}",
             "lifecycle": {"state": state},
             "groups": groups or [],
@@ -153,6 +249,200 @@ class MaterializeTests(unittest.TestCase):
         materialize_skills.synchronize(self.repo, self.central, self.config)
         self.assertFalse(codex.exists())
         self.assertEqual(materialize_skills.check(self.repo, self.central, self.config), [])
+
+    def test_v2_context_is_validated_injected_and_tracked(self) -> None:
+        self.enable_context_fixture()
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+
+        codex_context = self.target("codex") / materialize_skills.CONTEXT_FILE
+        claude_context = self.target("claude") / materialize_skills.CONTEXT_FILE
+        self.assertEqual(codex_context.read_bytes(), claude_context.read_bytes())
+        context = json.loads(codex_context.read_text(encoding="utf-8"))
+        self.assertEqual(context["skill"], "demo-skill")
+        self.assertEqual(context["repository_id"], "fixture-repo")
+        self.assertEqual(
+            context["allowlist"]["tracked_files"],
+            ["facts/goal.md", "facts/input.md", "records/one.md"],
+        )
+        self.assertEqual(context["allowlist"]["tracked_collections"], ["records"])
+        self.assertEqual(context["allowlist"]["write_paths"], ["generated/output.md"])
+
+        state = json.loads(
+            (self.repo / materialize_skills.STATE_FILE).read_text(encoding="utf-8")
+        )
+        self.assertEqual(state["config"], ".agent-skills.json")
+        self.assertEqual(len(state["config_digest"]), 64)
+        for record in state["managed"].values():
+            self.assertEqual(len(record["source_digest"]), 64)
+            self.assertEqual(len(record["context_digest"]), 64)
+        self.assertEqual(materialize_skills.check(self.repo, self.central, self.config), [])
+
+        skill_config = self.repo / ".agent-skills-config" / "demo-skill.json"
+        updated = json.loads(skill_config.read_text(encoding="utf-8"))
+        updated["output_path"] = "generated/changed.md"
+        write_json(skill_config, updated)
+        errors = materialize_skills.check(self.repo, self.central, self.config)
+        self.assertTrue(any("drifted" in error or "metadata" in error for error in errors))
+
+    def test_v2_context_rejects_untracked_facts_and_unknown_fields(self) -> None:
+        self.enable_context_fixture()
+        untracked = self.repo / "facts" / "private.md"
+        untracked.write_text("private\n", encoding="utf-8")
+        repository_config = self.repo / ".agent-skills-config" / "repository.json"
+        repository = json.loads(repository_config.read_text(encoding="utf-8"))
+        repository["facts"]["goal"] = {"path": "facts/private.md"}
+        write_json(repository_config, repository)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "Git tracked"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+        repository["facts"]["goal"] = {"path": "facts/goal.md"}
+        repository["unexpected"] = True
+        write_json(repository_config, repository)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "unknown"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_rejects_write_overlap_with_configs_inputs_and_managed_skills(self) -> None:
+        self.enable_context_fixture()
+        skill_path = self.repo / ".agent-skills-config" / "demo-skill.json"
+        base_skill = json.loads(skill_path.read_text(encoding="utf-8"))
+        protected = [
+            ".agent-skills.json",
+            ".agent-skills-config/repository.json",
+            ".agent-skills-config/demo-skill.json",
+            "facts/goal.md",
+            ".agents/skills/demo-skill/SKILL.md",
+        ]
+        for output_path in protected:
+            with self.subTest(output_path=output_path):
+                skill = dict(base_skill)
+                skill["output_path"] = output_path
+                write_json(skill_path, skill)
+                with self.assertRaisesRegex(
+                    materialize_skills.SyncError, "overlaps protected"
+                ):
+                    materialize_skills.build_plan(
+                        self.repo, self.central, self.config
+                    )
+
+        skill = dict(base_skill)
+        skill["output_path"] = ".AGENT-SKILLS-CONFIG/REPOSITORY.JSON"
+        write_json(skill_path, skill)
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "Git tracked|overlaps protected"
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+        self.assertTrue(
+            materialize_skills._relative_paths_overlap(
+                ".AGENT-SKILLS-CONFIG/REPOSITORY.JSON",
+                ".agent-skills-config/repository.json",
+            )
+        )
+
+    def test_v2_allows_skill_owned_inventory_collection_to_share_output_root(self) -> None:
+        self.enable_context_fixture()
+        skill_path = self.repo / ".agent-skills-config" / "demo-skill.json"
+        skill = json.loads(skill_path.read_text(encoding="utf-8"))
+        skill["output_path"] = "records/new.md"
+        write_json(skill_path, skill)
+        desired, consumer = materialize_skills.build_plan(
+            self.repo, self.central, self.config
+        )
+        self.assertEqual(len(desired), 2)
+        self.assertEqual(
+            consumer.contexts["demo-skill"]["allowlist"]["write_paths"],
+            ["records/new.md"],
+        )
+
+    def test_v2_collection_requires_exact_git_casing_and_a_tracked_member(self) -> None:
+        self.enable_context_fixture()
+        skill_path = self.repo / ".agent-skills-config" / "demo-skill.json"
+        skill = json.loads(skill_path.read_text(encoding="utf-8"))
+        skill["collection"] = "Records"
+        write_json(skill_path, skill)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "exact path casing"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+        empty = self.repo / "empty-records"
+        empty.mkdir()
+        skill["collection"] = "empty-records"
+        write_json(skill_path, skill)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "tracked member"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_rejects_platform_unsafe_missing_write_paths(self) -> None:
+        self.enable_context_fixture()
+        skill_path = self.repo / ".agent-skills-config" / "demo-skill.json"
+        base_skill = json.loads(skill_path.read_text(encoding="utf-8"))
+        unsafe = [
+            "generated/CON.txt",
+            "generated/bad<name>.md",
+            "generated/trailing./file.md",
+            "generated/name. ",
+        ]
+        for output_path in unsafe:
+            with self.subTest(output_path=output_path):
+                skill = dict(base_skill)
+                skill["output_path"] = output_path
+                write_json(skill_path, skill)
+                with self.assertRaisesRegex(
+                    materialize_skills.SyncError, "platform-unsafe"
+                ):
+                    materialize_skills.build_plan(
+                        self.repo, self.central, self.config
+                    )
+
+    def test_v1_materialization_does_not_inject_context(self) -> None:
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertFalse((self.target() / materialize_skills.CONTEXT_FILE).exists())
+
+    def test_source_rejects_ignored_untracked_files(self) -> None:
+        hidden = self.central / "skills" / "demo-skill" / "private.txt"
+        hidden.write_text("must not leak\n", encoding="utf-8")
+        exclude = self.central / ".git" / "info" / "exclude"
+        with exclude.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n/skills/demo-skill/private.txt\n")
+
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "match its Git index exactly"
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_rejects_non_utf8_collection_members(self) -> None:
+        self.enable_context_fixture()
+        binary = self.repo / "records" / "binary.md"
+        binary.write_bytes(b"\xff\xfe")
+        git(self.repo, "add", "records/binary.md")
+
+        with self.assertRaisesRegex(materialize_skills.SyncError, "valid UTF-8"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_rejects_an_existing_untracked_write_target(self) -> None:
+        self.enable_context_fixture()
+        target = self.repo / "generated" / "output.md"
+        target.parent.mkdir()
+        target.write_text("user owned\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(materialize_skills.SyncError, "must be Git tracked"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_ignores_unrelated_intent_but_rejects_referenced_intent(self) -> None:
+        self.enable_context_fixture()
+        unrelated = self.repo / "unrelated.md"
+        unrelated.write_text("unrelated\n", encoding="utf-8")
+        git(self.repo, "add", "--intent-to-add", "unrelated.md")
+        materialize_skills.build_plan(self.repo, self.central, self.config)
+
+        private = self.repo / "facts" / "private.md"
+        private.write_text("private\n", encoding="utf-8")
+        git(self.repo, "add", "--intent-to-add", "facts/private.md")
+        repository_path = self.repo / ".agent-skills-config" / "repository.json"
+        repository = json.loads(repository_path.read_text(encoding="utf-8"))
+        repository["facts"]["goal"] = {"path": "facts/private.md"}
+        write_json(repository_path, repository)
+
+        with self.assertRaisesRegex(materialize_skills.SyncError, "intent-to-add"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
 
     def test_unmanaged_collision_is_preserved(self) -> None:
         target = self.target()

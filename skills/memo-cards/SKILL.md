@@ -1,51 +1,32 @@
 ---
 name: memo-cards
-description: 把学习记录整理成墨墨记忆卡（Markji）表格导入 TSV。两类输入——英语日志（英语/log/day-NN.md → 英语/cards/day-NN.md，三卡型）；技术学习素材（文章〔面试问题Q&A〕等 → {module}/cards/，技术Q&A卡）。Use when the user asks 制卡 / 整理成墨墨表格 / build Markji cards, or when english-coach Stage B needs the day's cards refreshed.
+description: 将用户明确指定的、已核验且值得反复强化的英语或技术学习素材整理为受管的 Markji 3.8+ 表格导入暂存文档。Use when the user explicitly asks to 制作、预览、保存、刷新或去重墨墨记忆卡，或要求把成熟学习材料转换成 Markji cards；不要因学习结束、上游 bundle 到达或其他 Skill 建议而自动触发。
 ---
 
-# 墨墨记忆卡制卡
+# Memo Cards
 
-把学习记录转成 Markji「表格导入」用的 TSV。不管哪类输入，**先读两份格式规范**（每会话读一次即可，不会中途变）：
-
-- `英语/references/markji-content-syntax.md` — 内容语法（`---` 答案线、`[T#B#]` 加粗、`[T#!36b59d#]` 颜色、`[Choice#ans/A#…]` 选择题、`[F##]` 挖空等）。
-- `英语/references/markji-table-import.md` — 表格导入规则：首行 = 字段名，**TSV 列序必须与模板 `{{}}` 出现顺序一致**。
-
-## 通用硬规则（所有输入类型适用）
-
-- 输出：每种卡型一个 TSV code block，首行 = 表头（字段名按模板 `{{}}` 顺序），一行一卡。
-- **数据行保持纯文本**——样式全部写在墨墨模板里，绝不写进数据行。颜色码全小写（`36b59d`、`939393`）。
-- **无空块**：某类没有条目就不输出那类的 block。
-- **原子卡**：一条多点记录拆成多行，一卡只考一个点。
-- **重新生成而非盲目追加**：目标卡片文件整体覆盖重写，覆盖当天/当篇全部素材——保证幂等、自动去重。
-- **TSV 校验**：写入前检查每个字段不含制表符或裸换行，每行列数必须与表头完全一致；需要表达换行时改写成单行短句。
-
-## 输入一：英语日志（原始功能）
-
-标准指令形态：「读 `英语/log/day-NN.md`，按 review-workflow Step 3 整理成墨墨表格，写到 `英语/cards/day-NN.md`。」
-
-- 先读 `英语/review-workflow.md`（Step 3）+ `英语/cards/_templates.md`（三卡型与列序的**权威定义**）。
-- 类型映射：`[纠错]` / `[词块]` → 纠错卡（无错误可对照的词块 → 语法/概念卡即 Q&A 卡）；`[语法]` → 语法/概念卡；`[选择]` → 选择题卡。
-- 列序（与 `_templates.md` 一致，此处仅备忘）：纠错卡 `意图→场景→正确→错误→说明`；选择题卡 `题干→答案→选项1→选项2→选项3→解析→场景`；语法/概念卡 `问题→答案→例句→场景`。
-- `day-NN` 是学习日序号（跳过的日子不占号），日期在文件 H1 里。
-
-## 输入二：技术学习素材（通用化扩展）
-
-把技术模块的问答类素材做成**技术Q&A卡**。素材源优先级：
-
-1. 文章的〔面试问题Q&A〕节（学习的**结果**——如 `PyTorch/深入学习理解PyTorch/1-Internal-Overview.md`，天然「问→答」结构）；
-2. `{module}/log/` 学习记录（学习的**过程**——由 study-log skill 从对话提取；`[要点]` / `[纠错]` 条目制卡，纠错卡把"我怎么错的"写进答案，`[遗留]` 不制卡）；
-3. 各模块 `进度.md` 的「遗留问题」、`学习指引.md` 自测题库里已能作答的条目（用户点名时）。
-
-规则：
-
-- 模板与列序见 [references/tech-qa-template.md](references/tech-qa-template.md)：`问题 → 答案 → 锚点 → 来源`。
-- 输出位置：`{module}/cards/<文章或主题 slug>.md`（如 `PyTorch/cards/1-internal-overview.md`），目录不存在就创建。
-- **答案压缩成 2–4 句可背诵要点**，不搬文章原文；有边界条件/反例的要带上（面试加分点）。
-- 锚点 = 一行帮助回忆的代码/公式/关键词短语；来源 = 相对路径 + 节号（如 `1-Internal-Overview.md §2.2`），方便回查。
-- **跨来源去重——文章 Q&A 卡为主牌**：给学习记录制卡前，先对照关联文章的〔面试问题Q&A〕节；与其中题目同源的 `[要点]` 跳过（那些留给文章全量制卡时出），学习记录只出 **`[纠错]` 类**（"我怎么错的"是文章不会全留的）和**文章未收录的过程细节**。反向同理：文章全量制卡时若该模块 `cards/` 里已有同源的学习记录卡，在报告中列出重复项提醒用户在墨墨端二选一。
-- 首次为某模块制卡时提醒一次：用户需在墨墨新建对应牌组，并把 `tech-qa-template.md` 里的模板粘进「表格导入」左侧面板。
+把成熟学习证据转成可审阅的 Markji 暂存卡片。始终用自然语言理解用户请求；不要要求用户记忆脚本命令。
 
 ## 边界
 
-- 本 skill 只读用户指定的素材源（英语日志、文章 Q&A、学习记录，或用户点名的 `进度.md` / `学习指引.md`），只写 `cards/` 下的 TSV 文件——不改日志、不改文章、不改 `进度.md`。
-- 这是机械任务：执行中不附加英语反馈（english-coach 的豁免条款）。
+- 只在用户明确提出制卡、预览、创建或刷新卡片时运行。上游 Skill、bundle、静态配置和学习收尾都不构成触发或授权。
+- 默认精选；用户明确要求完整转换时，仍只输出通过质量门槛且完成去重的候选。
+- 默认零写入。只看候选时保持预览；清晰来源与新目标的明确保存请求可以授权当次低风险创建。接管 legacy、人工漂移、来源范围变化、模板升级、删除、冲突或跨文件刷新必须先展示精确差异，再取得确认。
+- 只生成本地 Markdown＋TSV 暂存文档；不上传资产、不导入 Markji、不声称改变远端卡片，也不提交或推送 Git。
+- 没有经过 materializer 校验的 `.agent-skills-context.json` 时，只能在对话中讨论候选，不猜测路径或写入。
+
+## 工作流
+
+1. 明确素材边界、目标 collection、目标文件以及用户要精选还是完整转换。只读取受管 context 允许的来源。
+2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
+3. 由 Agent 完成语义工作：拆分回忆目标，判断 A／B／C、常青／版本快照、原子／机制／综合口述层级，撰写题面、答案、例句和评分锚点。机制卡若声明子卡依赖，必须引用同一 request 内 eligible、已核验且 active 的原子／机制卡；综合口述卡引用其中 2–5 张。不要手写逻辑 ID、TSV、hash 或 manifest。
+4. 按 [Markdown 与 TSV 暂存合同](references/markdown-tsv-staging.md) 形成严格 request JSON，调用 `scripts/memo_cards.py prepare`。工具负责模板、身份、inventory、软目标、差异和预览摘要。
+5. 向用户展示 included、deferred、blocked、duplicate／conflict、目标差异、风险原因和 `preview_digest`。依赖漂移触发的 `review` 会持续保留；复核完成后，只有在对应卡片提供可摘要的 `review_resolution`、展示新 diff 并取得 `confirmed` 授权，才能恢复 `active`。模板及内容语法边界见 [Markji 3.8 兼容面](references/markji-3.8-compatibility.md)。
+6. 无写入授权时停在预览。获得足够授权后，用同一 request 和 digest 调用 `publish`；若任何来源、目标、模板、候选或 inventory 漂移，重新预览。详细 CAS 与接管规则见 [受管产物合同](references/managed-artifacts.md)。
+7. 发布后用同一 request 调用 `verify --request <request.json>`，复核 context、模板、目标与受管 inventory；只有返回的 `request_check.operation` 为 `no-op` 且 `would_write=false`，才表示该 request 无需再次写入。这也能复核尚未重新 materialize 进 inventory 的新目标。报告本地写入结果及仍需用户在 Markji 手动完成的操作。
+
+## 职责分工
+
+- Agent 判断知识价值、语义等价、事实范围与教学表达。
+- `memo_cards.py` 独占配置校验、逻辑身份、模板字段顺序、受控 Markji 片段、TSV 校验、manifest、派生 inventory、确定性 diff、CAS 和原子发布。
+- `guide-learning` 继续验证研究项；`study-log` 只提供 structured 学习过程；`english-coach` 只提供真实错误、主动表达和稳定辨析候选。raw 对话永不直接制卡。
