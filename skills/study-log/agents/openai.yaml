@@ -1,0 +1,4 @@
+interface:
+  display_name: "Study Log / 学习记录"
+  short_description: "把学习对话整理为结构化过程记录或安全归档可追溯可见文本"
+  default_prompt: "Use $study-log to extract the important learning process from this conversation into a structured study record."
