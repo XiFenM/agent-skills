@@ -1,7 +1,7 @@
 # 学习类 Skill 合并升级决策与评审记录
 
 本文记录学习类 Skill 在质量评估与合并升级阶段的已确认决策、中央实现和后续迁移边界。
-用户已授权并完成 D23 定义的中央 C0–C3；因此本文所述 `guide-learning`、`study-log`、catalog 和中央验证状态已经落地。2026-08-11 又经分阶段单独授权完成 M0 中央发布、M1 迁移输入冻结、M2 消费仓库空管线接入与 M3 programming-lab 金丝雀切换；M4 PlanA 切换与 M5 中央旧入口删除仍只是已确认设计，尚未执行。
+用户已授权并完成 D23 定义的中央 C0–C3；因此本文所述 `guide-learning`、`study-log`、catalog 和中央验证状态已经落地。2026-08-11 又经分阶段单独授权完成 M0 中央发布、M1 迁移输入冻结、M2 消费仓库空管线接入、M3 programming-lab 金丝雀切换与 M4 PlanA 双 host 切换；M5 中央旧入口删除仍未执行。
 
 ## 当前范围
 
@@ -57,7 +57,7 @@
 - Session、Lesson、Program、mastery 和文章状态的分离已在 D6 确定，稀疏写入时机和所有权已在 D14
   确定；具体逻辑 schema 已在 D20 确定；
 - PlanA 事实源映射与消费仓库适配职责已在 D15 确定；旧文件的分阶段迁移、兼容窗口和退役顺序已在
-  D19 确定。中央兼容状态已完成；PlanA 的具体变更仍须等待 M4 的独立迁移授权。
+  D19 确定。中央兼容状态与 PlanA 的 M4 具体适配均已完成。
 
 ### D4：教学微循环采用“先讲关键节点，再检查理解”
 
@@ -608,11 +608,14 @@ schema、场景与变体不在主入口重复。
    Windows 上退化为文本的发现／exporter 链接和重复 exporter 测试，更新 pytest、
    VS Code 与活跃文档引用。提交后 materializer 仅生成两个受管 Codex 入口，
    `--check` 及针对性静态、单元、类型与全新会话前向测试通过；完成后发布至远端 `main`。
-5. **M4，PlanA 切换**：在切换当时的真实语义暂停点冻结活动 Checkpoint，保持唯一下一动作和返回点
-   不变；本次设计基线是 Pass C-1，若迁移时仍未变化则直接沿用。随后移除两棵受 Git 跟踪的 Skill
-   副本，配置 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、
-   `resource-planning` 和 `playwright-cli` 给 Codex 与 Claude，改造 `陪学流程.md`、`学习断点.md`、学习
-   偏好及入口文档后，分别验证两棵生成目录。迁移不得触碰或顺手提交无关的用户工作。
+5. **M4，PlanA 切换（已完成）**：原子提交
+   `f7e267d22cc626e4c79aeeac918ebb217d34be8e` 保持中央 gitlink 固定在 M1 输入，在 Pass C-1 真实暂停点
+   保存唯一稀疏 Checkpoint，保持唯一下一动作、前进门槛和 PyTorch 返回点不变；移除两棵受 Git 跟踪的
+   Skill 副本，把 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、
+   `resource-planning` 和 `playwright-cli` 同时配置给 Codex 与 Claude，并把流程、断点、学习偏好及入口
+   文档改为中央行为规范的 PlanA 适配。提交后 materializer 生成 12 个受管入口，`--check`、结构校验、
+   `study-log` 测试与全新会话恢复测试通过；恢复到 Pass C-1 唯一下一动作时零写且无 drift。受保护的
+   Program、Lesson、证据和进度文件未改动，无关未跟踪用户工作未读取或提交；随后发布至远端 `main`。
 6. **M5，中央删除旧入口**：只有两个消费者均通过 materializer 检查、programming-lab 完成一次新流程
    前向验证、PlanA 能从迁移时冻结的 Checkpoint 无漂移恢复并保存一次稀疏 Checkpoint，且 `study-log`
    两种模式均通过测试后，才删除两个旧目录与 catalog 条目。消费者随后升级中央指针并重新 materialize。
@@ -846,17 +849,15 @@ active Skill；活动名称、rollback-only 名称和 retired 名称不得重叠
 与测试但不切换入口；**C1** 升级 `study-log` 并复制、改造 exporter 能力和测试，暂不破坏当时仍为 active
 的旧入口；**C2** 创建并验证 `guide-learning`，同时从旧所有者移除重复 exporter、把两个旧入口切为
 rollback-only；**C3** 更新中央说明和迁移基线并运行完整验证。C0–C3 不包含任何消费仓库迁移。
-M0–M3 已经完成；M4–M5 仍须由用户另行授权启动。
+M0–M4 已经完成；M5 仍须由用户另行授权启动。
 
 ## 后续仍禁止事项
 
-中央 C0–C3 与 M0–M3 已获用户授权并完成。以下动作仍持续禁止，直到用户另行明确授权启动
-M4 或 M5：
+中央 C0–C3 与 M0–M4 已获用户授权并完成。以下动作仍持续禁止，直到用户另行明确授权启动 M5：
 
-- 不切换 PlanA 或其他消费仓库的 submodule、Skill 配置、发现目录、文档或测试；
 - 不删除中央 `study-companion` 与 `learn-by-practice` rollback-only 源码或 catalog 条目；
-- 不修改任何真实学习状态、进度、Checkpoint、文章或其他用户学习产物；
-- 不以本地路径 submodule、临时复制或提前 materialize 绕过独立迁移授权。
+- 不把消费仓库升级到删除旧入口后的中央提交，也不提前移除 rollback 兼容材料；
+- 不借 M5 批量改写任何历史学习状态、进度、Checkpoint、文章或其他用户学习产物。
 
 ## 完成状态与后续边界
 
@@ -866,9 +867,10 @@ D1–D23 已完成本轮学习类 Skill 的职责边界、教学微循环、证�
 
 中央 C0–C3 已完成 catalog／工具基础、`study-log`、`guide-learning`、旧入口 rollback-only 切换、中央文档
 和整体验证，M0 已完成公开远端发布，M1 已冻结并复验唯一迁移输入，M2 已接入两个消费仓库的空管线，
-M3 已将 programming-lab 切换到两个中央 Codex Skill 并发布。下一阶段是在用户另行授权后执行 M4；
-M5 只能在两个消费者均满足完成门槛后启动。
+M3 已将 programming-lab 切换到两个中央 Codex Skill 并发布，M4 已将 PlanA 切换到六个中央双 host Skill
+并发布。下一阶段只有 M5；它仍须用户另行授权，并在执行前复核两个消费者的完成门槛。
 
-本轮中央实现只覆盖 `guide-learning`、`study-log` 及两个旧主入口的 rollback-only 兼容状态；旧入口从
-剩余消费仓库退役与中央旧入口删除分别属于 M4 与 M5。`english-coach`、`memo-cards`、`resource-planning` 保持独立的决定已经完成，
-但它们各自进一步的质量升级仍属于后续独立评审阶段，不构成当前学习核心的阻塞项。
+本轮中央实现只覆盖 `guide-learning`、`study-log` 及两个旧主入口的 rollback-only 兼容状态；两个旧入口
+已从消费仓库发现目录退役，但中央源码与 catalog 兼容材料继续保留到 M5。`english-coach`、`memo-cards`、
+`resource-planning` 保持独立的决定已经完成，但它们各自进一步的质量升级仍属于后续独立评审阶段，
+不构成当前学习核心的阻塞项。
