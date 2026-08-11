@@ -55,17 +55,87 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(catalog["retired_names"], {})
 
         primary = set()
+        active_primary = set()
+        expected_rollback = {
+            "learn-by-practice": "guide-learning",
+            "study-companion": "guide-learning",
+        }
         for item in catalog["skills"]:
             with self.subTest(skill=item["name"]):
-                self.assertEqual(item["lifecycle"]["state"], "active")
+                state = item["lifecycle"]["state"]
+                self.assertIn(state, {"active", "rollback-only"})
                 self.assertIsInstance(item["groups"], list)
-                self.assertNotIn("replacement", item)
+                if item["name"] in expected_rollback:
+                    self.assertEqual(state, "rollback-only")
+                    self.assertEqual(
+                        item["replacement"], expected_rollback[item["name"]]
+                    )
+                else:
+                    self.assertEqual(state, "active")
+                    self.assertNotIn("replacement", item)
                 if item["kind"] == "first-party":
                     self.assertTrue(item["lineage"])
                     self.assertNotIn("origin", item)
                 if "primary-learning" in item["groups"]:
                     primary.add(item["name"])
-        self.assertEqual(primary, {"learn-by-practice", "study-companion"})
+                    if state == "active":
+                        active_primary.add(item["name"])
+        self.assertEqual(
+            primary,
+            {"guide-learning", "learn-by-practice", "study-companion"},
+        )
+        self.assertEqual(active_primary, {"guide-learning"})
+
+    def test_learning_upgrade_lineage_and_review_are_recorded(self) -> None:
+        catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
+        by_name = {item["name"]: item for item in catalog["skills"]}
+
+        guide = by_name["guide-learning"]
+        self.assertEqual(guide["migration"], "merged-upgrade")
+        self.assertEqual(guide["review"], {"state": "implemented", "topics": []})
+        self.assertEqual(guide["consumers"], ["PlanA", "programming-lab"])
+        self.assertEqual(
+            guide["lineage"],
+            [
+                {
+                    "repository": "PlanA",
+                    "path": ".claude/skills/study-companion",
+                    "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9",
+                },
+                {
+                    "repository": "programming-lab",
+                    "path": "skills/learn-by-practice",
+                    "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518",
+                },
+            ],
+        )
+
+        for legacy_name in ("learn-by-practice", "study-companion"):
+            with self.subTest(legacy=legacy_name):
+                legacy = by_name[legacy_name]
+                self.assertEqual(
+                    legacy["migration"],
+                    "rollback-source-merged-into-guide-learning",
+                )
+                self.assertEqual(
+                    legacy["review"],
+                    {
+                        "state": "implemented",
+                        "topics": ["merged-into-guide-learning"],
+                    },
+                )
+
+        study_log = by_name["study-log"]
+        self.assertEqual(study_log["review"]["state"], "implemented")
+        self.assertEqual(study_log["consumers"], ["PlanA", "programming-lab"])
+        self.assertIn(
+            {
+                "repository": "programming-lab",
+                "path": "skills/learn-by-practice/scripts/export_codex_dialogue.py",
+                "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518",
+            },
+            study_log["lineage"],
+        )
 
     def test_expected_migration_boundary(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
@@ -80,6 +150,7 @@ class CatalogTests(unittest.TestCase):
             {
                 "creator-workflow",
                 "english-coach",
+                "guide-learning",
                 "learn-by-practice",
                 "memo-cards",
                 "resource-planning",

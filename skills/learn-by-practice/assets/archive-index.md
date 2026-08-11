@@ -2,7 +2,7 @@
 
 This directory preserves both the final understanding and the path used to reach it: source-based
 explanations, learner questions, practice artifacts, experiments, reviews, revisions, mastery
-checks, pause checkpoints, and visible dialogue archives.
+checks, and pause checkpoints.
 
 ## Program profile
 
@@ -26,7 +26,7 @@ checks, pause checkpoints, and visible dialogue archives.
 7. Review with numbered, evidence-backed findings and agent-authored regression tests.
 8. Let the learner revise the core artifact and verify each finding.
 9. Check conceptual, practical, and transferable mastery.
-10. Close or pause with a recovery checkpoint and post-hoc dialogue archive.
+10. Close or pause with a recovery checkpoint.
 
 ## Directory layout
 
@@ -35,12 +35,11 @@ checks, pause checkpoints, and visible dialogue archives.
 ├── README.md
 ├── templates/lesson-record.md
 ├── lessons/
-├── dialogues/
 ├── references/
 └── attachments/
 ```
 
-- Keep lesson conclusions in `lessons/` and generated visible dialogue in `dialogues/`.
+- Keep lesson conclusions in `lessons/`.
 - Keep practice artifacts in the repository's normal source locations and link to them.
 - Keep bulky generated evidence in `attachments/<lesson>/`.
 - Do not edit authoritative source snapshots merely to add notes.
@@ -50,9 +49,9 @@ checks, pause checkpoints, and visible dialogue archives.
 Use states: `not-started`, `explaining`, `questions`, `practicing`, `reviewing`,
 `mastery-check`, `paused`, and `complete`.
 
-| Lesson | Source unit | Structured record | State | Dialogue |
-| --- | --- | --- | --- | --- |
-| 01 | To be selected | `lessons/01-<lesson>.md` | not-started | not exported |
+| Lesson | Source unit | Structured record | State |
+| --- | --- | --- | --- |
+| 01 | To be selected | `lessons/01-<lesson>.md` | not-started |
 
 ## Current checkpoint
 
@@ -64,13 +63,6 @@ Use states: `not-started`, `explaining`, `questions`, `practicing`, `reviewing`,
 | Open work | Select the first source unit and confirm learning objectives |
 | Next action | Create the first lesson from `templates/lesson-record.md` |
 | Advancement gate | Lesson-specific blocking findings closed and mastery demonstrated |
-| Dialogue | Not yet exported |
-
-## Dialogue index
-
-| Segment | Scope | File | Message count | Status |
-| --- | --- | --- | --- | --- |
-| — | — | — | — | not exported |
 
 ## Recording principles
 
@@ -79,5 +71,6 @@ Use states: `not-started`, `explaining`, `questions`, `practicing`, `reviewing`,
 - Record reproducible evidence before claiming correctness or performance.
 - Keep routine tests or rubrics agent-owned and the core practice artifact learner-owned.
 - Treat “changed,” “verified,” and “closed” as different review states.
-- Keep structured conclusions separate from unedited visible dialogue.
+- Only when the user explicitly requests conversation discovery, extraction, or archiving,
+  delegate it to `study-log` and link the reviewed, user-approved output if this archive needs it.
 - Resume from the latest checkpoint instead of reconstructing the course from memory.

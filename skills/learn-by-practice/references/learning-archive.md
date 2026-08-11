@@ -27,8 +27,6 @@ that is already the local convention.
 │   └── lesson-record.md
 ├── lessons/
 │   └── 01-<lesson-slug>.md
-├── dialogues/
-│   └── 01-<lesson-slug>.md
 ├── references/
 └── attachments/
     └── 01-<lesson-slug>/
@@ -41,7 +39,9 @@ that is already the local convention.
 - Store only bulky, generated, or machine-readable evidence under `attachments/`.
 - Preserve source materials in place. Do not annotate or rewrite vendored or official
   snapshots unless the user explicitly wants an edited copy.
-- Store generated visible-dialogue archives under `dialogues/` and never hand-polish them.
+- Do not create a conversation archive as part of this layout. Only when the user explicitly
+  requests conversation discovery, extraction, or archiving, delegate the work to `study-log`
+  and consume its reviewed output by linking the user-approved target from the learning record.
 
 Run the initializer from the repository root when creating the default layout:
 
@@ -80,14 +80,14 @@ Keep `README.md` concise and operational. Include:
 
 - the subject, intended outcome, source authority, and archive start date;
 - the fixed learning loop and documentation conventions;
-- a lesson table with number, source unit, record link, state, and dialogue status;
+- a lesson table with number, source unit, record link, and state;
 - one current checkpoint with active lesson, current phase, evidence, open work, next action,
   and the advancement gate;
 - stable principles such as source/evidence separation, agent ownership of routine validation,
   and learner ownership of the core practice artifact.
 
-Update the index when a lesson is created, its state changes, a dialogue is exported, a pause
-snapshot changes the recovery entry point, or the course plan changes.
+Update the index when a lesson is created, its state changes, a pause snapshot changes the
+recovery entry point, or the course plan changes.
 
 ## Lesson record responsibilities
 
@@ -120,7 +120,7 @@ Update the lesson after these events:
 6. **Review completed**: numbered findings, severity, evidence, recommendation, disposition,
    current status, and any agent-authored regression-test changes.
 7. **Revision verified**: changed behavior, validation output, regressions, and findings closed.
-8. **Pause or completion**: checkpoint, mastery result, dialogue status, and next boundary.
+8. **Pause or completion**: checkpoint, mastery result, and next boundary.
 
 Avoid rewriting old entries to reflect later understanding. Add corrections and state
 transitions so the reasoning history remains visible.
@@ -138,7 +138,6 @@ period, or asks for a checkpoint. Include:
 | Open work | Findings, questions, missing validation, or unverified changes, each with an owner |
 | Next actions | Small ordered steps that can be started immediately |
 | Advancement gate | Conditions required before the next lesson |
-| Dialogue | Export file or explicit “not yet exported” state |
 
 On resume:
 
@@ -151,7 +150,7 @@ On resume:
 
 Do not run the initializer over an existing learning tree. Instead:
 
-1. Map existing files to index, lesson, dialogue, reference, and attachment roles.
+1. Map existing files to index, lesson, reference, and attachment roles.
 2. Preserve names and links unless inconsistent naming blocks automation.
 3. Add only missing lifecycle fields and recovery information.
 4. Copy the generic lesson template only if the archive lacks an equivalent template.
@@ -171,5 +170,5 @@ Generalize the workflow, not the knowledge that makes the domain record useful.
 - Attribute routine test/rubric changes to the agent and core artifact changes to the learner.
 - Prefer relative repository links in generated records.
 - Use the learner's language unless they request otherwise.
-- Keep the structured record readable without the raw dialogue, and keep the raw dialogue
-  meaningful without editorial corrections from the structured record.
+- Keep the structured record self-contained. If the user explicitly requested a `study-log`
+  artifact, link its reviewed output without copying or editorially rewriting it here.

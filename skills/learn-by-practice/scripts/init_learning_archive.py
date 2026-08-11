@@ -115,7 +115,6 @@ def initialize_archive(config: ArchiveConfig, *, dry_run: bool = False) -> list[
         Path("README.md"),
         Path("templates/lesson-record.md"),
         Path("lessons"),
-        Path("dialogues"),
         Path("references"),
         Path("attachments"),
     ]
@@ -144,7 +143,6 @@ def initialize_archive(config: ArchiveConfig, *, dry_run: bool = False) -> list[
         for directory in (
             "templates",
             "lessons",
-            "dialogues",
             "references",
             "attachments",
         ):

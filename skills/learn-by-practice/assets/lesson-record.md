@@ -17,7 +17,6 @@ Mark an inapplicable section with a reason rather than deleting it.
 | Completed | — |
 | Learner artifacts | Paths or not created |
 | Validation artifacts | Paths or not created |
-| Raw dialogue | `../dialogues/<NN>-<lesson-slug>.md` or not exported |
 
 ### Relevant environment
 
@@ -43,7 +42,6 @@ Record only details that can change behavior, compatibility, reproducibility, or
 - [ ] Required correctness or rubric evidence passes
 - [ ] Transfer/mastery check passes
 - [ ] Lesson closed with learner agreement
-- [ ] Raw dialogue exported at closure or pause
 
 ## 2. Objectives and prerequisites
 
@@ -288,22 +286,8 @@ meaningful older milestones in the changelog.
 | Open findings/questions |  |
 | Next ordered actions |  |
 | Gate before advancing |  |
-| Dialogue snapshot | not exported |
 
-## 11. Raw dialogue and references
-
-### Raw dialogue
-
-- Archive file:
-- Source session and ID:
-- Inclusive start boundary:
-- Exclusive end boundary:
-- Message count:
-- Normalization options:
-- Privacy/boundary review:
-- Export date:
-
-### References
+## 11. References
 
 - Primary source:
 - Supporting documentation:

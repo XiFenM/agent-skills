@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guided Learning / 学习带练"
+  short_description: "来源驱动的学习带练、练习评审、掌握验证与最小跨会话恢复"
+  default_prompt: "使用 $guide-learning 带我学习这个主题，并根据现有证据选择最小必要流程。"

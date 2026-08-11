@@ -73,11 +73,16 @@
       }
     },
     {
-      "name": "learn-by-practice",
+      "name": "guide-learning",
       "category": "learning/coaching",
       "kind": "first-party",
-      "path": "skills/learn-by-practice",
+      "path": "skills/guide-learning",
       "lineage": [
+        {
+          "repository": "PlanA",
+          "path": ".claude/skills/study-companion",
+          "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        },
         {
           "repository": "programming-lab",
           "path": "skills/learn-by-practice",
@@ -91,13 +96,42 @@
         "primary-learning"
       ],
       "consumers": [
+        "PlanA",
         "programming-lab"
       ],
-      "migration": "verbatim-plus-relocated-external-test",
+      "migration": "merged-upgrade",
       "review": {
-        "state": "pending",
+        "state": "implemented",
+        "topics": []
+      }
+    },
+    {
+      "name": "learn-by-practice",
+      "category": "learning/coaching",
+      "kind": "first-party",
+      "path": "skills/learn-by-practice",
+      "lineage": [
+        {
+          "repository": "programming-lab",
+          "path": "skills/learn-by-practice",
+          "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
+        }
+      ],
+      "lifecycle": {
+        "state": "rollback-only"
+      },
+      "replacement": "guide-learning",
+      "groups": [
+        "primary-learning"
+      ],
+      "consumers": [
+        "programming-lab"
+      ],
+      "migration": "rollback-source-merged-into-guide-learning",
+      "review": {
+        "state": "implemented",
         "topics": [
-          "learning-workflow-boundary-review"
+          "merged-into-guide-learning"
         ]
       }
     },
@@ -171,20 +205,20 @@
         }
       ],
       "lifecycle": {
-        "state": "active"
+        "state": "rollback-only"
       },
+      "replacement": "guide-learning",
       "groups": [
         "primary-learning"
       ],
       "consumers": [
         "PlanA"
       ],
-      "migration": "verbatim",
+      "migration": "rollback-source-merged-into-guide-learning",
       "review": {
-        "state": "pending",
+        "state": "implemented",
         "topics": [
-          "learning-workflow-boundary-review",
-          "consumer-relative-paths"
+          "merged-into-guide-learning"
         ]
       }
     },
@@ -198,6 +232,11 @@
           "repository": "PlanA",
           "path": ".claude/skills/study-log",
           "commit": "cddefb09f6e26fabd6e98cc515a19e4609c248c9"
+        },
+        {
+          "repository": "programming-lab",
+          "path": "skills/learn-by-practice/scripts/export_codex_dialogue.py",
+          "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
         }
       ],
       "lifecycle": {
@@ -205,15 +244,17 @@
       },
       "groups": [],
       "consumers": [
-        "PlanA"
+        "PlanA",
+        "programming-lab"
       ],
-      "migration": "verbatim",
+      "migration": "merged-upgrade",
       "review": {
-        "state": "pending",
+        "state": "implemented",
         "topics": [
-          "learning-workflow-boundary-review",
-          "consumer-relative-paths",
-          "cwd-dependent-script-defaults"
+          "unified-provider-discovery",
+          "safe-boundary-extraction",
+          "explicit-private-archive-root",
+          "source-and-target-race-guards"
         ]
       }
     },

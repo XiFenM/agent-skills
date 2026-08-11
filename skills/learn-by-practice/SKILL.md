@@ -1,6 +1,6 @@
 ---
 name: learn-by-practice
-description: Run structured, repository-aware learning programs that combine source-based explanation, learner questions, agent-authored acceptance tests, test-driven learner practice, artifact review, revision, mastery checks, durable progress records, and post-hoc dialogue archives. Use when a user asks Codex to teach or study a technical or non-technical topic over multiple sessions; learn from tutorials, documentation, examples, papers, or a codebase; assign and review exercises; resume a paused course; maintain a learning journal; or transfer this guided-learning workflow to another subject or repository.
+description: Run structured, repository-aware learning programs that combine source-based explanation, learner questions, agent-authored acceptance tests, test-driven learner practice, artifact review, revision, mastery checks, and durable progress records. Use when a user asks Codex to teach or study a technical or non-technical topic over multiple sessions; learn from tutorials, documentation, examples, papers, or a codebase; assign and review exercises; resume a paused course; maintain a learning journal; or transfer this guided-learning workflow to another subject or repository.
 ---
 
 # Learn by Practice
@@ -27,8 +27,7 @@ Infer the narrowest mode that satisfies the request:
 - **Review work**: inspect the learner's artifact, run proportionate checks, record
   findings, add or repair regression tests when required behavior is uncovered, and
   let the learner revise the core artifact unless they explicitly ask for implementation.
-- **Pause or close**: write a recovery checkpoint, synchronize evidence, and export the
-  visible dialogue when the session source is available.
+- **Pause or close**: write a recovery checkpoint and synchronize learning evidence.
 
 Do not force a full course archive for a one-off explanation unless the user asks for
 ongoing study or durable records.
@@ -148,33 +147,27 @@ Preserve:
 - environment details needed to reproduce results;
 - the current checkpoint and exact next actions.
 
-Keep structured conclusions separate from raw dialogue. Never rewrite a raw dialogue
-archive to make the learning process appear cleaner.
+Keep structured conclusions separate from any dialogue material supplied by another
+workflow. Do not reconstruct dialogue inside this Skill or rewrite it to make the
+learning process appear cleaner.
 
-## Pause, resume, and archive dialogue
+## Pause and resume
 
 When interrupted, add a checkpoint containing the current phase, completed work,
 evidence, open findings, unresolved questions, next ordered actions, and the gate for
 advancing. On resume, use that checkpoint as the entry point.
 
-At a lesson boundary or deliberate pause, read
-[references/dialogue-archive.md](references/dialogue-archive.md) and use
-`scripts/export_codex_dialogue.py` when the Codex rollout JSONL is accessible. Select
-explicit start and end boundaries, review privacy and message counts, and link the
-generated archive from the structured lesson. Treat an active-session export as a
-versioned snapshot that may need regeneration when the lesson finally closes.
+When the user explicitly requests dialogue discovery, extraction, or archiving, hand
+that work to `study-log` and consume its reviewed output if the learning record needs a
+link. Do not inspect provider session formats or maintain a second extraction path here.
 
 ## Resource map
 
 - `scripts/init_learning_archive.py`: create a new subject archive without overwriting
   existing material.
-- `scripts/export_codex_dialogue.py`: extract user-visible dialogue from one Codex
-  rollout JSONL with provenance and safe boundary selection.
 - `assets/archive-index.md`: template consumed by the archive initializer.
 - `assets/lesson-record.md`: comprehensive, domain-neutral lesson template.
 - [references/learning-archive.md](references/learning-archive.md): archive layout,
   lifecycle, update rules, and migration guidance.
 - [references/practice-review-mastery.md](references/practice-review-mastery.md):
   exercise design, review taxonomy, and mastery gates.
-- [references/dialogue-archive.md](references/dialogue-archive.md): post-hoc extraction,
-  privacy review, and multi-session handling.
