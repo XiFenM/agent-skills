@@ -424,18 +424,31 @@ def _validate_skill_config(value: Any) -> dict[str, Any]:
             record,
             label=f"input_collections[{index}]",
             required={"id", "kind", "patterns"},
+            optional={"producer"},
         )
         collection_id = _id(record["id"], f"input_collections[{index}].id")
         kind = _string(record["kind"], f"input_collections[{index}].kind", maximum=50)
         if kind not in INPUT_KINDS:
             raise MemoCardsError("config", f"input collection {collection_id} has an unsupported kind")
-        inputs.append(
-            {
-                "id": collection_id,
-                "kind": kind,
-                "patterns": _patterns(record["patterns"], f"input_collections[{index}].patterns"),
-            }
-        )
+        patterns = _patterns(record["patterns"], f"input_collections[{index}].patterns")
+        normalized_input = {
+            "id": collection_id,
+            "kind": kind,
+            "patterns": patterns,
+        }
+        if "producer" in record:
+            producer = _id(record["producer"], f"input_collections[{index}].producer")
+            if kind != "article" or not all(
+                _exact_markdown_input(pattern) for pattern in patterns
+            ):
+                raise MemoCardsError(
+                    "config",
+                    "input producer is allowed only for exact Markdown article inputs",
+                )
+            if producer == "memo-cards":
+                raise MemoCardsError("config", "input producer cannot be memo-cards itself")
+            normalized_input["producer"] = producer
+        inputs.append(normalized_input)
 
     outputs_raw = config["output_collections"]
     if not isinstance(outputs_raw, list) or not outputs_raw:
@@ -541,11 +554,21 @@ def validate_materialized_context(
             for pattern in record["patterns"]
         }
     )
+    read_handoffs = sorted(
+        (
+            {"path": pattern, "producer": record["producer"]}
+            for record in skill["input_collections"]
+            if "producer" in record
+            for pattern in record["patterns"]
+        ),
+        key=lambda item: (item["path"], item["producer"]),
+    )
     return {
         "context": context,
         "tracked_files": tracked_files,
         "tracked_collections": tracked_collections,
         "write_paths": write_paths,
+        "read_handoffs": read_handoffs,
     }
 
 

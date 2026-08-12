@@ -14,6 +14,12 @@ pattern 本身留在受管 context 中做更窄匹配；来源必须同时命中
 inventory 也只在 concrete 文件中筛选，绝不重新 glob 文件系统。新增但尚未 tracked／重新 materialize 的
 目标仍可由当次明确请求创建或直接刷新，但不参与跨文件 inventory。
 
+若一个精确文章输入由另一个已配置 Skill 生成，可在该 input record 中声明唯一 `producer`。它只允许
+`kind: article` 且所有 pattern 都是精确 `.md` 文件；materializer 还会核对 producer 已配置、不是当前
+Skill，且该文件确实位于 producer 的 write ceiling 内。该双边声明只让“文章产物→制卡来源”的机械边界
+共存，不授予起草、覆盖、发布、提交或推送权限。没有 `producer` 的精确输入仍是不可被其他 Skill 写入的
+受保护事实。
+
 静态配置只描述环境事实，不能关闭质量门槛、注入模板／prompt，或预先授权保存、覆盖、导入、提交和推送。中央核心没有消费仓库路径和数量上限。
 
 ## Request

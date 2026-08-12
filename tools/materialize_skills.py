@@ -257,34 +257,71 @@ def _assert_context_writes_disjoint(
 def _assert_cross_skill_contexts_disjoint(
     contexts: dict[str, dict[str, Any]],
     explicit_tracked_by_skill: dict[str, list[str]],
+    read_handoffs_by_skill: dict[str, list[tuple[str, str]]],
 ) -> None:
     """Prevent one configured Skill from writing through another's boundary.
 
     A Skill may deliberately use one of its own tracked collections as a managed
     inventory/output root.  Cross-Skill collection handoff is also explicit: a
     writer may target the reader's declared collection root or a path beneath it.
-    It may not write a broader ancestor, an explicit tracked file, or another
-    Skill's write path.  Expanded collection members inherit the declared root
-    and therefore do not become false-positive explicit inputs.
+    An exact tracked file remains protected unless the reader's trusted validator
+    names both the file and its producer as a read handoff.  Expanded collection
+    members inherit the declared root and therefore do not become false-positive
+    explicit inputs.
     """
+
+    for reader, handoffs in sorted(read_handoffs_by_skill.items()):
+        explicit = set(explicit_tracked_by_skill.get(reader, []))
+        for path, producer in handoffs:
+            if path not in explicit:
+                raise SyncError(
+                    f"{reader} read handoff {path!r} must also be an explicit "
+                    "tracked file"
+                )
+            if producer == reader:
+                raise SyncError(
+                    f"{reader} read handoff {path!r} cannot name itself as producer"
+                )
+            producer_context = contexts.get(producer)
+            if producer_context is None:
+                raise SyncError(
+                    f"{reader} read handoff {path!r} names unconfigured producer "
+                    f"{producer!r}"
+                )
+            if not any(
+                _relative_path_is_within(path, write_path)
+                for write_path in producer_context["allowlist"]["write_paths"]
+            ):
+                raise SyncError(
+                    f"{reader} read handoff {path!r} is outside producer "
+                    f"{producer!r} write paths"
+                )
 
     for writer, wrapper in sorted(contexts.items()):
         for write_path in wrapper["allowlist"]["write_paths"]:
             for owner, other in sorted(contexts.items()):
-                if owner == writer:
-                    continue
-                for other_write in other["allowlist"]["write_paths"]:
-                    if _relative_paths_overlap(write_path, other_write):
-                        raise SyncError(
-                            f"{writer} write path {write_path!r} overlaps "
-                            f"{owner} write path {other_write!r}"
-                        )
+                if owner != writer:
+                    for other_write in other["allowlist"]["write_paths"]:
+                        if _relative_paths_overlap(write_path, other_write):
+                            raise SyncError(
+                                f"{writer} write path {write_path!r} overlaps "
+                                f"{owner} write path {other_write!r}"
+                            )
                 for tracked_file in explicit_tracked_by_skill.get(owner, []):
                     if _relative_paths_overlap(write_path, tracked_file):
+                        if owner != writer and (
+                            tracked_file,
+                            writer,
+                        ) in read_handoffs_by_skill.get(owner, []) and (
+                            _relative_path_is_within(tracked_file, write_path)
+                        ):
+                            continue
                         raise SyncError(
                             f"{writer} write path {write_path!r} overlaps "
                             f"{owner} explicit tracked file {tracked_file!r}"
                         )
+                if owner == writer:
+                    continue
                 for collection in other["allowlist"]["tracked_collections"]:
                     if not _relative_paths_overlap(write_path, collection):
                         continue
@@ -939,7 +976,7 @@ def _materialized_context(
     tracked: set[str],
     gitlinks: set[str],
     intent_to_add: set[str],
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], list[str], list[tuple[str, str]]]:
     if skill_config_relative not in tracked:
         raise SyncError(f"Skill config must be Git tracked: {skill_config_relative}")
     if skill_config_relative in intent_to_add:
@@ -963,11 +1000,17 @@ def _materialized_context(
         result = validator(deepcopy(repository), deepcopy(skill_config))
     except Exception as exc:
         raise SyncError(f"invalid context config for {name!r}: {exc}") from exc
-    expected_keys = {"context", "tracked_files", "tracked_collections", "write_paths"}
-    if not isinstance(result, dict) or set(result) != expected_keys:
+    required_keys = {"context", "tracked_files", "tracked_collections", "write_paths"}
+    optional_keys = {"read_handoffs"}
+    if (
+        not isinstance(result, dict)
+        or not required_keys <= set(result)
+        or set(result) - required_keys - optional_keys
+    ):
         raise SyncError(
-            f"context validator for {name!r} must return exactly "
-            + ", ".join(sorted(expected_keys))
+            f"context validator for {name!r} must return "
+            + ", ".join(sorted(required_keys))
+            + " and may return read_handoffs"
         )
     if not isinstance(result["context"], dict):
         raise SyncError(f"context validator for {name!r} context must be an object")
@@ -990,6 +1033,37 @@ def _materialized_context(
         for raw_path in result["tracked_files"]
     }
     declared_tracked = sorted(explicit_tracked)
+    read_handoffs: list[tuple[str, str]] = []
+    raw_handoffs = result.get("read_handoffs", [])
+    if not isinstance(raw_handoffs, list):
+        raise SyncError(
+            f"context validator for {name!r} read_handoffs must be an array"
+        )
+    for index, raw_handoff in enumerate(raw_handoffs):
+        if not isinstance(raw_handoff, dict) or set(raw_handoff) != {
+            "path",
+            "producer",
+        }:
+            raise SyncError(
+                f"context validator for {name!r} read_handoffs[{index}] must "
+                "contain exactly path and producer"
+            )
+        path = _tracked_file(
+            repo,
+            raw_handoff["path"],
+            f"{name} read handoff",
+            tracked=tracked,
+            gitlinks=gitlinks,
+            intent_to_add=intent_to_add,
+        )
+        producer = _validated_name(
+            raw_handoff["producer"],
+            f"{name} read_handoffs[{index}].producer",
+        )
+        read_handoffs.append((path, producer))
+    if len(read_handoffs) != len(set(read_handoffs)):
+        raise SyncError(f"context validator for {name!r} read_handoffs has duplicates")
+    read_handoffs.sort()
     normalized_collections: list[str] = []
     for raw_path in result["tracked_collections"]:
         collection, members = _tracked_collection(
@@ -1043,7 +1117,7 @@ def _materialized_context(
         _json_bytes(wrapper)
     except (TypeError, ValueError) as exc:
         raise SyncError(f"context validator for {name!r} returned non-JSON data") from exc
-    return wrapper, declared_tracked
+    return wrapper, declared_tracked, read_handoffs
 
 
 def _read_config(
@@ -1078,6 +1152,7 @@ def _read_config(
     contexts: dict[str, dict[str, Any]] = {}
     config_source_digests = {config_relative: _sha256_bytes(config_bytes)}
     declared_tracked_by_skill: dict[str, list[str]] = {}
+    read_handoffs_by_skill: dict[str, list[tuple[str, str]]] = {}
     protected_context_paths: dict[str, str] = {
         config_relative: "consumer config",
         STATE_FILE: "materializer state",
@@ -1163,7 +1238,7 @@ def _read_config(
                 protected_context_paths[skill_config_relative] = (
                     f"Skill config for {name!r}"
                 )
-                context, declared_tracked = _materialized_context(
+                context, declared_tracked, read_handoffs = _materialized_context(
                     repo,
                     central_root,
                     name,
@@ -1182,17 +1257,15 @@ def _read_config(
                     "skill"
                 ]["digest"]
                 declared_tracked_by_skill[name] = declared_tracked
+                read_handoffs_by_skill[name] = read_handoffs
         elif raw_context.get("repository") is not None:
             raise SyncError(
                 f"{config_path}.config.repository must be null when no Skill contexts exist"
             )
 
-        for name, paths in declared_tracked_by_skill.items():
-            for path in paths:
-                protected_context_paths[path] = f"{name} explicit tracked fact"
         _assert_context_writes_disjoint(contexts, protected_context_paths)
         _assert_cross_skill_contexts_disjoint(
-            contexts, declared_tracked_by_skill
+            contexts, declared_tracked_by_skill, read_handoffs_by_skill
         )
 
     return ConsumerConfig(

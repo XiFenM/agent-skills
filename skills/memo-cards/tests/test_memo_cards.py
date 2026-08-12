@@ -247,6 +247,51 @@ def test_exact_markdown_input_is_a_file_not_a_collection() -> None:
 
     assert result["tracked_files"] == ["articles/fixed.md"]
     assert result["tracked_collections"] == ["cards", "notes"]
+    assert result["read_handoffs"] == []
+
+
+def test_exact_article_input_can_name_one_cross_skill_producer() -> None:
+    config = _skill_config()
+    config["input_collections"].append(
+        {
+            "id": "fixed-article",
+            "kind": "article",
+            "patterns": ["articles/fixed.md"],
+            "producer": "guide-learning",
+        }
+    )
+
+    result = memo_cards.validate_materialized_context(_repository_config(), config)
+
+    assert result["context"]["input_collections"][0]["producer"] == "guide-learning"
+    assert result["read_handoffs"] == [
+        {"path": "articles/fixed.md", "producer": "guide-learning"}
+    ]
+
+    wildcard = _skill_config()
+    wildcard["input_collections"][0]["producer"] = "guide-learning"
+    with pytest.raises(memo_cards.MemoCardsError, match="exact Markdown article"):
+        memo_cards.validate_materialized_context(_repository_config(), wildcard)
+
+    wrong_kind = _skill_config()
+    wrong_kind["input_collections"][0] = {
+        "id": "fixed-note",
+        "kind": "verified-learning-note",
+        "patterns": ["notes/fixed.md"],
+        "producer": "guide-learning",
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="exact Markdown article"):
+        memo_cards.validate_materialized_context(_repository_config(), wrong_kind)
+
+    self_produced = _skill_config()
+    self_produced["input_collections"][0] = {
+        "id": "fixed-article",
+        "kind": "article",
+        "patterns": ["articles/fixed.md"],
+        "producer": "memo-cards",
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="cannot be memo-cards"):
+        memo_cards.validate_materialized_context(_repository_config(), self_produced)
 
 
 def test_runtime_ignores_repository_fact_collections(tmp_path: Path) -> None:

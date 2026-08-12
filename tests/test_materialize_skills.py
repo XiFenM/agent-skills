@@ -192,19 +192,26 @@ def validate_materialized_context(repository_config, skill_config):
         validator.parent.mkdir()
         validator.write_text(
             """def validate_materialized_context(repository_config, skill_config):
-    allowed = {"schema", "skill", "input_path", "collection", "output_path"}
+    allowed = {"schema", "skill", "input_path", "collection", "output_path", "producer"}
     if set(skill_config) != allowed:
         raise ValueError("unknown other config fields")
     if skill_config["schema"] != "agent-skills.other-skill/v1":
         raise ValueError("bad other schema")
     if skill_config["skill"] != "other-skill":
         raise ValueError("bad other identity")
-    return {
+    result = {
         "context": {"output_path": skill_config["output_path"]},
         "tracked_files": [skill_config["input_path"]],
         "tracked_collections": [skill_config["collection"]],
         "write_paths": [skill_config["output_path"]],
     }
+    if skill_config["producer"] is not None:
+        result["context"]["producer"] = skill_config["producer"]
+        result["read_handoffs"] = [{
+            "path": skill_config["input_path"],
+            "producer": skill_config["producer"],
+        }]
+    return result
 """,
             encoding="utf-8",
         )
@@ -231,6 +238,7 @@ def validate_materialized_context(repository_config, skill_config):
                 "input_path": "other/input.md",
                 "collection": "other-records",
                 "output_path": "other-output/result.md",
+                "producer": None,
             },
         )
         consumer = json.loads(self.config.read_text(encoding="utf-8"))
@@ -393,7 +401,8 @@ def validate_materialized_context(repository_config, skill_config):
                 skill["output_path"] = output_path
                 write_json(skill_path, skill)
                 with self.assertRaisesRegex(
-                    materialize_skills.SyncError, "overlaps protected"
+                    materialize_skills.SyncError,
+                    "overlaps protected|explicit tracked file",
                 ):
                     materialize_skills.build_plan(
                         self.repo, self.central, self.config
@@ -455,8 +464,34 @@ def validate_materialized_context(repository_config, skill_config):
         ):
             materialize_skills.build_plan(self.repo, self.central, self.config)
 
+        # The reader and writer may explicitly agree on one exact produced file.
+        other["producer"] = "demo-skill"
+        write_json(other_path, other)
+        desired, _consumer = materialize_skills.build_plan(
+            self.repo, self.central, self.config
+        )
+        self.assertEqual(len(desired), 3)
+
+        # Self, missing, and stale producer declarations remain fail-closed.
+        other["producer"] = "other-skill"
+        write_json(other_path, other)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "itself as producer"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+        other["producer"] = "missing-skill"
+        write_json(other_path, other)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "unconfigured producer"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+        other["producer"] = "demo-skill"
+        demo["output_path"] = "generated/elsewhere.md"
+        write_json(other_path, other)
+        write_json(demo_path, demo)
+        with self.assertRaisesRegex(materialize_skills.SyncError, "outside producer"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
         # A declared collection is an explicit handoff boundary.  Its root and
         # members are valid writer targets, including an already expanded member.
+        other["producer"] = None
+        write_json(other_path, other)
         for handoff in ("other-records", "other-records/new.md", "other-records/one.md"):
             with self.subTest(handoff=handoff):
                 demo["output_path"] = handoff
@@ -480,6 +515,32 @@ def validate_materialized_context(repository_config, skill_config):
             materialize_skills.SyncError, "broader than.*tracked collection"
         ):
             materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_exact_read_handoff_only_exempts_the_containing_producer_write(self) -> None:
+        contexts = {
+            "producer-skill": {
+                "allowlist": {
+                    "tracked_files": [],
+                    "tracked_collections": [],
+                    "write_paths": ["articles", "articles/fixed.md/child"],
+                }
+            },
+            "reader-skill": {
+                "allowlist": {
+                    "tracked_files": ["articles/fixed.md"],
+                    "tracked_collections": [],
+                    "write_paths": [],
+                }
+            },
+        }
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "explicit tracked file"
+        ):
+            materialize_skills._assert_cross_skill_contexts_disjoint(
+                contexts,
+                {"producer-skill": [], "reader-skill": ["articles/fixed.md"]},
+                {"reader-skill": [("articles/fixed.md", "producer-skill")]},
+            )
 
     def test_v2_collection_requires_exact_git_casing_and_a_tracked_member(self) -> None:
         self.enable_context_fixture()
