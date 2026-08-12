@@ -1420,11 +1420,32 @@ PlanA 的首轮历史产物适配边界同时确认：
   回填或重写。PlanA 的历史日志、英语卡片和 resource-planning 的 registry／slot／旧 SOP 接管仍是
   后续独立阶段，不能借本轮状态或文章适配顺带处理。
 
-实施状态必须与设计结论分开记录：中央文章能力已在本地提交 `c3ae66a` 完成，并通过完整中央测试
+实施状态必须与设计结论分开记录：中央文章能力已在提交 `c3ae66a` 完成，并通过完整中央测试
 `274 passed, 4 skipped, 54 subtests passed`、Skill 结构校验和独立边界审查。PlanA 在基础 version 2
-提交 `1a2a162` 之后，又以本地提交 `b490b30` 退役重复记忆／陪学流程／文章模板，建立稀疏状态链和
+提交 `1a2a162` 之后，又以提交 `b490b30` 退役重复记忆／陪学流程／文章模板，建立稀疏状态链和
 文章配置；programming-lab 在基础提交 `d4ddc14` 之后，以 `60d5bc2` 更新中央指针且继续冻结 legacy。
-两仓均重新 materialize 并通过独立终审；上述提交尚未推送，因此这里只记录“本地完成”，不宣称远端发布。
+两仓均重新 materialize 并通过独立终审；中央与 PlanA 的后续历史适配提交已经发布，programming-lab
+将在 D42 的消费入口扩展完成后一起发布。
+
+## D42：programming-lab 启用英语反馈与受管制卡入口（2026-08-12）
+
+用户确认在 programming-lab 中增加 `english-coach` 与 `memo-cards`，继续只向 Codex 分发。采用以下窄
+配置边界：
+
+- `english-coach` 只把 `docs/triton-learning/logs/` 识别为 structured study log collection，保持
+  `save_targets: []`；当前对话中的技术英语反馈默认零写入，保存学习过程仍交给 `study-log`。
+- `memo-cards` 只读取上述 structured logs，并只把 `docs/triton-learning/cards/triton-*.md` 作为
+  Markji 暂存目标与 inventory；不设置数量门槛，也不因日志出现而自动制卡。
+- `logs/` 与 `cards/` 只使用不匹配 `*.md`／`triton-*.md` 的 Git 占位建立安全 collection 根。占位不是
+  学习素材或卡片，未来新文件只有在被 Git 跟踪并重新 materialize 后才进入跨文件读取范围。
+- 10 份 frozen raw dialogues、Lesson 01／02、模板、references、附件和实验结果均不进入两项配置；若
+  以后确需从某个 Lesson 制卡，必须逐文件、逐主题定向核验并另行扩展配置。
+- 静态 context 只提供 locator、read allowlist 与 write ceiling，不授予英语保存、日志读取、制卡、发布、
+  提交或推送。新目标仍需本轮请求，legacy adoption／刷新仍需展示精确 diff 后独立确认。
+
+中央 catalog 将两个 Skill 的 consumer 列表扩展到 PlanA 与 programming-lab；消费仓随后更新子模块、
+严格配置、说明与受管入口，并要求 materializer、Skill 结构、memo verify、相关中央测试和仓库 CPU 测试
+全部通过后才提交发布。
 
 ## 延期待办：`creator-workflow` 质量评审、通用化升级与 `daily-work` 适配迁移
 
