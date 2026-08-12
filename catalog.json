@@ -72,7 +72,8 @@
       },
       "groups": [],
       "consumers": [
-        "PlanA"
+        "PlanA",
+        "programming-lab"
       ],
       "migration": "generalized-configurable-upgrade",
       "review": {
@@ -143,7 +144,8 @@
       },
       "groups": [],
       "consumers": [
-        "PlanA"
+        "PlanA",
+        "programming-lab"
       ],
       "migration": "generalized-configurable-upgrade",
       "review": {

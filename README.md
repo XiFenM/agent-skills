@@ -12,7 +12,7 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D41 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 已在中央提交 `c3ae66a` 实现按需学习文章能力，PlanA 首轮历史状态适配也已完成独立审查并形成提交 `b490b30`；这些本地提交均尚未推送。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D41 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。
 
 ## 目录
 
@@ -28,9 +28,9 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者的远端已发布基线都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。
+消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本。programming-lab 向 Codex 分发 `guide-learning`、`study-log`、`english-coach` 与 `memo-cards`；PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。
 
-2026-08-12 的本地工作批次先分别形成 PlanA `1a2a162` 与 programming-lab `d4ddc14`，完成 version 2 基础消费配置；随后中央 `c3ae66a` 加入文章能力，PlanA `b490b30` 完成首轮历史状态适配，programming-lab `60d5bc2` 只更新中央指针并继续冻结 legacy。两个消费者都固定到中央代码提交 `c3ae66a` 并重新 materialize；整批本地提交均尚未推送。
+2026-08-12 的工作批次先分别形成 PlanA `1a2a162` 与 programming-lab `d4ddc14`，完成 version 2 基础消费配置；随后中央 `c3ae66a` 加入文章能力，PlanA 继续完成历史状态、日志、卡片与资源治理接管，programming-lab 则在保持 legacy 冻结的前提下增加英语反馈与受管制卡入口。消费配置只提供 locator 和机械边界，不授予读取 raw、写入、发布、提交或推送。
 
 不需要消费环境配置的仓库可以继续使用 version 1。需要为自创 Skill 提供仓库事实、素材 collection、输出目标或 adapter 时，使用 version 2，并让索引只引用严格 JSON 配置：
 
