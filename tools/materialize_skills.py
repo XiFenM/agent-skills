@@ -976,6 +976,7 @@ def _materialized_context(
     tracked: set[str],
     gitlinks: set[str],
     intent_to_add: set[str],
+    selected_skills: dict[str, list[str]],
 ) -> tuple[dict[str, Any], list[str], list[tuple[str, str]]]:
     if skill_config_relative not in tracked:
         raise SyncError(f"Skill config must be Git tracked: {skill_config_relative}")
@@ -1001,7 +1002,7 @@ def _materialized_context(
     except Exception as exc:
         raise SyncError(f"invalid context config for {name!r}: {exc}") from exc
     required_keys = {"context", "tracked_files", "tracked_collections", "write_paths"}
-    optional_keys = {"read_handoffs"}
+    optional_keys = {"read_handoffs", "required_skills"}
     if (
         not isinstance(result, dict)
         or not required_keys <= set(result)
@@ -1010,7 +1011,7 @@ def _materialized_context(
         raise SyncError(
             f"context validator for {name!r} must return "
             + ", ".join(sorted(required_keys))
-            + " and may return read_handoffs"
+            + " and may return read_handoffs and required_skills"
         )
     if not isinstance(result["context"], dict):
         raise SyncError(f"context validator for {name!r} context must be an object")
@@ -1064,6 +1065,32 @@ def _materialized_context(
     if len(read_handoffs) != len(set(read_handoffs)):
         raise SyncError(f"context validator for {name!r} read_handoffs has duplicates")
     read_handoffs.sort()
+    raw_required_skills = result.get("required_skills", [])
+    if not isinstance(raw_required_skills, list) or not all(
+        isinstance(value, str) for value in raw_required_skills
+    ):
+        raise SyncError(
+            f"context validator for {name!r} required_skills must be a string array"
+        )
+    required_skills = {
+        _validated_name(value, f"{name} required Skill")
+        for value in raw_required_skills
+    }
+    if len(required_skills) != len(raw_required_skills):
+        raise SyncError(f"context validator for {name!r} required_skills has duplicates")
+    missing_required = sorted(required_skills - set(selected_skills))
+    if missing_required:
+        raise SyncError(
+            f"{name} context requires selected Skills: " + ", ".join(missing_required)
+        )
+    selected_hosts = set(selected_skills[name])
+    for required_skill in sorted(required_skills):
+        missing_hosts = sorted(selected_hosts - set(selected_skills[required_skill]))
+        if missing_hosts:
+            raise SyncError(
+                f"{name} context requires {required_skill} on hosts: "
+                + ", ".join(missing_hosts)
+            )
     normalized_collections: list[str] = []
     for raw_path in result["tracked_collections"]:
         collection, members = _tracked_collection(
@@ -1251,6 +1278,7 @@ def _read_config(
                     tracked=tracked,
                     gitlinks=gitlinks,
                     intent_to_add=intent_to_add,
+                    selected_skills=selected,
                 )
                 contexts[name] = context
                 config_source_digests[skill_config_relative] = context["sources"][

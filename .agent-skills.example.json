@@ -2,6 +2,9 @@
   "version": 2,
   "source": ".agent-skills",
   "skills": {
+    "creator-workflow": [
+      "codex"
+    ],
     "english-coach": [
       "codex",
       "claude"
@@ -26,6 +29,7 @@
   "config": {
     "repository": ".agent-skills-config/repository.json",
     "skills": {
+      "creator-workflow": ".agent-skills-config/creator-workflow.json",
       "english-coach": ".agent-skills-config/english-coach.json",
       "guide-learning": ".agent-skills-config/guide-learning.json",
       "memo-cards": ".agent-skills-config/memo-cards.json",

@@ -1463,3 +1463,35 @@ PlanA 的首轮历史产物适配边界同时确认：
 5. 运行中央单元／结构测试、合成前向验证和 `daily-work` 集成验证，通过后才建议提交与推送。
 
 当前只登记待办，不开始 `creator-workflow` 评审，不修改该 Skill、`daily-work`、其子模块指针或生成入口。
+
+## D43：`creator-workflow` 通用核心、严格配置与恢复模型（2026-08-12）
+
+用户在学习类迁移完成后启动该主线，并确认三轮方案：
+
+- 触发范围扩展为“多阶段、可追踪的内容／创作生命周期”，可覆盖知识整理与发布包；简单单工具任务仍直接
+  交给专用 Skill，不为了记账强制建项目。一次性任务默认零仓库写，durable project 才建立受管状态。
+- 中央只拥有 operation DAG、不可变事件与 provenance、精确授权、CAS 和恢复；artifact profile 继续拥有
+  自己的业务状态。事件链是状态事实源，snapshot 只是受校验投影；远端结果不明必须进入 `unknown`，重试
+  使用新 operation 和独立 `retry` 授权，不能覆写原事件或静默再次计费。
+- 明确生成请求只可授权边界清楚的一次首次付费尝试。无法给出货币硬上限时，必须披露估价不具约束力，
+  并用输入、时长／token、数量及一次尝试限制请求。重试、额外付费尝试、破坏性本地动作和外部发布分别
+  使用与 exact preview digest 绑定的一次性 grant。
+- `agent-skills.creator-workflow/v1` 只允许公共 fact refs、受管 state／project／work／output／publication
+  roots、两个白名单 profile、selected-Skill／package-script 两种声明式 route，以及写入保护根。配置禁止
+  凭据、环境值、job ID、当前状态、prompt、授权文本、URL、任意命令、cwd 或 headers；write path 只是机械
+  上限。受保护路径可与写根完全分离，或作为其严格子树，从而允许新 publication 同时冻结一个既有 draft。
+- 通用 runtime 只使用标准库进行 canonical plan、dependency／target digest、hash-chained events、授权检查、
+  cooperative lock、before／after journal、原子本地替换和机械 recovery；它不执行 provider、浏览器、网络、
+  shell、Git 或 subprocess。远端调用前必须先持久化 `dispatching`；本地和远端之间不宣称分布式原子性。
+- Remotion 只路由到官方聚合 `remotion-best-practices`，细分能力从其嵌套 reference 读取；ZenMux 实际生成
+  继续由消费仓库受控 adapter 执行，`zenmux-context/setup/usage` 各守事实、接入和用量职责。外部 Skill 的
+  凭据建议不能覆盖中央／仓库更严格的安全规则。
+
+中央候选的精确文件树为一个短入口、四份一级 reference、两个标准库脚本及对应测试；catalog 已把 review
+标为 implemented 并登记 validator。Remotion 官方子模块只机械前进一个上游模板版本提交，从 4.0.507
+到 4.0.508；消费仓库的视频运行时不随本批次升级。中央完整回归、Skill、catalog 与 diff 校验均须
+在候选冻结后通过；独立前向审计仍是提交前门槛，不在设计记录中固化易漂移的测试数量。
+
+`daily-work` 迁移必须作为下一独立边界：只物化 creator、Playwright、Remotion 聚合入口和三个 ZenMux
+入口；配置采用新的 managed roots；已完成算法课程全树保持原字节，`.pathnote` 工具链及现有 draft 保持
+原字节且作为保护子树。中央候选和消费迁移通过后再决定提交、推送，不由本记录预授权。

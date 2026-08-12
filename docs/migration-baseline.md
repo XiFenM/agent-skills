@@ -8,7 +8,7 @@
 
 | Skill | 原仓库 | 中央路径 | 迁移状态 |
 |---|---|---|---|
-| `creator-workflow` | `daily-work` | `skills/creator-workflow` | 原样复制；后续改造成通用工作流 |
+| `creator-workflow` | `daily-work` | `skills/creator-workflow` | 已升级为中央通用编排核心与严格配置；消费迁移独立执行 |
 | `english-coach` | `PlanA` | `skills/english-coach` | 原样复制；保留消费仓库相对路径 |
 | `memo-cards` | `PlanA` | `skills/memo-cards` | 原样复制；保留已知断链与消费仓库相对路径 |
 | `resource-planning` | `PlanA` | `skills/resource-planning` | 原样复制；保留消费仓库相对路径 |
@@ -65,7 +65,7 @@ ZenMux 官方仓库中当前还有其他 Skill，但它们不是三个主仓库�
 - `resource-planning` 已落实 D35–D39：`research-brief`、`refresh`、`review` 三模式隔离，资源身份／claim 证据／coverage cursor／候选事件归入单一 registry，并由 `verify`、`prepare`、`publish`、`recover` 管理可恢复的多文件事务。
 - 三项 Skill 均登记严格的 `validate_materialized_context`。materializer 继续兼容 version 1，并新增 version 2 配置索引、公共 repository facts、逐 Skill 配置、Git-tracked UTF-8 collection 展开和逐副本 `.agent-skills-context.json`；中央源码、消费配置和生成上下文均进入摘要与漂移检查。
 - 最终中央验证为 `197 passed, 4 skipped, 46 subtests passed`，catalog 与三项 Skill 结构校验通过；隔离的英语制卡、技术依赖卡、无配置 research 和受管 refresh／review 前向场景均通过。跳过项只涉及当前 Windows 环境缺少链接／junction 权限的防护用例。
-- `creator-workflow` 的通用化质量评审、升级方案和 `daily-work` 适配迁移已明确延期，不与本轮学习类实施混合。
+- `creator-workflow` 曾明确延期，不与学习类实施混合；该边界在学习迁移完成后由 D43 独立启动。
 - 本节只记录中央实现边界。PlanA 的 version 2 配置、旧英语 prompt／旧资源 SOP 退役、历史卡片渐进接管、资源 registry bootstrap 及首次真实 refresh／review 均属于后续消费适配；本轮不批量改写历史学习产物或用户未跟踪工作。
 
 ## 2026-08-12：五个学习类 Skill 统一 version 2 配置层
@@ -117,7 +117,7 @@ ZenMux 官方仓库中当前还有其他 Skill，但它们不是三个主仓库�
    仍按各自合同冻结，不属于迁移欠账。
 2. PlanA 的首次真实资源 refresh／review，以及两个仓库后续 Lesson、日志、卡片与 raw 产物，继续按
    当轮目标和授权运行；静态配置不预授权这些操作。
-3. `creator-workflow` 仍绑定当前创作目录约定；其通用化评审、旧 Remotion 路由修正和 `daily-work` 适配
-   已经登记为延期事项。
+3. `creator-workflow` 的中央通用化候选已经完成；当前后续只剩 `daily-work` 的 version 2 消费配置、
+   本地行为副本清理、历史保护验证与发布。
 
 这些后续事项不阻塞当前中央学习核心。

@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。五个学习类 Skill 现统一支持中央通用核心、严格消费配置和受管上下文；version 2 与首轮历史状态适配也已形成待推送的本地消费提交。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成五个学习核心及 `creator-workflow` 的评审、通用化升级与校验，并发布既有学习批次到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)。六个 first-party Skill 均采用中央通用核心、严格消费配置和受管上下文；`daily-work` 的消费迁移在中央 creator 候选通过后独立进行。
 
 ## 当前范围
 
@@ -39,6 +39,7 @@ agent-skills/
   "version": 2,
   "source": ".agent-skills",
   "skills": {
+    "creator-workflow": ["codex"],
     "english-coach": ["codex", "claude"],
     "guide-learning": ["codex", "claude"],
     "memo-cards": ["codex", "claude"],
@@ -48,6 +49,7 @@ agent-skills/
   "config": {
     "repository": ".agent-skills-config/repository.json",
     "skills": {
+      "creator-workflow": ".agent-skills-config/creator-workflow.json",
       "english-coach": ".agent-skills-config/english-coach.json",
       "guide-learning": ".agent-skills-config/guide-learning.json",
       "memo-cards": ".agent-skills-config/memo-cards.json",
@@ -58,7 +60,7 @@ agent-skills/
 }
 ```
 
-公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope 或原始对话存档的格式版本。配置只能声明环境事实和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
 新 clone 或更新子模块后，先递归初始化中央仓库及其第三方子模块：
 

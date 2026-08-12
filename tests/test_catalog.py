@@ -135,6 +135,7 @@ class CatalogTests(unittest.TestCase):
         )
 
         configurable = {
+            "creator-workflow": "scripts/context_config.py",
             "english-coach": "scripts/context_config.py",
             "guide-learning": "scripts/context_config.py",
             "memo-cards": "scripts/memo_cards.py",
@@ -151,6 +152,10 @@ class CatalogTests(unittest.TestCase):
                 by_name[name]["migration"],
                 "generalized-configurable-upgrade",
             )
+        self.assertEqual(
+            by_name["creator-workflow"]["migration"],
+            "generalized-configurable-upgrade",
+        )
         for name in ("guide-learning", "study-log"):
             self.assertEqual(by_name[name]["migration"], "merged-upgrade")
 

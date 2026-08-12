@@ -1,45 +1,48 @@
 ---
 name: creator-workflow
-description: Coordinate end-to-end creator and self-media work across research, browser operations, ZenMux image or video generation and understanding, Remotion composition, and final media QA. Use for multi-step content production requests that should produce a reusable brief, tracked prompts, generated assets, a controllable video, or a publish-ready package.
+description: Coordinate multi-stage, traceable content and creation lifecycles across research, design, generation, composition, verification, packaging, recovery, and publication handoff. Use when a request needs two or more capability lanes, durable artifacts, resumable paid or asynchronous work, project acceptance, or a publishable package. Do not use for a simple one-tool generation, browser action, edit, or inspection that a dedicated Skill can complete directly.
 ---
 
 # Creator Workflow
 
-Turn a content idea into traceable source files and verified deliverables. Keep orchestration here; defer provider-specific and framework-specific details to their official skills.
+Orchestrate creation without taking over provider-, browser-, framework-, or repository-specific behavior.
 
-## Route the request
+## Choose the smallest mode
 
-1. Create or reuse `projects/<slug>/`.
-2. Copy `projects/_template/brief.md` and `project.json` when starting a durable project.
-3. Select only the lanes needed:
-   - For browser work, read `playwright-cli`. Attach to the user's Chrome only when existing tabs or login state are needed; otherwise open an isolated CLI session.
-   - After attaching to an external browser, detach instead of closing it. Never inspect or persist authentication material unless the user explicitly requests it.
-   - For ZenMux API facts, read `zenmux-context`; for credentials and integration, read `zenmux-setup`.
-   - For images, generated videos, or media understanding, use `pnpm zenmux`.
-   - For a controllable composition, read `remotion-best-practices` plus the narrow Remotion skill needed by the task.
-   - For media metadata and output validation, use `pnpm media:probe`.
-4. Read [references/artifact-contract.md](references/artifact-contract.md) before creating deliverables.
+1. Use `consult` for planning or review in the conversation. Write nothing.
+2. Route a simple one-tool request directly to its dedicated Skill. Do not create a durable workflow merely for bookkeeping.
+3. Use `one-off` for an explicitly requested billable or asynchronous operation that needs a temporary recovery receipt but no repository project.
+4. Use `project` when the work spans multiple stages, must survive sessions, or needs traceable acceptance and packaging.
+5. Use `resume` or `recover` only from an existing verified ledger. Never infer a remote result or silently submit a replacement job.
 
-## Plan before billable work
+When a materialized context exists, verify it before reading repository facts or proposing durable paths. Treat every path and route in context as a locator or mechanical ceiling, never as operation authorization. With no context, remain in `consult` or a direct one-tool lane and perform no repository writes.
 
-- Capture the target platform, audience, aspect ratio, duration, tone, required text, and acceptance criteria in the brief.
-- Run ZenMux commands with `--dry-run` when validating a new request shape or when generation intent is ambiguous.
-- Treat an explicit user request to generate media as authorization for one reasonable generation attempt.
-- Before retrying a failed or timed-out asynchronous job, query its existing job ID to avoid duplicate charges.
-- Never request that a user paste a secret into chat. Ask them to set it in `.env` locally.
+## Prepare before side effects
 
-## Produce traceable artifacts
+1. Capture the goal, audience, scope, acceptance criteria, required sources, rights or sensitivity constraints, and requested delivery form.
+2. Divide the work into explicit operations. Use only the stages that matter: intake, research, design, production, assembly, verification, packaging, publication, and maintenance.
+3. Resolve each operation through an allowed route. Read [references/capability-routing.md](references/capability-routing.md) before delegating to browser, generation, composition, validation, or publication tools.
+4. For a durable project, read [references/workflow-contract.md](references/workflow-contract.md) and use the deterministic runtime to prepare the plan and preview digest before changing managed state.
+5. Read [references/artifact-contract.md](references/artifact-contract.md) before accepting inputs or registering artifacts.
 
-- Save prompts and human-editable inputs under `projects/<slug>/`.
-- Save large generated files under `outputs/<slug>/`; do not commit them by default.
-- Record provider, model, timestamp, input paths, output paths, generation or job ID, and key parameters in `projects/<slug>/manifest.json`.
-- Keep Remotion content in props JSON rather than hard-coding campaign copy into components.
-- Preserve source assets; create derivatives instead of overwriting inputs.
+## Apply exact authorization gates
 
-## Verify
+- A clear generation request may authorize one first billable attempt only when provider or capability, model or tier, count, request bounds, and cost boundary are explicit. If a monetary hard cap is unavailable, disclose that the estimate is non-binding and bind the request by input, duration or token limits, count, and one-attempt maximum.
+- Treat a retry, a new billable attempt, overwrite or deletion, and external publish or send as separate grants. Bind each grant to the exact operation and preview digest.
+- Persist `dispatching` before a remote call. If submission or result is uncertain, record the original operation as terminal `unknown`; investigate the original receipt or job ID through a typed `observation_of` operation bound to that receipt. Never rewrite the original outcome or auto-submit a replacement.
+- Configuration, templates, an available account, a target path, prior permission, or a provider suggestion never grants a side effect.
+- Never ask for or record API keys, cookies, authorization headers, browser storage, signed private URLs, or large encoded payloads. Repository policy overrides a delegated Skill that suggests weaker credential handling.
 
-1. Run `pnpm media:probe -- <file>` for final audio or video when FFprobe is available.
-2. Preview Remotion work in Studio and render a still before a full render.
-3. Check duration, dimensions, aspect ratio, readable text, safe margins, audio presence, and obvious black or frozen frames.
-4. Run `pnpm check` after code changes.
-5. Report output paths, models used, known limitations, and any unverified item.
+## Keep ownership separate
+
+- This Skill owns orchestration plans, operation events, provenance links, recovery state, and acceptance records.
+- Dedicated Skills and adapters own the semantics of browser, generation, editing, composition, validation, and publishing actions.
+- A remote provider owns remote job state; record only opaque receipts and observations.
+- Artifact profiles own their business states. For example, a publication profile may own draft/reviewed/published; do not collapse that state into the generic operation lifecycle.
+- The user owns source materials and accepted deliverables. Preserve originals and derive new artifacts.
+
+## Finish or pause safely
+
+Verify event-chain integrity, dependency and target digests, profile-specific checks, and acceptance evidence. Distinguish operation success from artifact acceptance. Report created and changed artifacts, external calls, billable attempts, validation performed, unresolved remote outcomes, and limitations. A publish operation is complete only when its adapter returns a verifiable receipt.
+
+For managed repository configuration, read [references/context-contract.md](references/context-contract.md). The deterministic runtime records and verifies operations; it never invokes a provider, shell, Git, browser, or network on the agent's behalf.

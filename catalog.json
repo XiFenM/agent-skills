@@ -35,6 +35,9 @@
           "commit": "859e0d9e1791d6b471e4add920a4ac8ca1e0caf2"
         }
       ],
+      "context": {
+        "validator": "scripts/context_config.py"
+      },
       "lifecycle": {
         "state": "active"
       },
@@ -42,13 +45,13 @@
       "consumers": [
         "daily-work"
       ],
-      "migration": "verbatim",
+      "migration": "generalized-configurable-upgrade",
       "review": {
-        "state": "pending",
+        "state": "implemented",
         "topics": [
-          "generalize-workflow",
-          "official-skill-routing-refresh",
-          "daily-work-adaptation-migration"
+          "generic-operation-ledger-and-recovery",
+          "strict-consumer-profiles-and-routes",
+          "exact-cost-retry-and-publish-authorization"
         ]
       }
     },

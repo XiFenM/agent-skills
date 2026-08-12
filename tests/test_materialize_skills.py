@@ -184,6 +184,19 @@ def validate_materialized_context(repository_config, skill_config):
             "records",
         )
 
+    def set_demo_required_skills(self, required_skills: list[str]) -> None:
+        validator = self.central / "skills" / "demo-skill" / "scripts" / "context.py"
+        source = validator.read_text(encoding="utf-8")
+        needle = '        "write_paths": [skill_config["output_path"]],\n    }\n'
+        replacement = (
+            '        "write_paths": [skill_config["output_path"]],\n'
+            f'        "required_skills": {required_skills!r},\n'
+            "    }\n"
+        )
+        self.assertIn(needle, source)
+        validator.write_text(source.replace(needle, replacement), encoding="utf-8")
+        self.commit_central("declare required Skills")
+
     def enable_second_context_fixture(self) -> None:
         self.add_skill("other-skill")
         validator = (
@@ -366,6 +379,68 @@ def validate_materialized_context(repository_config, skill_config):
         write_json(skill_config, updated)
         errors = materialize_skills.check(self.repo, self.central, self.config)
         self.assertTrue(any("drifted" in error or "metadata" in error for error in errors))
+
+    def test_v2_context_accepts_required_skill_when_selected(self) -> None:
+        self.enable_context_fixture()
+        self.add_skill("support-skill")
+        self.set_demo_required_skills(["support-skill"])
+        consumer = json.loads(self.config.read_text(encoding="utf-8"))
+        consumer["skills"]["support-skill"] = ["codex", "claude"]
+        write_json(self.config, consumer)
+
+        desired, parsed = materialize_skills.build_plan(
+            self.repo, self.central, self.config
+        )
+
+        self.assertEqual(set(parsed.selected), {"demo-skill", "support-skill"})
+        self.assertEqual(
+            {(item.skill, item.host) for item in desired},
+            {
+                ("demo-skill", "codex"),
+                ("demo-skill", "claude"),
+                ("support-skill", "codex"),
+                ("support-skill", "claude"),
+            },
+        )
+
+    def test_v2_context_rejects_required_skill_missing_selected_host(self) -> None:
+        self.enable_context_fixture()
+        self.add_skill("support-skill")
+        self.set_demo_required_skills(["support-skill"])
+        consumer = json.loads(self.config.read_text(encoding="utf-8"))
+        consumer["skills"]["support-skill"] = ["codex"]
+        write_json(self.config, consumer)
+
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError,
+            "demo-skill context requires support-skill on hosts: claude",
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_context_rejects_required_skill_when_unselected(self) -> None:
+        self.enable_context_fixture()
+        self.add_skill("support-skill")
+        self.set_demo_required_skills(["support-skill"])
+
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError,
+            "demo-skill context requires selected Skills: support-skill",
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_context_rejects_duplicate_required_skills(self) -> None:
+        self.enable_context_fixture()
+        self.add_skill("support-skill")
+        self.set_demo_required_skills(["support-skill", "support-skill"])
+        consumer = json.loads(self.config.read_text(encoding="utf-8"))
+        consumer["skills"]["support-skill"] = ["codex"]
+        write_json(self.config, consumer)
+
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError,
+            "context validator for 'demo-skill' required_skills has duplicates",
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
 
     def test_v2_context_rejects_untracked_facts_and_unknown_fields(self) -> None:
         self.enable_context_fixture()

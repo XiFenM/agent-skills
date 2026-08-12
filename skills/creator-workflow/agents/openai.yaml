@@ -1,4 +1,4 @@
 interface:
   display_name: "Creator Workflow"
-  short_description: "Plan, generate, compose, and verify media"
-  default_prompt: "Use $creator-workflow to turn this content idea into a verified media package."
+  short_description: "Coordinate traceable, recoverable content production"
+  default_prompt: "Use $creator-workflow to coordinate this multi-stage creation project with explicit authorization and verifiable artifacts."
