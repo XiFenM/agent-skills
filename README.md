@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。五个学习类 Skill 现统一支持中央通用核心、严格消费配置和受管上下文；消费仓库适配仍作为独立迁移阶段处理。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。五个学习类 Skill 现统一支持中央通用核心、严格消费配置和受管上下文；version 2 与首轮历史状态适配也已形成待推送的本地消费提交。
 
 ## 当前范围
 
@@ -12,7 +12,7 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D41 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 已确认并在本地提交中实现 `guide-learning` 的按需学习文章能力；PlanA 历史产物适配仍在本轮审查中，所有本地提交都尚未推送。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D41 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 已在中央提交 `c3ae66a` 实现按需学习文章能力，PlanA 首轮历史状态适配也已完成独立审查并形成提交 `b490b30`；这些本地提交均尚未推送。
 
 ## 目录
 
@@ -30,7 +30,7 @@ agent-skills/
 
 消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者的远端已发布基线都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。
 
-2026-08-12 的本地工作批次已经分别形成 PlanA 提交 `1a2a162` 与 programming-lab 提交 `d4ddc14`，完成五个学习类 Skill 的 version 2 基础消费配置迁移；这两个消费提交尚未推送。本提交完成并验证 `guide-learning` 的文章产物扩展；PlanA 历史产物适配仍在本轮实施和验证中，尚未发布。
+2026-08-12 的本地工作批次先分别形成 PlanA `1a2a162` 与 programming-lab `d4ddc14`，完成 version 2 基础消费配置；随后中央 `c3ae66a` 加入文章能力，PlanA `b490b30` 完成首轮历史状态适配，programming-lab `60d5bc2` 只更新中央指针并继续冻结 legacy。两个消费者都固定到中央代码提交 `c3ae66a` 并重新 materialize；整批本地提交均尚未推送。
 
 不需要消费环境配置的仓库可以继续使用 version 1。需要为自创 Skill 提供仓库事实、素材 collection、输出目标或 adapter 时，使用 version 2，并让索引只引用严格 JSON 配置：
 

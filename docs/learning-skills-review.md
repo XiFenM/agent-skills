@@ -1420,10 +1420,11 @@ PlanA 的首轮历史产物适配边界同时确认：
   回填或重写。PlanA 的历史日志、英语卡片和 resource-planning 的 registry／slot／旧 SOP 接管仍是
   后续独立阶段，不能借本轮状态或文章适配顺带处理。
 
-实施状态必须与设计结论分开记录：PlanA 的 version 2 基础迁移已形成本地提交 `1a2a162`，programming-lab
-对应本地提交为 `d4ddc14`，两者均尚未推送。中央文章能力已经完成实现，并通过完整中央测试
-`274 passed, 4 skipped, 54 subtests passed`、Skill 结构校验和独立边界审查；PlanA 的记忆／流程／文章
-模板退役与稀疏状态规范化仍在实施，因此 D41 尚不把消费仓库适配记录成已经发布。
+实施状态必须与设计结论分开记录：中央文章能力已在本地提交 `c3ae66a` 完成，并通过完整中央测试
+`274 passed, 4 skipped, 54 subtests passed`、Skill 结构校验和独立边界审查。PlanA 在基础 version 2
+提交 `1a2a162` 之后，又以本地提交 `b490b30` 退役重复记忆／陪学流程／文章模板，建立稀疏状态链和
+文章配置；programming-lab 在基础提交 `d4ddc14` 之后，以 `60d5bc2` 更新中央指针且继续冻结 legacy。
+两仓均重新 materialize 并通过独立终审；上述提交尚未推送，因此这里只记录“本地完成”，不宣称远端发布。
 
 ## 延期待办：`creator-workflow` 质量评审、通用化升级与 `daily-work` 适配迁移
 

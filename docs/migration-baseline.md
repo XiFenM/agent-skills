@@ -104,15 +104,17 @@ ZenMux 官方仓库中当前还有其他 Skill，但它们不是三个主仓库�
 - programming-lab 的既有 Lesson 01／02、历史对话、实验及其他 legacy 学习产物继续冻结，不进行回填、
   改写或追溯结构化。PlanA 的历史日志、英语卡片与资源规划 registry／slot／SOP 接管属于后续独立阶段，
   不与本轮状态和文章适配混写。
-- 两个消费者的 version 2 基础迁移已经形成仅本地提交：PlanA `1a2a162`，programming-lab `d4ddc14`。
-  两个提交均尚未推送。中央文章扩展已完成实现，并通过 `274 passed, 4 skipped, 54 subtests passed`、
-  Skill 结构校验与独立边界审查；PlanA 记忆／流程／文章模板退役与状态稀疏规范化仍在本轮实施，尚未发布。
+- 两个消费者的 version 2 基础迁移先形成 PlanA `1a2a162` 与 programming-lab `d4ddc14`。中央文章扩展
+  随后在 `c3ae66a` 完成，并通过 `274 passed, 4 skipped, 54 subtests passed`、Skill 结构校验与独立
+  边界审查。PlanA `b490b30` 又完成重复记忆／陪学流程／文章模板退役与状态稀疏规范化；programming-lab
+  `60d5bc2` 只更新中央指针并继续冻结 legacy。两仓均重新 materialize、检查 current 并通过独立终审。
+  这些提交均仍为本地提交，尚未推送。
 
 ## 当前已知但暂不修复
 
 1. PlanA 与 programming-lab 的远端已发布版本仍固定 M5 中央提交并使用 version 1 索引；本地 version 2
-   基础迁移提交 `1a2a162`／`d4ddc14` 尚未推送。
-2. D41 的中央文章扩展已实现并验证；PlanA 历史状态／文章适配仍在实施和验证中，尚未发布。
+   与 D41 适配提交链尚未推送。
+2. D41 的中央文章扩展和 PlanA 首轮历史状态／文章适配均已在本地实现、验证并提交，但尚未远端发布。
 3. 历史日志、卡片、旧周报和稳定资源组合保持原样；只有用户以后明确刷新或接管具体目标时，才按新的
    记录、manifest／registry 合同渐进迁移。
 4. `creator-workflow` 仍绑定当前创作目录约定；其通用化评审、旧 Remotion 路由修正和 `daily-work` 适配已经登记为延期事项。
