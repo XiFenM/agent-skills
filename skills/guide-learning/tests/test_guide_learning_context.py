@@ -221,3 +221,310 @@ def test_record_roots_cannot_overlap_and_shared_files_need_distinct_sections() -
             context_config.validate_materialized_context(
                 _repository(), _config(record_mappings=records)
             )
+
+
+def test_article_profile_is_canonical_and_derives_only_write_ceilings() -> None:
+    result = context_config.validate_materialized_context(
+        _repository(),
+        _config(
+            repository_fact_refs=[
+                {
+                    "fact_id": "preferences",
+                    "role": "article-profile",
+                    "kind": "file",
+                }
+            ],
+            article_profile={
+                "language": "zh-CN",
+                "tone_profile": "peer-explanatory",
+                "sections": {
+                    "required": [
+                        "thematic-understanding",
+                        "source-and-scope",
+                        "question-or-goal",
+                    ],
+                    "optional": ["open-items", "practice-evidence"],
+                },
+                "domain_lenses": ["source-code", "engineering-practice"],
+                "targets": [
+                    {
+                        "id": "systems-articles",
+                        "collection": "systems/articles",
+                        "filename_policy": "sequence-topic",
+                    },
+                    {
+                        "id": "runtime-notes",
+                        "collection": "runtime/notes",
+                        "filename_policy": "lesson-id-topic",
+                    },
+                ],
+            },
+        ),
+    )
+
+    assert result["tracked_files"] == ["learning/preferences.md"]
+    assert result["tracked_collections"] == []
+    assert result["write_paths"] == ["runtime/notes", "systems/articles"]
+    assert result["context"]["article_profile"] == {
+        "language": "zh-CN",
+        "tone_profile": "peer-explanatory",
+        "sections": {
+            "required": [
+                "source-and-scope",
+                "question-or-goal",
+                "thematic-understanding",
+            ],
+            "optional": ["practice-evidence", "open-items"],
+        },
+        "domain_lenses": ["source-code", "engineering-practice"],
+        "targets": [
+            {
+                "id": "runtime-notes",
+                "record_type": "learning-article",
+                "collection": "runtime/notes",
+                "format": "markdown",
+                "include_patterns": ["*.md"],
+                "filename_policy": "lesson-id-topic",
+            },
+            {
+                "id": "systems-articles",
+                "record_type": "learning-article",
+                "collection": "systems/articles",
+                "format": "markdown",
+                "include_patterns": ["*.md"],
+                "filename_policy": "sequence-topic",
+            },
+        ],
+    }
+
+
+def test_article_profile_without_targets_preserves_zero_write_default() -> None:
+    result = context_config.validate_materialized_context(
+        _repository(),
+        _config(article_profile={"tone_profile": "technical-reference"}),
+    )
+
+    assert result["write_paths"] == []
+    assert result["tracked_collections"] == []
+    assert result["context"]["article_profile"] == {
+        "tone_profile": "technical-reference",
+        "domain_lenses": [],
+        "targets": [],
+        "sections": {
+            "required": [
+                "source-and-scope",
+                "question-or-goal",
+                "thematic-understanding",
+            ],
+            "optional": [
+                "retrospective",
+                "practice-evidence",
+                "downstream-application",
+                "question-and-answer",
+                "summary",
+                "open-items",
+            ],
+        },
+    }
+
+
+@pytest.mark.parametrize("field", ["prompt", "command", "write_authorized", "owner"])
+def test_article_profile_rejects_freeform_or_authority_fields(field: str) -> None:
+    with pytest.raises(context_config.ContextConfigError, match="unknown fields"):
+        context_config.validate_materialized_context(
+            _repository(), _config(article_profile={field: "do something"})
+        )
+
+
+def test_article_profile_requires_non_empty_objects_and_target_arrays() -> None:
+    for profile, message in (
+        ({}, "must not be empty"),
+        ({"targets": []}, "non-empty array"),
+        ({"sections": {}}, "missing fields"),
+    ):
+        with pytest.raises(context_config.ContextConfigError, match=message):
+            context_config.validate_materialized_context(
+                _repository(), _config(article_profile=profile)
+            )
+
+
+def test_article_sections_require_core_and_must_not_overlap() -> None:
+    cases = (
+        (
+            {
+                "required": ["source-and-scope", "question-or-goal"],
+                "optional": ["summary"],
+            },
+            "must include",
+        ),
+        (
+            {
+                "required": [
+                    "source-and-scope",
+                    "question-or-goal",
+                    "thematic-understanding",
+                    "summary",
+                ],
+                "optional": ["summary"],
+            },
+            "overlap",
+        ),
+    )
+    for sections, message in cases:
+        with pytest.raises(context_config.ContextConfigError, match=message):
+            context_config.validate_materialized_context(
+                _repository(), _config(article_profile={"sections": sections})
+            )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("language", "not a language tag!"),
+        ("tone_profile", "custom-prompt"),
+        ("domain_lenses", ["pytorch"]),
+    ],
+)
+def test_article_profile_uses_finite_portable_values(field: str, value: object) -> None:
+    with pytest.raises(context_config.ContextConfigError):
+        context_config.validate_materialized_context(
+            _repository(), _config(article_profile={field: value})
+        )
+
+
+def _target(target_id: str, collection: str) -> dict[str, str]:
+    return {
+        "id": target_id,
+        "collection": collection,
+        "filename_policy": "topic",
+    }
+
+
+@pytest.mark.parametrize(
+    "targets",
+    [
+        [_target("same", "first/articles"), _target("same", "second/articles")],
+        [_target("first", "Docs/Articles"), _target("second", "docs/articles")],
+        [_target("first", "docs"), _target("second", "docs/articles")],
+        [_target("unsafe", "../articles")],
+    ],
+)
+def test_article_targets_are_unique_disjoint_and_portable(
+    targets: list[dict[str, str]],
+) -> None:
+    with pytest.raises(context_config.ContextConfigError):
+        context_config.validate_materialized_context(
+            _repository(), _config(article_profile={"targets": targets})
+        )
+
+
+def test_article_targets_cannot_overlap_read_facts_or_state_records() -> None:
+    cases = (
+        _config(
+            repository_fact_refs=[
+                {
+                    "fact_id": "sources",
+                    "role": "source-catalog",
+                    "kind": "collection",
+                }
+            ],
+            article_profile={"targets": [_target("articles", "learning/sources/articles")]},
+        ),
+        _config(
+            record_mappings={
+                "lesson": {"path": "learning/lessons", "kind": "collection"}
+            },
+            article_profile={"targets": [_target("articles", "learning/lessons/articles")]},
+        ),
+    )
+    for config in cases:
+        with pytest.raises(context_config.ContextConfigError, match="overlaps"):
+            context_config.validate_materialized_context(_repository(), config)
+
+
+def test_article_target_may_share_an_explicit_knowledge_artifact_collection() -> None:
+    result = context_config.validate_materialized_context(
+        _repository(),
+        _config(
+            repository_fact_refs=[
+                {
+                    "fact_id": "sources",
+                    "role": "knowledge-artifacts",
+                    "kind": "collection",
+                }
+            ],
+            article_profile={
+                "targets": [_target("articles", "learning/sources")]
+            },
+        ),
+    )
+
+    assert result["tracked_collections"] == ["learning/sources"]
+    assert result["write_paths"] == ["learning/sources"]
+
+
+def test_article_target_alone_does_not_authorize_collection_reads() -> None:
+    result = context_config.validate_materialized_context(
+        _repository(),
+        _config(
+            article_profile={
+                "targets": [_target("articles", "learning/sources")]
+            }
+        ),
+    )
+
+    assert result["tracked_files"] == []
+    assert result["tracked_collections"] == []
+    assert result["write_paths"] == ["learning/sources"]
+
+
+@pytest.mark.parametrize(
+    ("fact_ref", "collection"),
+    [
+        (
+            {
+                "fact_id": "sources",
+                "role": "knowledge-artifacts",
+                "kind": "collection",
+            },
+            "learning",
+        ),
+        (
+            {
+                "fact_id": "sources",
+                "role": "knowledge-artifacts",
+                "kind": "collection",
+            },
+            "learning/sources/articles",
+        ),
+        (
+            {
+                "fact_id": "preferences",
+                "role": "knowledge-artifacts",
+                "kind": "file",
+            },
+            "learning/preferences.md",
+        ),
+        (
+            {
+                "fact_id": "sources",
+                "role": "source-catalog",
+                "kind": "collection",
+            },
+            "learning/sources",
+        ),
+    ],
+)
+def test_article_target_fact_handoff_remains_narrow(
+    fact_ref: dict[str, str], collection: str
+) -> None:
+    with pytest.raises(context_config.ContextConfigError, match="overlaps"):
+        context_config.validate_materialized_context(
+            _repository(),
+            _config(
+                repository_fact_refs=[fact_ref],
+                article_profile={
+                    "targets": [_target("articles", collection)]
+                },
+            ),
+        )

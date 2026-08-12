@@ -12,7 +12,7 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D40 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D41 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 已确认并在本地提交中实现 `guide-learning` 的按需学习文章能力；PlanA 历史产物适配仍在本轮审查中，所有本地提交都尚未推送。
 
 ## 目录
 
@@ -28,7 +28,9 @@ agent-skills/
 
 ## 消费方式
 
-消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者当前都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。
+消费仓库从公开中央远端把本仓库加入为 `.agent-skills` 子模块，并提交自己的 `.agent-skills.json`。M0–M5 已全部完成：`learning-core-v1` 对应的 `b2afd92854d57a375fdf990028c31561118cf8ec` 继续固定兼容版本，两个消费者的远端已发布基线都固定到 M5 中央提交 `4ce419ced337b15937af03a93f26468c0ea2ddeb`。programming-lab 只向 Codex 分发 `guide-learning` 与 `study-log`，PlanA 则向 Codex 与 Claude 分发 `guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning` 与 `playwright-cli`。
+
+2026-08-12 的本地工作批次已经分别形成 PlanA 提交 `1a2a162` 与 programming-lab 提交 `d4ddc14`，完成五个学习类 Skill 的 version 2 基础消费配置迁移；这两个消费提交尚未推送。本提交完成并验证 `guide-learning` 的文章产物扩展；PlanA 历史产物适配仍在本轮实施和验证中，尚未发布。
 
 不需要消费环境配置的仓库可以继续使用 version 1。需要为自创 Skill 提供仓库事实、素材 collection、输出目标或 adapter 时，使用 version 2，并让索引只引用严格 JSON 配置：
 
@@ -56,7 +58,7 @@ agent-skills/
 }
 ```
 
-公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope 或原始对话存档的格式版本。配置只能声明环境事实和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope 或原始对话存档的格式版本。配置只能声明环境事实和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
 新 clone 或更新子模块后，先递归初始化中央仓库及其第三方子模块：
 

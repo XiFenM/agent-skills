@@ -24,6 +24,7 @@ _TIMEZONE_PATTERN = re.compile(
 )
 _FACT_ROLES = frozenset(
     {
+        "article-profile",
         "budget-source",
         "evidence-artifacts",
         "knowledge-artifacts",
@@ -48,6 +49,42 @@ _RECORD_ROLES = frozenset(
     }
 )
 _KINDS = frozenset({"collection", "file"})
+_ARTICLE_TONES = frozenset(
+    {
+        "neutral-explanatory",
+        "peer-explanatory",
+        "reflective-first-person",
+        "technical-reference",
+    }
+)
+_ARTICLE_SECTION_ORDER = (
+    "source-and-scope",
+    "question-or-goal",
+    "thematic-understanding",
+    "retrospective",
+    "practice-evidence",
+    "downstream-application",
+    "question-and-answer",
+    "summary",
+    "open-items",
+)
+_ARTICLE_SECTIONS = frozenset(_ARTICLE_SECTION_ORDER)
+_ARTICLE_BASE_SECTIONS = frozenset(
+    {"source-and-scope", "question-or-goal", "thematic-understanding"}
+)
+_ARTICLE_DOMAIN_LENSES = frozenset(
+    {
+        "counterexample",
+        "engineering-practice",
+        "historical-experience",
+        "interview-transfer",
+        "quantitative-example",
+        "source-code",
+    }
+)
+_ARTICLE_FILENAME_POLICIES = frozenset(
+    {"lesson-id-topic", "sequence-topic", "topic", "yyyy-mm-dd-topic"}
+)
 _WINDOWS_RESERVED_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
     | {f"COM{index}" for index in range(1, 10)}
@@ -285,6 +322,160 @@ def _record_mappings(value: Any) -> dict[str, dict[str, str]]:
     return result
 
 
+def _enum_list(
+    value: Any,
+    choices: frozenset[str],
+    label: str,
+    *,
+    maximum: int | None = None,
+) -> list[str]:
+    if not isinstance(value, list):
+        raise ContextConfigError(f"{label} must be an array")
+    if maximum is not None and len(value) > maximum:
+        raise ContextConfigError(f"{label} must contain at most {maximum} items")
+    result: list[str] = []
+    seen: set[str] = set()
+    for index, raw_item in enumerate(value):
+        item = _enum(raw_item, choices, f"{label}[{index}]")
+        if item in seen:
+            raise ContextConfigError(f"{label} contains duplicate item {item!r}")
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+def _article_targets(value: Any) -> list[dict[str, Any]]:
+    label = "skill_config.article_profile.targets"
+    if not isinstance(value, list) or not value:
+        raise ContextConfigError(f"{label} must be a non-empty array")
+
+    result: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, raw_target in enumerate(value):
+        target_label = f"{label}[{index}]"
+        target = _object(raw_target, target_label)
+        _exact_keys(
+            target,
+            allowed=frozenset({"id", "collection", "filename_policy"}),
+            required=frozenset({"id", "collection", "filename_policy"}),
+            label=target_label,
+        )
+        target_id = _identifier(target["id"], f"{target_label}.id")
+        if target_id in seen_ids:
+            raise ContextConfigError(f"{label} contains duplicate id {target_id!r}")
+        seen_ids.add(target_id)
+        parsed = {
+            "id": target_id,
+            "record_type": "learning-article",
+            "collection": _relative_path(
+                target["collection"], f"{target_label}.collection"
+            ),
+            "format": "markdown",
+            "include_patterns": ["*.md"],
+            "filename_policy": _enum(
+                target["filename_policy"],
+                _ARTICLE_FILENAME_POLICIES,
+                f"{target_label}.filename_policy",
+            ),
+        }
+        for existing in result:
+            existing_collection = existing["collection"]
+            collection = parsed["collection"]
+            if (
+                _folded_path(collection) == _folded_path(existing_collection)
+                or _is_proper_ancestor(collection, existing_collection)
+                or _is_proper_ancestor(existing_collection, collection)
+            ):
+                raise ContextConfigError(
+                    f"article target collections must be separate: {collection!r} "
+                    f"and {existing_collection!r}"
+                )
+        result.append(parsed)
+    return sorted(result, key=lambda item: item["id"])
+
+
+def _article_profile(value: Any) -> dict[str, Any]:
+    label = "skill_config.article_profile"
+    profile = _object(value, label)
+    _exact_keys(
+        profile,
+        allowed=frozenset(
+            {"language", "tone_profile", "sections", "domain_lenses", "targets"}
+        ),
+        required=frozenset(),
+        label=label,
+    )
+    if not profile:
+        raise ContextConfigError(f"{label} must not be empty")
+
+    result: dict[str, Any] = {
+        "tone_profile": _enum(
+            profile.get("tone_profile", "neutral-explanatory"),
+            _ARTICLE_TONES,
+            f"{label}.tone_profile",
+        ),
+        "domain_lenses": _enum_list(
+            profile.get("domain_lenses", []),
+            _ARTICLE_DOMAIN_LENSES,
+            f"{label}.domain_lenses",
+            maximum=6,
+        ),
+        "targets": _article_targets(profile["targets"])
+        if "targets" in profile
+        else [],
+    }
+    if "language" in profile:
+        language = _string(profile["language"], f"{label}.language", maximum=35)
+        if _LANGUAGE_PATTERN.fullmatch(language) is None:
+            raise ContextConfigError(
+                f"{label}.language must be a BCP-47-style language tag"
+            )
+        result["language"] = language
+
+    if "sections" in profile:
+        sections = _object(profile["sections"], f"{label}.sections")
+        _exact_keys(
+            sections,
+            allowed=frozenset({"required", "optional"}),
+            required=frozenset({"required", "optional"}),
+            label=f"{label}.sections",
+        )
+        required = _enum_list(
+            sections["required"], _ARTICLE_SECTIONS, f"{label}.sections.required"
+        )
+        optional = _enum_list(
+            sections["optional"], _ARTICLE_SECTIONS, f"{label}.sections.optional"
+        )
+        overlap = set(required) & set(optional)
+        if overlap:
+            raise ContextConfigError(
+                f"{label}.sections required and optional overlap: "
+                + ", ".join(sorted(overlap))
+            )
+        missing_base = _ARTICLE_BASE_SECTIONS - set(required)
+        if missing_base:
+            raise ContextConfigError(
+                f"{label}.sections.required must include: "
+                + ", ".join(sorted(missing_base))
+            )
+    else:
+        required = [
+            section
+            for section in _ARTICLE_SECTION_ORDER
+            if section in _ARTICLE_BASE_SECTIONS
+        ]
+        optional = [
+            section
+            for section in _ARTICLE_SECTION_ORDER
+            if section not in _ARTICLE_BASE_SECTIONS
+        ]
+    result["sections"] = {
+        "required": [section for section in _ARTICLE_SECTION_ORDER if section in required],
+        "optional": [section for section in _ARTICLE_SECTION_ORDER if section in optional],
+    }
+    return result
+
+
 def _folded_path(path: str) -> PurePosixPath:
     return PurePosixPath(*(part.casefold() for part in PurePosixPath(path).parts))
 
@@ -351,6 +542,52 @@ def _validate_mapping_boundaries(
                 )
 
 
+def _validate_article_target_boundaries(
+    article_profile: dict[str, Any] | None,
+    fact_refs: list[dict[str, str]],
+    records: dict[str, dict[str, str]],
+    repository: dict[str, Any],
+) -> None:
+    if article_profile is None:
+        return
+    read_facts = [
+        (ref, repository["facts"][ref["fact_id"]]["path"])
+        for ref in fact_refs
+    ]
+    for target in article_profile["targets"]:
+        collection = target["collection"]
+        for ref, fact_path in read_facts:
+            exact_match = _folded_path(collection) == _folded_path(fact_path)
+            if exact_match:
+                if (
+                    ref["kind"] == "collection"
+                    and ref["role"] == "knowledge-artifacts"
+                ):
+                    continue
+                raise ContextConfigError(
+                    f"article target {target['id']!r} overlaps read-only fact "
+                    f"{ref['fact_id']!r}"
+                )
+            if _is_proper_ancestor(
+                collection, fact_path
+            ) or _is_proper_ancestor(fact_path, collection):
+                raise ContextConfigError(
+                    f"article target {target['id']!r} overlaps read-only fact "
+                    f"{ref['fact_id']!r}"
+                )
+        for role, mapping in records.items():
+            mapping_path = mapping["path"]
+            if (
+                _folded_path(collection) == _folded_path(mapping_path)
+                or _is_proper_ancestor(collection, mapping_path)
+                or _is_proper_ancestor(mapping_path, collection)
+            ):
+                raise ContextConfigError(
+                    f"article target {target['id']!r} overlaps record mapping "
+                    f"{role!r}"
+                )
+
+
 def validate_materialized_context(
     repository_config: Any, skill_config: Any
 ) -> dict[str, Any]:
@@ -366,7 +603,13 @@ def validate_materialized_context(
     _exact_keys(
         skill,
         allowed=frozenset(
-            {"schema", "skill", "repository_fact_refs", "record_mappings"}
+            {
+                "schema",
+                "skill",
+                "repository_fact_refs",
+                "record_mappings",
+                "article_profile",
+            }
         ),
         required=frozenset({"schema", "skill"}),
         label="skill_config",
@@ -382,7 +625,15 @@ def validate_materialized_context(
 
     fact_refs = _fact_refs(skill.get("repository_fact_refs", []), repository)
     records = _record_mappings(skill.get("record_mappings", {}))
+    article_profile = (
+        _article_profile(skill["article_profile"])
+        if "article_profile" in skill
+        else None
+    )
     _validate_mapping_boundaries(fact_refs, records, repository)
+    _validate_article_target_boundaries(
+        article_profile, fact_refs, records, repository
+    )
 
     selected_facts = {
         ref["fact_id"]: dict(repository["facts"][ref["fact_id"]])
@@ -407,14 +658,23 @@ def validate_materialized_context(
         for ref in fact_refs
         if ref["kind"] == "collection"
     }
+    context: dict[str, Any] = {
+        "schema": CONTEXT_SCHEMA,
+        "repository": repository_context,
+        "repository_fact_refs": fact_refs,
+        "record_mappings": records,
+    }
+    article_write_paths: set[str] = set()
+    if article_profile is not None:
+        context["article_profile"] = article_profile
+        article_write_paths = {
+            target["collection"] for target in article_profile["targets"]
+        }
     return {
-        "context": {
-            "schema": CONTEXT_SCHEMA,
-            "repository": repository_context,
-            "repository_fact_refs": fact_refs,
-            "record_mappings": records,
-        },
+        "context": context,
         "tracked_files": sorted(tracked_files),
         "tracked_collections": sorted(tracked_collections),
-        "write_paths": sorted({mapping["path"] for mapping in records.values()}),
+        "write_paths": sorted(
+            {mapping["path"] for mapping in records.values()} | article_write_paths
+        ),
     }

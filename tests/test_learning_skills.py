@@ -9,6 +9,7 @@ GUIDE_ROOT = ROOT / "skills" / "guide-learning"
 RETIRED_SKILL_NAMES = {"learn-by-practice", "study-companion"}
 
 REFERENCE_FILES = {
+    "article-artifacts.md",
     "examples.md",
     "practice-review-mastery.md",
     "repository-adaptation.md",

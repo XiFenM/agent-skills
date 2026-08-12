@@ -1,6 +1,6 @@
 ---
 name: guide-learning
-description: "Guide human learners through source-grounded explanation, post-explanation adaptive checks, evidence-gap-driven formal practice, artifact review, mastery verification, and minimal cross-session recovery. Use when a user asks to learn or understand a topic; study documentation, tutorials, papers, examples, or source code; start, continue, or resume a lesson; design or review a learning exercise; or run a multi-session course. Do not use for ordinary implementation, bug fixing, or code review without learning intent, or for resource governance, dialogue extraction, card generation, or English-specific feedback or coaching."
+description: "Guide human learners through source-grounded explanation, post-explanation adaptive checks, evidence-gap-driven formal practice, artifact review, mastery verification, minimal cross-session recovery, and optional source-grounded learning articles. Use when a user asks to learn or understand a topic; study documentation, tutorials, papers, examples, or source code; start, continue, or resume a lesson; design or review a learning exercise; turn completed learning into an article; or run a multi-session course. Do not use for ordinary implementation, bug fixing, or code review without learning intent, or for resource governance, dialogue extraction, card generation, or English-specific feedback or coaching."
 ---
 
 # Guided Learning / 学习带练
@@ -153,7 +153,9 @@ material assistance，不向用户暴露提示层号。material hint 或 Agent �
   进入 mastery gate、暂停、收工或确认关闭时，按需同步授权状态。
 - 应用 semantic diff：状态、证据和下一动作均未变化时不写；不要只更新时间戳，不要猜测学习时长。
 - 不要自动生成文章、学习日志、卡片或原始对话。只有用户明确请求并确认相应范围时，才生成或交接。
-- 形成完整且值得整理的主题时，可以自然提议文章；先让用户确认素材范围和目标，再起草或写入。
+- 形成完整且值得整理的主题时，可以自然提议文章；先让用户确认素材范围与用途后再起草，取得本次目标文件的
+  明确授权后才写入。文章按主题综合已核验理解与纠错，不保存对话流水，也不拥有 Lesson 状态或 mastery。
+  起草、适配结构或选择受管文章目标前读取 [article-artifacts.md](references/article-artifacts.md)。
 
 ## 处理暂停、专项与跨能力边界
 
@@ -180,5 +182,7 @@ material assistance，不向用户暴露提示层号。material hint 或 Agent �
   Session event 或 Checkpoint 时读取。
 - [repository-adaptation.md](references/repository-adaptation.md)：在发现消费仓库约定、映射逻辑状态、选择
   授权路径、解释受管 context 或采用 schema-only fallback 时读取。
+- [article-artifacts.md](references/article-artifacts.md)：在提议、起草、写入或适配学习文章时读取；用于区分
+  文章与过程日志、应用通用骨架、解释文章 profile 并选择安全目标。
 - [examples.md](references/examples.md)：只在一次答疑、独立 Session、跳过练习、drift、临时专项、来源
   冲突或不同关闭分支的边界仍不清楚时读取；把示例视为非规范性说明。
