@@ -33,6 +33,12 @@ description: "Guide human learners through source-grounded explanation, post-exp
 5. 在同一工作上下文中只保持一个前台 active Lesson。允许其他 Program 或 Lesson 保持 planned、frozen
    或等待恢复。
 
+若生成副本含 `.agent-skills-context.json`，只把其中的 repository facts 当作只读 locator，把
+`record_mappings` 当作物理位置候选，把 `allowlist.write_paths` 当作机械上限。配置和 allowlist 都不授予
+写入、所有权、Lesson 启动、连续推进、练习接受、mastery 或结课权限；实际文件内容与本 Skill 的行为
+规范继续裁决这些事实。context 缺失时按仓库约定正常发现；context 损坏、身份不符或与实际事实源冲突
+时不要部分采信，保持只读并要求重新 materialize 或让用户选择唯一映射。
+
 按范围投影最小开场信息：
 
 - 一次答疑不展示固定卡片；仅在来源、版本、假设或回答边界会改变答案时补一句说明。
@@ -173,6 +179,6 @@ material assistance，不向用户暴露提示层号。material hint 或 Agent �
 - [state-records.md](references/state-records.md)：在创建、恢复、暂停、写入或关闭 Program、Lesson、
   Session event 或 Checkpoint 时读取。
 - [repository-adaptation.md](references/repository-adaptation.md)：在发现消费仓库约定、映射逻辑状态、选择
-  授权路径或采用 schema-only fallback 时读取。
+  授权路径、解释受管 context 或采用 schema-only fallback 时读取。
 - [examples.md](references/examples.md)：只在一次答疑、独立 Session、跳过练习、drift、临时专项、来源
   冲突或不同关闭分支的边界仍不清楚时读取；把示例视为非规范性说明。

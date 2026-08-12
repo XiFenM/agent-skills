@@ -30,6 +30,11 @@
 
 允许同一来源承担多个角色，但要分别说明适用范围。不要复制大段正文；保存能重新定位证据的锚点。
 
+受管 context 的 repository fact role 只是查找提示：`source-catalog` 不自动成为 teaching spine，
+`knowledge-artifacts` 不自动裁决 claim，`validation-instructions` 不自动定义完成 gate，
+`evidence-artifacts` 不自动证明 mastery。读取实际内容、版本和适用范围后，再按本参考分配来源角色；
+配置中的 `learner-preferences` 也不能覆盖教学循环、提示边界或最低 mastery evidence。
+
 角色含义：
 
 - `teaching-spine`：决定本课沿什么顺序和例子推进。

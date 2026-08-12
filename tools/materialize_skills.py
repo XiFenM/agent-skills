@@ -71,6 +71,8 @@ class ConsumerConfig:
     source_relative: str
     config_relative: str
     config_digest: str
+    config_source_digests: tuple[tuple[str, str], ...]
+    config_sources_require_tracking: bool
     contexts: dict[str, dict[str, Any]]
 
 
@@ -224,6 +226,20 @@ def _relative_paths_overlap(left: str, right: str) -> bool:
         return False
 
 
+def _relative_path_is_within(path: str, root: str) -> bool:
+    normalized_path = PurePosixPath(
+        *(part.casefold() for part in PurePosixPath(path).parts)
+    )
+    normalized_root = PurePosixPath(
+        *(part.casefold() for part in PurePosixPath(root).parts)
+    )
+    try:
+        normalized_path.relative_to(normalized_root)
+        return True
+    except ValueError:
+        return False
+
+
 def _assert_context_writes_disjoint(
     contexts: dict[str, dict[str, Any]],
     protected_roots: dict[str, str],
@@ -235,6 +251,48 @@ def _assert_context_writes_disjoint(
                     raise SyncError(
                         f"{skill} write path {write_path!r} overlaps protected "
                         f"{protected_label} {protected_path!r}"
+                    )
+
+
+def _assert_cross_skill_contexts_disjoint(
+    contexts: dict[str, dict[str, Any]],
+    explicit_tracked_by_skill: dict[str, list[str]],
+) -> None:
+    """Prevent one configured Skill from writing through another's boundary.
+
+    A Skill may deliberately use one of its own tracked collections as a managed
+    inventory/output root.  Cross-Skill collection handoff is also explicit: a
+    writer may target the reader's declared collection root or a path beneath it.
+    It may not write a broader ancestor, an explicit tracked file, or another
+    Skill's write path.  Expanded collection members inherit the declared root
+    and therefore do not become false-positive explicit inputs.
+    """
+
+    for writer, wrapper in sorted(contexts.items()):
+        for write_path in wrapper["allowlist"]["write_paths"]:
+            for owner, other in sorted(contexts.items()):
+                if owner == writer:
+                    continue
+                for other_write in other["allowlist"]["write_paths"]:
+                    if _relative_paths_overlap(write_path, other_write):
+                        raise SyncError(
+                            f"{writer} write path {write_path!r} overlaps "
+                            f"{owner} write path {other_write!r}"
+                        )
+                for tracked_file in explicit_tracked_by_skill.get(owner, []):
+                    if _relative_paths_overlap(write_path, tracked_file):
+                        raise SyncError(
+                            f"{writer} write path {write_path!r} overlaps "
+                            f"{owner} explicit tracked file {tracked_file!r}"
+                        )
+                for collection in other["allowlist"]["tracked_collections"]:
+                    if not _relative_paths_overlap(write_path, collection):
+                        continue
+                    if _relative_path_is_within(write_path, collection):
+                        continue
+                    raise SyncError(
+                        f"{writer} write path {write_path!r} is broader than "
+                        f"{owner} tracked collection {collection!r}"
                     )
 
 
@@ -1018,6 +1076,7 @@ def _read_config(
         )
     selected = _normalized_selected(config.get("skills"), config_path)
     contexts: dict[str, dict[str, Any]] = {}
+    config_source_digests = {config_relative: _sha256_bytes(config_bytes)}
     declared_tracked_by_skill: dict[str, list[str]] = {}
     protected_context_paths: dict[str, str] = {
         config_relative: "consumer config",
@@ -1081,6 +1140,7 @@ def _read_config(
                 tracked=tracked,
                 gitlinks=gitlinks,
             )
+            config_source_digests[repository_relative] = repository_digest
             protected_context_paths[repository_relative] = "repository config"
             for name in sorted(configured_names):
                 entry = catalog.skills.get(name)
@@ -1118,6 +1178,9 @@ def _read_config(
                     intent_to_add=intent_to_add,
                 )
                 contexts[name] = context
+                config_source_digests[skill_config_relative] = context["sources"][
+                    "skill"
+                ]["digest"]
                 declared_tracked_by_skill[name] = declared_tracked
         elif raw_context.get("repository") is not None:
             raise SyncError(
@@ -1128,12 +1191,17 @@ def _read_config(
             for path in paths:
                 protected_context_paths[path] = f"{name} explicit tracked fact"
         _assert_context_writes_disjoint(contexts, protected_context_paths)
+        _assert_cross_skill_contexts_disjoint(
+            contexts, declared_tracked_by_skill
+        )
 
     return ConsumerConfig(
         selected=selected,
         source_relative=source_relative,
         config_relative=config_relative,
         config_digest=_sha256_bytes(config_bytes),
+        config_source_digests=tuple(sorted(config_source_digests.items())),
+        config_sources_require_tracking=version == 2,
         contexts=contexts,
     )
 
@@ -1240,6 +1308,38 @@ def build_plan(
     }
     _assert_context_writes_disjoint(consumer.contexts, materialized_roots)
     return desired, consumer
+
+
+def _assert_config_sources_unchanged(repo: Path, consumer: ConsumerConfig) -> None:
+    """Recheck configuration bytes and the version-2 Git index contract."""
+
+    tracked: set[str] = set()
+    gitlinks: set[str] = set()
+    intent_to_add: set[str] = set()
+    if consumer.config_sources_require_tracking:
+        tracked, gitlinks, intent_to_add = _git_index(repo)
+
+    for relative, expected_digest in consumer.config_source_digests:
+        path, normalized = _resolve_under(
+            repo, relative, f"configuration source {relative!r}"
+        )
+        if normalized != relative:
+            raise SyncError(f"configuration source path changed: {relative}")
+        if consumer.config_sources_require_tracking:
+            _tracked_file(
+                repo,
+                relative,
+                f"configuration source {relative!r}",
+                tracked=tracked,
+                gitlinks=gitlinks,
+                intent_to_add=intent_to_add,
+            )
+        _value, raw_bytes = _load_json_with_bytes(path)
+        actual_digest = _sha256_bytes(raw_bytes)
+        if actual_digest != expected_digest:
+            raise SyncError(
+                f"configuration source changed while materializing: {relative}"
+            )
 
 
 def _run_git(root: Path, *arguments: str) -> str:
@@ -1724,6 +1824,11 @@ def _synchronize_locked(
                 _marker_for_record(_state_record(item)),
             )
 
+        # The consumer lock coordinates materializers, not editors.  Recheck the
+        # exact index/repository/Skill config bytes immediately before the first
+        # permanent target swap.
+        _assert_config_sources_unchanged(repo, consumer)
+
         for item in desired:
             target = item.target
             if _path_present(target):
@@ -1766,6 +1871,11 @@ def _synchronize_locked(
         }
         state_temp = repo / f".{STATE_FILE.lstrip('.')}.tmp-{uuid.uuid4().hex}"
         _write_json(state_temp, new_state)
+
+        # Build the complete state candidate before the final compare. A config
+        # edit racing with either installation or state serialization must take
+        # the same rollback path as any swap/state failure.
+        _assert_config_sources_unchanged(repo, consumer)
         os.replace(state_temp, repo / STATE_FILE)
         state_temp = None
     except Exception as original:

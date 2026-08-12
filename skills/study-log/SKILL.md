@@ -22,12 +22,18 @@ description: 从 Claude Code 或 Codex 会话中发现、预览和选择可见�
 3. 边界不明确时向用户确认。优先使用稳定消息 ID；文本片段重复时不得猜选。
 4. 选择下方对应模式。详细调用契约和错误处理见 [references/extraction-contract.md](references/extraction-contract.md)。
 
+消费仓库若通过统一 version 2 配置提供 `.agent-skills-context.json`，只把其中
+`structured_targets` 与 `allowlist.write_paths` 当作结构化记录的合法候选范围。不要遍历目标目录；该
+context 不授予读取 collection、保存某次记录、覆盖文件或选择具体目标的权限。配置格式与无配置降级见
+[references/context-contract.md](references/context-contract.md)。会话 source、消息 boundary、临时提取
+位置和 raw 目标始终由当次 CLI 调用与用户确认决定，不能从公共配置补全。
+
 ## Structured：结构化学习过程记录
 
 1. 来源、边界和新目标明确时，用户的生成请求即构成授权；存在多个合理会话或主题边界时先澄清。
 2. 带预览所得 source SHA-256 调用 `extract`。让脚本创建仓库外临时材料；结构化模式可以在明确告警下忽略唯一残缺尾行，中间坏行仍须停止。
-3. 从临时材料中保留学习者原始回答、误解、纠错、高价值问题和关键转折；不复写完整教学正文、课程状态或 mastery。按 [references/log-format.md](references/log-format.md) 写入消费仓库适配的位置；PlanA 使用 `{module}/log/YYYY-MM-DD-topic.md`。
-4. 新记录可直接写入已授权目标。已有同一逻辑记录时，先展示 diff 并取得明确确认，不得静默覆盖人工编辑。
+3. 从临时材料中保留学习者原始回答、误解、纠错、高价值问题和关键转折；不复写完整教学正文、课程状态或 mastery。按 [references/log-format.md](references/log-format.md) 写入消费仓库配置或用户当次明确指定的位置。
+4. 配置中的 target root 只是静态范围，不是当次写授权。新记录仍须由用户本轮请求选择精确目标；已有同一逻辑记录时，先展示 diff 并取得明确确认，不得静默覆盖人工编辑。
 5. 完成蒸馏后删除临时材料。结构化记录是过程材料，不是知识权威或课程状态。
 
 ## Raw：可追溯可见文本对话
@@ -45,6 +51,7 @@ description: 从 Claude Code 或 Codex 会话中发现、预览和选择可见�
 然后调用 `archive`，并遵守以下规则：
 
 - 私有 archive root 没有隐式默认值。首次保存时询问一个绝对目录，再通过 `config archive-root set` 保存到用户级配置；单次目标和 `STUDY_LOG_ARCHIVE_ROOT` 可以覆盖。
+- 不从消费仓库公共配置或 `.agent-skills-context.json` 读取 raw root、session 目录、source、boundary 或 target；这些字段即使出现在非受管说明中也不能替代当次确认。
 - 高置信度凭据默认阻止写入。优先缩小边界或改用 `structured`；只有用户明确选择后，才采用可复现脱敏或原样私存。
 - 公司代码、内部 API、未公开硬件／性能数据等可能的专有内容需要单独确认；所有权或政策不清楚时停止。普通个人信息给予警告并纳入确认。
 - 默认拒绝写入项目或 Git 工作树。用户坚持时，目标必须未被跟踪且已被 Git 忽略；不要修改 `.gitignore`。
@@ -55,5 +62,6 @@ description: 从 Claude Code 或 Codex 会话中发现、预览和选择可见�
 ## 失败与边界
 
 - 会话不存在而当前上下文足够时，只能在 `structured` 中把来源标为“当前可见上下文（无本地原始日志）”；否则请用户提供目标材料，绝不补造。
+- 没有受管 context 时仍可发现、预览并临时提取用户本轮选择的会话，也可在聊天中生成 structured candidate；默认不猜消费仓库路径且零仓库写入。只有用户本轮明确指定精确目标时，才按一次性授权处理。
 - 对话源只读。此 Skill 不修改课程状态、文章、卡片或 Git 历史，也不负责提交产物。
 - `memo-cards` 可以消费稳定的 `[要点]` 和 `[纠错]`；`[遗留]` 不直接制卡。

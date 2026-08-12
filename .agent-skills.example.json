@@ -27,8 +27,10 @@
     "repository": ".agent-skills-config/repository.json",
     "skills": {
       "english-coach": ".agent-skills-config/english-coach.json",
+      "guide-learning": ".agent-skills-config/guide-learning.json",
       "memo-cards": ".agent-skills-config/memo-cards.json",
-      "resource-planning": ".agent-skills-config/resource-planning.json"
+      "resource-planning": ".agent-skills-config/resource-planning.json",
+      "study-log": ".agent-skills-config/study-log.json"
     }
   }
 }

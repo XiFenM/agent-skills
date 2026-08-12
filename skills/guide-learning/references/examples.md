@@ -16,7 +16,8 @@
 9. [Resume with drift](#resume-with-drift)
 10. [Temporary program](#temporary-program)
 11. [Source conflict](#source-conflict)
-12. [Different closure branches](#different-closure-branches)
+12. [Configured path without authorization](#configured-path-without-authorization)
+13. [Different closure branches](#different-closure-branches)
 
 ## One-off explanation
 
@@ -140,6 +141,15 @@ Lesson 另开兼容性调查。让用户选择。
 **If blocking:** 冲突阻塞目标时做最小一手核验；仍无法解决则标为待验证。
 
 **If nonblocking:** 保存 observation 并返回 teaching spine。不要静默换教程，也不要扩成资料治理项目。
+
+## Configured path without authorization
+
+**Situation:** 受管 context 把 `learning/checkpoint.md` 映射为 Checkpoint，并把它列入 write paths，但用户
+本轮只是一次答疑，且没有要求保存或恢复。
+
+**Act:** 直接回答并保持零写。mapping 只说明以后需要 Checkpoint 时应先核对哪个候选位置；它不把一次
+答疑升级为 Session，也不授权创建或修改文件。若实际仓库已有另一唯一游标，保持只读并让用户选择，
+不要按配置生成第二份 Checkpoint。
 
 ## Different closure branches
 

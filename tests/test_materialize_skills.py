@@ -184,6 +184,70 @@ def validate_materialized_context(repository_config, skill_config):
             "records",
         )
 
+    def enable_second_context_fixture(self) -> None:
+        self.add_skill("other-skill")
+        validator = (
+            self.central / "skills" / "other-skill" / "scripts" / "context.py"
+        )
+        validator.parent.mkdir()
+        validator.write_text(
+            """def validate_materialized_context(repository_config, skill_config):
+    allowed = {"schema", "skill", "input_path", "collection", "output_path"}
+    if set(skill_config) != allowed:
+        raise ValueError("unknown other config fields")
+    if skill_config["schema"] != "agent-skills.other-skill/v1":
+        raise ValueError("bad other schema")
+    if skill_config["skill"] != "other-skill":
+        raise ValueError("bad other identity")
+    return {
+        "context": {"output_path": skill_config["output_path"]},
+        "tracked_files": [skill_config["input_path"]],
+        "tracked_collections": [skill_config["collection"]],
+        "write_paths": [skill_config["output_path"]],
+    }
+""",
+            encoding="utf-8",
+        )
+        catalog = self.read_catalog()
+        entries = catalog["skills"]
+        assert isinstance(entries, list)
+        other = next(entry for entry in entries if entry["name"] == "other-skill")
+        other["context"] = {"validator": "scripts/context.py"}
+        self.write_catalog(catalog)
+        self.commit_central("add second context validator")
+
+        other_input = self.repo / "other" / "input.md"
+        other_input.parent.mkdir()
+        other_input.write_text("other input\n", encoding="utf-8")
+        other_collection = self.repo / "other-records"
+        other_collection.mkdir()
+        (other_collection / "one.md").write_text("other record\n", encoding="utf-8")
+        other_config = self.repo / ".agent-skills-config" / "other-skill.json"
+        write_json(
+            other_config,
+            {
+                "schema": "agent-skills.other-skill/v1",
+                "skill": "other-skill",
+                "input_path": "other/input.md",
+                "collection": "other-records",
+                "output_path": "other-output/result.md",
+            },
+        )
+        consumer = json.loads(self.config.read_text(encoding="utf-8"))
+        consumer["skills"]["other-skill"] = ["codex"]
+        consumer["config"]["skills"]["other-skill"] = (
+            ".agent-skills-config/other-skill.json"
+        )
+        write_json(self.config, consumer)
+        git(
+            self.repo,
+            "add",
+            ".agent-skills.json",
+            ".agent-skills-config/other-skill.json",
+            "other/input.md",
+            "other-records/one.md",
+        )
+
     def read_catalog(self) -> dict[str, object]:
         return json.loads((self.central / "catalog.json").read_text(encoding="utf-8"))
 
@@ -252,6 +316,17 @@ def validate_materialized_context(repository_config, skill_config):
 
     def test_v2_context_is_validated_injected_and_tracked(self) -> None:
         self.enable_context_fixture()
+        _desired, consumer = materialize_skills.build_plan(
+            self.repo, self.central, self.config
+        )
+        self.assertEqual(
+            {path for path, _digest in consumer.config_source_digests},
+            {
+                ".agent-skills.json",
+                ".agent-skills-config/repository.json",
+                ".agent-skills-config/demo-skill.json",
+            },
+        )
         materialize_skills.synchronize(self.repo, self.central, self.config)
 
         codex_context = self.target("codex") / materialize_skills.CONTEXT_FILE
@@ -354,6 +429,58 @@ def validate_materialized_context(repository_config, skill_config):
             ["records/new.md"],
         )
 
+    def test_v2_cross_skill_write_boundaries_and_collection_handoff(self) -> None:
+        self.enable_context_fixture()
+        self.enable_second_context_fixture()
+        demo_path = self.repo / ".agent-skills-config" / "demo-skill.json"
+        other_path = self.repo / ".agent-skills-config" / "other-skill.json"
+        demo = json.loads(demo_path.read_text(encoding="utf-8"))
+        other = json.loads(other_path.read_text(encoding="utf-8"))
+
+        # Distinct Skills may never share or nest write ownership.
+        other["output_path"] = "generated"
+        write_json(other_path, other)
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "write path.*overlaps.*write path"
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+        # A writer cannot target another Skill's explicit input file.
+        other["output_path"] = "other-output/result.md"
+        demo["output_path"] = "other/input.md"
+        write_json(other_path, other)
+        write_json(demo_path, demo)
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "overlaps protected|explicit tracked file"
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+        # A declared collection is an explicit handoff boundary.  Its root and
+        # members are valid writer targets, including an already expanded member.
+        for handoff in ("other-records", "other-records/new.md", "other-records/one.md"):
+            with self.subTest(handoff=handoff):
+                demo["output_path"] = handoff
+                write_json(demo_path, demo)
+                desired, _consumer = materialize_skills.build_plan(
+                    self.repo, self.central, self.config
+                )
+                self.assertEqual(len(desired), 3)
+
+        # A broader writer root could mutate paths outside the reader's declared
+        # collection and is not a valid handoff.
+        demo["output_path"] = "other-records-parent"
+        other["collection"] = "other-records-parent/child"
+        child = self.repo / "other-records-parent" / "child"
+        child.mkdir(parents=True)
+        (child / "one.md").write_text("child\n", encoding="utf-8")
+        git(self.repo, "add", "other-records-parent/child/one.md")
+        write_json(demo_path, demo)
+        write_json(other_path, other)
+        with self.assertRaisesRegex(
+            materialize_skills.SyncError, "broader than.*tracked collection"
+        ):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
     def test_v2_collection_requires_exact_git_casing_and_a_tracked_member(self) -> None:
         self.enable_context_fixture()
         skill_path = self.repo / ".agent-skills-config" / "demo-skill.json"
@@ -395,6 +522,36 @@ def validate_materialized_context(repository_config, skill_config):
     def test_v1_materialization_does_not_inject_context(self) -> None:
         materialize_skills.synchronize(self.repo, self.central, self.config)
         self.assertFalse((self.target() / materialize_skills.CONTEXT_FILE).exists())
+
+    def test_v1_context_capable_skill_remains_unconfigured(self) -> None:
+        self.enable_context_fixture()
+        self.write_config({"demo-skill": ["codex", "claude"]})
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertFalse(
+            (self.target("codex") / materialize_skills.CONTEXT_FILE).exists()
+        )
+        self.assertFalse(
+            (self.target("claude") / materialize_skills.CONTEXT_FILE).exists()
+        )
+
+    def test_v2_selected_but_unconfigured_skill_remains_contextless(self) -> None:
+        self.enable_context_fixture()
+        write_json(
+            self.config,
+            {
+                "version": 2,
+                "source": ".agent-skills",
+                "skills": {"demo-skill": ["codex", "claude"]},
+                "config": {"repository": None, "skills": {}},
+            },
+        )
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertFalse(
+            (self.target("codex") / materialize_skills.CONTEXT_FILE).exists()
+        )
+        self.assertFalse(
+            (self.target("claude") / materialize_skills.CONTEXT_FILE).exists()
+        )
 
     def test_source_rejects_ignored_untracked_files(self) -> None:
         hidden = self.central / "skills" / "demo-skill" / "private.txt"
@@ -660,6 +817,134 @@ def validate_materialized_context(repository_config, skill_config):
                 materialize_skills.synchronize(self.repo, self.central, self.config)
         self.assertFalse(self.target().exists())
         self.assertFalse((self.repo / materialize_skills.STATE_FILE).exists())
+
+    def test_config_digest_change_before_first_swap_installs_nothing(self) -> None:
+        self.enable_context_fixture()
+        original_assert = materialize_skills._assert_config_sources_unchanged
+        calls = 0
+
+        def change_index_then_assert(repo, consumer):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                with self.config.open("a", encoding="utf-8") as handle:
+                    handle.write(" \n")
+            return original_assert(repo, consumer)
+
+        with mock.patch.object(
+            materialize_skills,
+            "_assert_config_sources_unchanged",
+            side_effect=change_index_then_assert,
+        ):
+            with self.assertRaisesRegex(
+                materialize_skills.SyncError,
+                "configuration source changed while materializing",
+            ):
+                materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertEqual(calls, 1)
+        self.assertFalse(self.target("codex").exists())
+        self.assertFalse(self.target("claude").exists())
+        self.assertFalse((self.repo / materialize_skills.STATE_FILE).exists())
+
+    def test_config_digest_change_after_install_rolls_back_before_state(self) -> None:
+        self.enable_context_fixture()
+        skill_config = self.repo / ".agent-skills-config" / "demo-skill.json"
+        original_assert = materialize_skills._assert_config_sources_unchanged
+        calls = 0
+
+        def change_skill_config_on_second_assert(repo, consumer):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                with skill_config.open("a", encoding="utf-8") as handle:
+                    handle.write(" \n")
+            return original_assert(repo, consumer)
+
+        with mock.patch.object(
+            materialize_skills,
+            "_assert_config_sources_unchanged",
+            side_effect=change_skill_config_on_second_assert,
+        ):
+            with self.assertRaisesRegex(
+                materialize_skills.SyncError,
+                "configuration source changed while materializing",
+            ):
+                materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertEqual(calls, 2)
+        self.assertFalse(self.target("codex").exists())
+        self.assertFalse(self.target("claude").exists())
+        self.assertFalse((self.repo / materialize_skills.STATE_FILE).exists())
+
+    def test_v2_config_sources_untracked_before_first_swap_install_nothing(self) -> None:
+        self.enable_context_fixture()
+        sources = (
+            ".agent-skills.json",
+            ".agent-skills-config/repository.json",
+            ".agent-skills-config/demo-skill.json",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                original_assert = materialize_skills._assert_config_sources_unchanged
+                calls = 0
+
+                def untrack_source_then_assert(repo, consumer):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        git(self.repo, "rm", "--cached", "--quiet", source)
+                    return original_assert(repo, consumer)
+
+                with mock.patch.object(
+                    materialize_skills,
+                    "_assert_config_sources_unchanged",
+                    side_effect=untrack_source_then_assert,
+                ):
+                    with self.assertRaisesRegex(
+                        materialize_skills.SyncError,
+                        "must be a Git tracked regular file",
+                    ):
+                        materialize_skills.synchronize(
+                            self.repo, self.central, self.config
+                        )
+                self.assertEqual(calls, 1)
+                self.assertFalse(self.target("codex").exists())
+                self.assertFalse(self.target("claude").exists())
+                self.assertFalse(
+                    (self.repo / materialize_skills.STATE_FILE).exists()
+                )
+                git(self.repo, "add", source)
+
+    def test_config_change_during_state_temp_write_rolls_back_and_cleans_temp(self) -> None:
+        self.enable_context_fixture()
+        original_write = materialize_skills._write_json
+        changed = False
+
+        def change_config_after_state_temp_write(path, value):
+            nonlocal changed
+            original_write(path, value)
+            if path.name.startswith(".agent-skills.state.json.tmp-"):
+                with self.config.open("a", encoding="utf-8") as handle:
+                    handle.write(" \n")
+                changed = True
+
+        with mock.patch.object(
+            materialize_skills,
+            "_write_json",
+            side_effect=change_config_after_state_temp_write,
+        ):
+            with self.assertRaisesRegex(
+                materialize_skills.SyncError,
+                "configuration source changed while materializing",
+            ):
+                materialize_skills.synchronize(self.repo, self.central, self.config)
+        self.assertTrue(changed)
+        self.assertFalse(self.target("codex").exists())
+        self.assertFalse(self.target("claude").exists())
+        self.assertFalse((self.repo / materialize_skills.STATE_FILE).exists())
+        self.assertEqual(
+            list(self.repo.glob(".agent-skills.state.json.tmp-*")),
+            [],
+        )
 
     def test_partial_copy_failure_cleans_staging_directory(self) -> None:
         def fail_after_partial_copy(_source, destination, **_kwargs):

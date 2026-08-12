@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。`english-coach`、`memo-cards` 与 `resource-planning` 现进一步采用中央通用核心、严格消费配置和受管上下文；消费仓库适配仍作为独立迁移阶段处理。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成第一轮学习核心的评审、合并升级与校验，并发布到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)；programming-lab 的 M3 金丝雀切换、PlanA 的 M4 双 host 切换和 M5 旧入口最终退役均已完成并发布。五个学习类 Skill 现统一支持中央通用核心、严格消费配置和受管上下文；消费仓库适配仍作为独立迁移阶段处理。
 
 ## 当前范围
 
@@ -12,7 +12,7 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D39 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D40 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。
 
 ## 目录
 
@@ -47,14 +47,16 @@ agent-skills/
     "repository": ".agent-skills-config/repository.json",
     "skills": {
       "english-coach": ".agent-skills-config/english-coach.json",
+      "guide-learning": ".agent-skills-config/guide-learning.json",
       "memo-cards": ".agent-skills-config/memo-cards.json",
-      "resource-planning": ".agent-skills-config/resource-planning.json"
+      "resource-planning": ".agent-skills-config/resource-planning.json",
+      "study-log": ".agent-skills-config/study-log.json"
     }
   }
 }
 ```
 
-公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。配置只能声明环境事实，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope 或原始对话存档的格式版本。配置只能声明环境事实和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
 新 clone 或更新子模块后，先递归初始化中央仓库及其第三方子模块：
 

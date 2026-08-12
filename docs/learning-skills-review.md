@@ -1366,6 +1366,35 @@ Skill 的结构校验均通过。四个隔离的前向场景还分别覆盖英�
 标记、registry bootstrap、历史卡片渐进接管、中央子模块升级与重新 materialize 仍是后续消费适配阶段；
 当前未修改消费仓库、未提交、未推送。
 
+## D40：`guide-learning` 与 `study-log` 统一接入 version 2 配置层（2026-08-12）
+
+用户确认让最后两个学习核心也采用统一 version 2。该决定中的“version 2”专指消费索引及受管 context
+能力，不表示把 Skill 自身首版配置、学习记录、CLI envelope 或 raw archive 一并改成 schema v2。
+
+- `guide-learning` 使用 `agent-skills.guide-learning/v1`：`repository_fact_refs` 只引用公共 repository
+  config 中的只读事实；`record_mappings` 只声明 Program、Lesson、Session event、Checkpoint 与正式练习
+  相关位置的候选 locator。两类路径必须隔离，mapping 不保存状态值，也不授予写入、所有权、开课、连续
+  推进、练习接受、mastery 或结课权限。无 context 时继续按既有仓库约定发现；完全没有约定时仍只提议
+  schema-only fallback，并在获授权前零写入。
+- `study-log` 使用 `agent-skills.study-log/v1`：公共配置只允许非空 `structured_targets[{id,path}]`，
+  validator 派生固定 Markdown 记录类型和 filename policy，并只返回 target roots 作为 `write_paths`。
+  `tracked_files` 与 `tracked_collections` 固定为空，因此不会遍历日志目录或把其中成员隐式暴露给 Skill。
+  新 exact target 仍须由当轮请求选择，已有逻辑记录仍须 diff 与 overwrite 确认。
+- raw 模式完全隔离：archive root、session 目录、source、boundary、scratch、output、隐私决定和 approval
+  不能出现在公共 Skill config 或 materialized context。原有 CLI、source／target SHA、partial／final、
+  Git ignore、用户级私有根和 schema version 1 合同保持不变。
+- `study-log` 的结构化输出若由 `english-coach` 或 `memo-cards` 消费，双方必须各自在自己的 Skill 配置中
+  声明同一 collection。这个显式 handoff 不传递授权；materializer 只允许 writer 位于 reader 声明的
+  collection 内，并继续拒绝跨 Skill write／write、显式事实覆盖和更宽父目录写入。
+- 配置文件的原始字节摘要与 Git-tracked 合同在永久安装前和 state commit 前复核。在复核点发现的并发
+  变化会走现有 rollback，不能产生“旧 context + 新 digest”或安装完成但 state 绑定错误配置的中间状态。
+
+实现新增两个纯、无副作用 validator，更新 Skill／按需 reference、catalog、示例配置和五 Skill 双 host
+集成场景，并保持 version 1 与 selected-but-unconfigured 行为。完整中央验证为
+`252 passed, 4 skipped, 54 subtests passed`，两个 Skill 的 quick validation、catalog 和 diff check 均通过。
+本阶段不修改消费仓库；PlanA／programming-lab 配置适配、子模块升级和重新 materialize 继续按独立授权
+执行。
+
 ## 延期待办：`creator-workflow` 质量评审、通用化升级与 `daily-work` 适配迁移
 
 `creator-workflow` 是当前唯一尚未完成方案级质量评审的 first-party Skill。按用户决定，本项暂缓到三个

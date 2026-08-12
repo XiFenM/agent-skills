@@ -13,7 +13,13 @@ from tools import materialize_skills
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-CONFIGURABLE_SKILLS = ("english-coach", "memo-cards", "resource-planning")
+CONFIGURABLE_SKILLS = (
+    "english-coach",
+    "guide-learning",
+    "memo-cards",
+    "resource-planning",
+    "study-log",
+)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -130,6 +136,11 @@ def _memo_config() -> dict[str, Any]:
                 "id": "verified-notes",
                 "kind": "verified-learning-note",
                 "patterns": ["notes/*.md"],
+            },
+            {
+                "id": "structured-study-logs",
+                "kind": "structured-log",
+                "patterns": ["english/logs/*.md"],
             }
         ],
         "output_collections": [
@@ -139,6 +150,51 @@ def _memo_config() -> dict[str, Any]:
                 "inventory_patterns": ["cards/*.md"],
                 "soft_target": {"minimum": 1, "maximum": 12},
             }
+        ],
+    }
+
+
+def _guide_config() -> dict[str, Any]:
+    return {
+        "schema": "agent-skills.guide-learning/v1",
+        "skill": "guide-learning",
+        "repository_fact_refs": [
+            {
+                "fact_id": "learning-goal",
+                "role": "learner-preferences",
+                "kind": "file",
+            },
+            {
+                "fact_id": "evidence-collection",
+                "role": "evidence-artifacts",
+                "kind": "collection",
+            },
+        ],
+        "record_mappings": {
+            "program": {
+                "path": "learning/state.md",
+                "kind": "file",
+                "section": "Program",
+            },
+            "checkpoint": {
+                "path": "learning/state.md",
+                "kind": "file",
+                "section": "Checkpoint",
+            },
+            "practice-artifacts": {
+                "path": "learning/practice",
+                "kind": "collection",
+            },
+        },
+    }
+
+
+def _study_log_config() -> dict[str, Any]:
+    return {
+        "schema": "agent-skills.study-log/v1",
+        "skill": "study-log",
+        "structured_targets": [
+            {"id": "english-study-log", "path": "english/logs"}
         ],
     }
 
@@ -196,13 +252,17 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
     repository = _repository_config()
     skill_configs = {
         "english-coach": _english_config(),
+        "guide-learning": _guide_config(),
         "memo-cards": _memo_config(),
         "resource-planning": _resource_config(),
+        "study-log": _study_log_config(),
     }
     paths = {
         "english-coach": ".agent-skills-config/english-coach.json",
+        "guide-learning": ".agent-skills-config/guide-learning.json",
         "memo-cards": ".agent-skills-config/memo-cards.json",
         "resource-planning": ".agent-skills-config/resource-planning.json",
+        "study-log": ".agent-skills-config/study-log.json",
     }
     config_path = consumer / ".agent-skills.json"
     _write_json(
@@ -228,6 +288,7 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
         "cards/tracked.md": "# Existing legacy card\n",
         "english/current-summary.md": "# Current summary\n",
         "english/logs/tracked.md": "# Tracked study log\n",
+        "learning/state.md": "# Learning state\n\n## Program\n\n## Checkpoint\n",
         "curriculum/guide.md": "# Guide\n\n## Resources\n",
     }
     for relative, body in tracked_files.items():
@@ -305,7 +366,7 @@ def _assert_canonical_wrapper(
     return wrapper
 
 
-def test_three_configurable_skills_materialize_shared_canonical_contexts(tmp_path: Path) -> None:
+def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path: Path) -> None:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     central = consumer / ".agent-skills"
@@ -314,8 +375,10 @@ def test_three_configurable_skills_materialize_shared_canonical_contexts(tmp_pat
 
     messages = materialize_skills.synchronize(consumer, central, config_path)
     assert any("english-coach" in message for message in messages)
+    assert any("guide-learning" in message for message in messages)
     assert any("memo-cards" in message for message in messages)
     assert any("resource-planning" in message for message in messages)
+    assert any("study-log" in message for message in messages)
     assert materialize_skills.check(consumer, central, config_path) == []
 
     wrappers: dict[str, dict[str, Any]] = {}
@@ -326,8 +389,10 @@ def test_three_configurable_skills_materialize_shared_canonical_contexts(tmp_pat
         assert codex_bytes == claude_context.read_bytes()
         script_name = {
             "english-coach": "context_config.py",
+            "guide-learning": "context_config.py",
             "memo-cards": "memo_cards.py",
             "resource-planning": "resource_planning.py",
+            "study-log": "context_config.py",
         }[name]
         module = _load_module(
             consumer / ".agents" / "skills" / name / "scripts" / script_name,
@@ -348,10 +413,30 @@ def test_three_configurable_skills_materialize_shared_canonical_contexts(tmp_pat
     memo_files = wrappers["memo-cards"]["allowlist"]["tracked_files"]
     assert "notes/tracked.md" in memo_files
     assert "cards/tracked.md" in memo_files
+    assert "english/logs/tracked.md" in memo_files
     assert "notes/untracked.md" not in memo_files
     assert "cards/untracked.md" not in memo_files
 
     resource_files = wrappers["resource-planning"]["allowlist"]["tracked_files"]
     assert "facts/evidence/tracked.md" in resource_files
     assert "facts/evidence/untracked.md" not in resource_files
+    guide_files = wrappers["guide-learning"]["allowlist"]["tracked_files"]
+    assert "facts/goal.md" in guide_files
+    assert "facts/evidence/tracked.md" in guide_files
+    assert "facts/evidence/untracked.md" not in guide_files
+    assert wrappers["guide-learning"]["allowlist"]["write_paths"] == [
+        "learning/practice",
+        "learning/state.md",
+    ]
+    assert not (consumer / "learning" / "practice").exists()
+
+    study_wrapper = wrappers["study-log"]
+    assert study_wrapper["allowlist"] == {
+        "tracked_files": [],
+        "tracked_collections": [],
+        "write_paths": ["english/logs"],
+    }
+    serialized_study = json.dumps(study_wrapper, ensure_ascii=False)
+    for forbidden in ("archive_root", "private_root", "session_dirs", "boundary"):
+        assert forbidden not in serialized_study
     assert materialize_skills.check(consumer, central, config_path) == []

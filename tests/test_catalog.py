@@ -93,7 +93,8 @@ class CatalogTests(unittest.TestCase):
 
         guide = by_name["guide-learning"]
         self.assertEqual(guide["migration"], "merged-upgrade")
-        self.assertEqual(guide["review"], {"state": "implemented", "topics": []})
+        self.assertEqual(guide["review"]["state"], "implemented")
+        self.assertIn("generic-managed-context", guide["review"]["topics"])
         self.assertEqual(guide["consumers"], ["PlanA", "programming-lab"])
         self.assertEqual(
             guide["lineage"],
@@ -135,17 +136,23 @@ class CatalogTests(unittest.TestCase):
 
         configurable = {
             "english-coach": "scripts/context_config.py",
+            "guide-learning": "scripts/context_config.py",
             "memo-cards": "scripts/memo_cards.py",
             "resource-planning": "scripts/resource_planning.py",
+            "study-log": "scripts/context_config.py",
         }
         for name, validator in configurable.items():
             with self.subTest(configurable=name):
                 self.assertEqual(by_name[name]["context"], {"validator": validator})
-                self.assertEqual(
-                    by_name[name]["migration"],
-                    "generalized-configurable-upgrade",
-                )
                 self.assertEqual(by_name[name]["review"]["state"], "implemented")
+
+        for name in ("english-coach", "memo-cards", "resource-planning"):
+            self.assertEqual(
+                by_name[name]["migration"],
+                "generalized-configurable-upgrade",
+            )
+        for name in ("guide-learning", "study-log"):
+            self.assertEqual(by_name[name]["migration"], "merged-upgrade")
 
     def test_expected_migration_boundary(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))

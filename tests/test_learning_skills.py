@@ -19,6 +19,8 @@ REFERENCE_FILES = {
 EXPECTED_GUIDE_FILES = {
     "SKILL.md",
     "agents/openai.yaml",
+    "scripts/context_config.py",
+    "tests/test_guide_learning_context.py",
     *(f"references/{name}" for name in REFERENCE_FILES),
 }
 
@@ -27,7 +29,7 @@ def _relative_files(root: Path) -> set[str]:
     return {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file()
+        if path.is_file() and "__pycache__" not in path.relative_to(root).parts
     }
 
 
@@ -44,6 +46,8 @@ def test_guide_learning_has_the_exact_progressive_disclosure_tree() -> None:
         "SKILL.md",
         "agents",
         "references",
+        "scripts",
+        "tests",
     }
     assert _relative_files(GUIDE_ROOT) == EXPECTED_GUIDE_FILES
 
@@ -92,7 +96,9 @@ def test_guide_learning_openai_metadata_routes_to_the_skill() -> None:
 
 def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> None:
     combined = "\n".join(
-        path.read_text(encoding="utf-8") for path in _text_files(GUIDE_ROOT)
+        path.read_text(encoding="utf-8")
+        for path in _text_files(GUIDE_ROOT)
+        if "tests" not in path.relative_to(GUIDE_ROOT).parts
     )
     for forbidden in ("PlanA", "JSONL", ".jsonl", "TODO"):
         assert forbidden not in combined

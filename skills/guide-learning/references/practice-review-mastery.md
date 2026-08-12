@@ -42,6 +42,11 @@
 6. **非目标与完成门槛**：把 optional 单列；说明 required acceptance 必须通过，映射到它们或 required
    mastery 的 blocking／major finding 必须关闭，并满足已声明的解释、变式或实证要求。
 
+受管 context 若列出 `practice-contracts`、`practice-artifacts`、`practice-validation` 或
+`practice-records`，这些只是候选位置和机械上限。它们不能预先指定 learner-owned／agent-owned，不能
+替代本节的 actual path、受限 pattern、允许操作、revision、digest 与接受事件，也不能把 optional 变成
+required。未在本次六块契约中逐项授权的路径保持只读或 excluded。
+
 使用以下用户可见标签：
 
 | 标签 | 默认含义 |

@@ -101,6 +101,9 @@
           "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
         }
       ],
+      "context": {
+        "validator": "scripts/context_config.py"
+      },
       "lifecycle": {
         "state": "active"
       },
@@ -114,7 +117,10 @@
       "migration": "merged-upgrade",
       "review": {
         "state": "implemented",
-        "topics": []
+        "topics": [
+          "generic-managed-context",
+          "repository-fact-and-record-mapping-boundary"
+        ]
       }
     },
     {
@@ -198,6 +204,9 @@
           "commit": "b5f22d33437cc242ef57d860ef2db680ffea9518"
         }
       ],
+      "context": {
+        "validator": "scripts/context_config.py"
+      },
       "lifecycle": {
         "state": "active"
       },
@@ -213,7 +222,8 @@
           "unified-provider-discovery",
           "safe-boundary-extraction",
           "explicit-private-archive-root",
-          "source-and-target-race-guards"
+          "source-and-target-race-guards",
+          "generic-managed-structured-targets"
         ]
       }
     },

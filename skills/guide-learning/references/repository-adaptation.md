@@ -6,12 +6,13 @@
 ## Contents
 
 1. [Inspect before mapping](#inspect-before-mapping)
-2. [Discover facts in order](#discover-facts-in-order)
-3. [Assign one role to each fact](#assign-one-role-to-each-fact)
-4. [Choose and authorize paths](#choose-and-authorize-paths)
-5. [Use schema-only fallback](#use-schema-only-fallback)
-6. [Avoid duplicate facts](#avoid-duplicate-facts)
-7. [Preserve legacy evidence](#preserve-legacy-evidence)
+2. [Use managed context as locators](#use-managed-context-as-locators)
+3. [Discover facts in order](#discover-facts-in-order)
+4. [Assign one role to each fact](#assign-one-role-to-each-fact)
+5. [Choose and authorize paths](#choose-and-authorize-paths)
+6. [Use schema-only fallback](#use-schema-only-fallback)
+7. [Avoid duplicate facts](#avoid-duplicate-facts)
+8. [Preserve legacy evidence](#preserve-legacy-evidence)
 
 ## Inspect before mapping
 
@@ -29,6 +30,22 @@
 
 从内容和仓库约定判断职责，不只根据文件名。一个物理文件可以承载多个逻辑对象，但要能用稳定锚点
 区分；多个物理文件不得同时拥有同一活动事实。
+
+## Use managed context as locators
+
+生成副本可能带有 materializer 管理的 `.agent-skills-context.json`。仅在 wrapper 的 manager、Skill 身份和
+context schema 完整匹配时使用它；不要自行修补或部分解释未知字段。
+
+- `repository_fact_refs` 只定位只读的仓库指令、偏好、预算、资料、验证方式或历史 evidence。角色名称
+  不会把资料自动提升为 teaching spine、claim authority 或 mastery evidence。
+- `record_mappings` 只定位 Program、Lesson、Session event、Checkpoint 或练习工件的候选物理位置。
+  文件内容仍是事实源；context 不保存其当前状态。
+- `allowlist.write_paths` 是 materializer 核验过的机械上限，不是写入授权。仍须按本参考、
+  `state-records.md` 和练习契约投影实际路径、职责与所有权。
+
+先核对映射路径或 section 的实际内容是否承担声明角色。若映射与仓库指令、既有唯一 owner 或未提交用户
+工作冲突，保持只读并让用户选择；不要按配置另建第二份记录。context 缺失时继续下面的正常发现顺序；
+context 损坏或身份不符时停止使用其全部 locator，并要求重新 materialize。
 
 ## Discover facts in order
 
@@ -71,6 +88,9 @@ evidence。不要复制正文、命令输出或历史 Review。
 
 在首次创建 Program／Lesson 或任何 Agent-owned 状态文件前，向用户投影拟用路径及其逻辑职责。足够
 具体的开始请求可以授权目标和范围，但不能自动授权未披露的路径。
+
+受管 context 中已有 mapping 只省去路径猜测，不省去这里的授权。collection mapping 只表示一个狭窄
+候选命名空间；正式练习仍须在六块契约中列出实际文件或受限 pattern，且不得覆盖未知成员。
 
 选择路径时：
 

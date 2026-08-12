@@ -68,9 +68,32 @@ ZenMux 官方仓库中当前还有其他 Skill，但它们不是三个主仓库�
 - `creator-workflow` 的通用化质量评审、升级方案和 `daily-work` 适配迁移已明确延期，不与本轮学习类实施混合。
 - 本节只记录中央实现边界。PlanA 的 version 2 配置、旧英语 prompt／旧资源 SOP 退役、历史卡片渐进接管、资源 registry bootstrap 及首次真实 refresh／review 均属于后续消费适配；本轮不批量改写历史学习产物或用户未跟踪工作。
 
+## 2026-08-12：五个学习类 Skill 统一 version 2 配置层
+
+- `guide-learning` 与 `study-log` 已加入和另外三项学习类 Skill 相同的 version 2 受管配置管线；version 1
+  消费者以及 version 2 中“已选择但未配置”的 Skill 继续保持无 context 的兼容行为。
+- 这里的 version 2 只指消费索引 `.agent-skills.json`。公共仓库配置和各 Skill 配置仍分别使用严格的
+  `agent-skills.repository/v1` 与 `agent-skills.<skill>/v1`；materialized wrapper、`study-log` CLI envelope
+  和 raw archive 的既有 schema version 均未被改写。
+- `guide-learning` 的配置只包含只读 `repository_fact_refs` 与候选 `record_mappings`。配置不保存 Program、
+  Lesson、Session event、Checkpoint、练习契约或 mastery 的当前值；`write_paths` 只是机械上限，不能代替
+  状态路径投影、六块练习契约、用户授权或结课确认。
+- `study-log` 的公共配置只声明结构化记录 target roots，并产生 write-only allowlist；materializer 不扫描
+  这些目录。会话 source、边界、临时提取位置、raw archive root、隐私决定和 exact target 仍只属于当次
+  请求与用户级私有配置，不进入公共仓库配置、受管 context 或 state。
+- materializer 现验证跨 Skill 写入边界：不同 Skill 的 write roots 不得重叠；一方写入、另一方读取同一
+  collection 只有在双方配置都精确声明该交接时才合法，writer 不能扩大到 reader collection 的父目录。
+  消费索引、repository config 与各 Skill config 的原始字节及 Git-tracked 合同还会在首次安装前及
+  state 提交前再次复核；在复核点发现的竞态变化会停止并回滚。
+- 中央完整验证为 `252 passed, 4 skipped, 54 subtests passed`；catalog 保持 11 Skills（6 first-party、
+  5 official external），两个新增 validator、五 Skill 双 host 真实 materialization、配置隔离、raw 私有边界、
+  兼容降级与结构校验均通过。跳过项仍只涉及当前 Windows 环境缺少链接／junction 权限的防护用例。
+- 本节只涉及中央实现，不修改 PlanA、programming-lab 或 `daily-work`，也不读取或接管消费仓库中的
+  未跟踪用户文件。消费仓库配置、子模块升级和重新 materialize 仍须单独实施与授权。
+
 ## 当前已知但暂不修复
 
-1. PlanA 当前发布版本仍固定 M5 中央提交并使用 version 1 索引；在后续消费适配完成前，不会获得本轮三项通用核心和受管上下文。
+1. PlanA 当前发布版本仍固定 M5 中央提交并使用 version 1 索引；在后续消费适配完成前，不会获得五个学习类 Skill 的最新通用核心和受管上下文。
 2. 历史卡片、旧周报和稳定资源组合保持原样；只有用户以后明确刷新或接管具体目标时，才按新 manifest／registry 合同渐进迁移。
 3. `creator-workflow` 仍绑定当前创作目录约定；其通用化评审、旧 Remotion 路由修正和 `daily-work` 适配已经登记为延期事项。
 
