@@ -8,10 +8,11 @@
 - `input_collections`：带 kind 和安全相对路径 pattern 的允许来源；
 - `output_collections`：允许目标 pattern、inventory pattern，以及可选软目标。
 
-materializer 的 allowlist 保存显式 collection 根目录，并把这些目录中当次 Git tracked 的普通文件展开为
-`tracked_files`。pattern 本身留在受管 context 中做更窄匹配；来源必须同时命中输入 pattern 和 concrete
-`tracked_files`，inventory 也只在 concrete 文件中筛选，绝不重新 glob 文件系统。新增但尚未 tracked／重新
-materialize 的目标仍可由当次明确请求创建或直接刷新，但不参与跨文件 inventory。
+输入 pattern 精确指向一个 `.md` 文件时，materializer 只把该文件加入 `tracked_files`；带通配符的输入与
+inventory 才保存显式 collection 根目录，并把目录中当次 Git tracked 的普通文件展开为 `tracked_files`。
+pattern 本身留在受管 context 中做更窄匹配；来源必须同时命中输入 pattern 和 concrete `tracked_files`，
+inventory 也只在 concrete 文件中筛选，绝不重新 glob 文件系统。新增但尚未 tracked／重新 materialize 的
+目标仍可由当次明确请求创建或直接刷新，但不参与跨文件 inventory。
 
 静态配置只描述环境事实，不能关闭质量门槛、注入模板／prompt，或预先授权保存、覆盖、导入、提交和推送。中央核心没有消费仓库路径和数量上限。
 

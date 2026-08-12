@@ -233,6 +233,22 @@ def test_context_validator_is_pure_strict_and_returns_path_arrays() -> None:
         memo_cards.validate_materialized_context(_repository_config(), bad)
 
 
+def test_exact_markdown_input_is_a_file_not_a_collection() -> None:
+    config = _skill_config()
+    config["input_collections"].append(
+        {
+            "id": "fixed-article",
+            "kind": "article",
+            "patterns": ["articles/fixed.md"],
+        }
+    )
+
+    result = memo_cards.validate_materialized_context(_repository_config(), config)
+
+    assert result["tracked_files"] == ["articles/fixed.md"]
+    assert result["tracked_collections"] == ["cards", "notes"]
+
+
 def test_runtime_ignores_repository_fact_collections(tmp_path: Path) -> None:
     environment = _environment(
         tmp_path,

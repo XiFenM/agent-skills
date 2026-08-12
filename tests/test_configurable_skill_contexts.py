@@ -133,6 +133,11 @@ def _memo_config() -> dict[str, Any]:
         },
         "input_collections": [
             {
+                "id": "fixed-article",
+                "kind": "article",
+                "patterns": ["articles/fixed.md"],
+            },
+            {
                 "id": "verified-notes",
                 "kind": "verified-learning-note",
                 "patterns": ["notes/*.md"],
@@ -282,6 +287,7 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
         _write_json(consumer / paths[name], value)
 
     tracked_files = {
+        "articles/fixed.md": "# Fixed article\n\nA reviewed article.\n",
         "facts/goal.md": "# Goal\nLearn dependable systems concepts.\n",
         "facts/evidence/tracked.md": "tracked resource evidence\n",
         "notes/tracked.md": "# Verified note\n\nA reviewed source.\n",
@@ -295,6 +301,8 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
         path = consumer / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
+    binary_sibling = consumer / "articles" / "diagram.png"
+    binary_sibling.write_bytes(b"\x89PNG\r\n\x1a\n\xff\x00")
 
     (consumer / ".gitignore").write_text(
         ".agent-skills/\n.agents/\n.claude/\n.agent-skills-state.json\n.agent-skills-sync.lock\n",
@@ -307,6 +315,7 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
         ".gitignore",
         ".agent-skills.json",
         ".agent-skills-config",
+        "articles/diagram.png",
         *tracked_files,
     )
     _git(consumer, "commit", "-q", "-m", "configure shared Skills")
@@ -411,6 +420,8 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
             module._validate_source_binding(consumer, wrappers[name])
 
     memo_files = wrappers["memo-cards"]["allowlist"]["tracked_files"]
+    assert "articles/fixed.md" in memo_files
+    assert "articles/diagram.png" not in memo_files
     assert "notes/tracked.md" in memo_files
     assert "cards/tracked.md" in memo_files
     assert "english/logs/tracked.md" in memo_files

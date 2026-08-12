@@ -327,6 +327,12 @@ def _collection_root(pattern: str, label: str) -> str:
     return PurePosixPath(*literal).as_posix()
 
 
+def _exact_markdown_input(pattern: str) -> bool:
+    """Return whether an input pattern names one exact Markdown file."""
+
+    return "*" not in pattern and pattern.endswith(".md")
+
+
 def _glob_regex(pattern: str) -> re.Pattern[str]:
     parts = pattern.split("/")
     expression = "^"
@@ -507,11 +513,20 @@ def validate_materialized_context(
         "input_collections": skill["input_collections"],
         "output_collections": skill["output_collections"],
     }
+    tracked_files = sorted(
+        {
+            pattern
+            for record in skill["input_collections"]
+            for pattern in record["patterns"]
+            if _exact_markdown_input(pattern)
+        }
+    )
     tracked_collections = sorted(
         {
             _collection_root(pattern, f"collection {record['id']}")
             for record in skill["input_collections"]
             for pattern in record["patterns"]
+            if not _exact_markdown_input(pattern)
         }
         | {
             _collection_root(pattern, f"inventory {record['id']}")
@@ -528,7 +543,7 @@ def validate_materialized_context(
     )
     return {
         "context": context,
-        "tracked_files": [],
+        "tracked_files": tracked_files,
         "tracked_collections": tracked_collections,
         "write_paths": write_paths,
     }
