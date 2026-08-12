@@ -1447,10 +1447,10 @@ PlanA 的首轮历史产物适配边界同时确认：
 严格配置、说明与受管入口，并要求 materializer、Skill 结构、memo verify、相关中央测试和仓库 CPU 测试
 全部通过后才提交发布。
 
-## 延期待办：`creator-workflow` 质量评审、通用化升级与 `daily-work` 适配迁移
+## 历史待办：`creator-workflow` 质量评审、通用化升级与 `daily-work` 适配迁移
 
-`creator-workflow` 是当前唯一尚未完成方案级质量评审的 first-party Skill。按用户决定，本项暂缓到三个
-学习类 Skill 的升级实施完成之后，不与当前学习类改造交叉推进。后续工作必须依次覆盖：
+本节保留启动 D43 前的历史待办；该待办现已由 D43–D44 完成。它当时被推迟到三个学习类 Skill 的升级
+实施完成之后，并要求不与学习类改造交叉推进，执行顺序为：
 
 1. 只读审计中央 `skills/creator-workflow`、`daily-work` 的实际创作流程、入口、第三方官方 Skill 路由、
    产物写面与真实使用证据，区分可复用核心、消费环境事实和应退役的专用约定；
@@ -1462,7 +1462,7 @@ PlanA 的首轮历史产物适配边界同时确认：
    materialize／check 两个 host 所需入口，并保持用户工作产物与无关未提交改动不变；
 5. 运行中央单元／结构测试、合成前向验证和 `daily-work` 集成验证，通过后才建议提交与推送。
 
-当前只登记待办，不开始 `creator-workflow` 评审，不修改该 Skill、`daily-work`、其子模块指针或生成入口。
+上述限制描述的是当时的授权边界，不再代表当前状态；实际实施和验收结果见 D43–D44。
 
 ## D43：`creator-workflow` 通用核心、严格配置与恢复模型（2026-08-12）
 
@@ -1495,3 +1495,26 @@ PlanA 的首轮历史产物适配边界同时确认：
 `daily-work` 迁移必须作为下一独立边界：只物化 creator、Playwright、Remotion 聚合入口和三个 ZenMux
 入口；配置采用新的 managed roots；已完成算法课程全树保持原字节，`.pathnote` 工具链及现有 draft 保持
 原字节且作为保护子树。中央候选和消费迁移通过后再决定提交、推送，不由本记录预授权。
+
+## D44：`daily-work` version 2 消费迁移与历史保护（2026-08-12）
+
+经独立实施和前向验证，`daily-work` 已完成以下候选迁移：
+
+- 新增中央 `.agent-skills` 子模块、version 2 消费索引、repository／creator 严格配置和跨平台
+  materializer 入口；只选择 `creator-workflow`、`playwright-cli`、`remotion-best-practices`、
+  `zenmux-context`、`zenmux-setup`、`zenmux-usage`，不再复制或发现旧 Remotion 顶层入口。
+- 旧 `.agents/skills` 跟踪副本、手工更新脚本和旧 lock 清单从版本库退役；`.agents/skills` 改由中央
+  materializer 生成并忽略。Playwright 对齐 0.1.18；Remotion 知识 Skill 对齐 4.0.508，但
+  `apps/video` 运行时继续固定 4.0.499，不在本次迁移中暗中升级。
+- creator 配置只公开仓库 fact、白名单 profile／route、受管根和保护根；算法课程完整项目树、`.pathnote`
+  受控工具链、现有 PathNote draft 及视频运行时均保持原字节。新 durable 工作只可写入明确的 managed
+  roots，已有保护子树不能被 prepare、append、recover 或 stale-lock 处理绕过。
+- ZenMux image／video adapter 增加 UTF-8 `--prompt-file`，同时保留行内 `--prompt`；二者严格二选一。
+  公共配置只声明参数键和 package script，不保存 prompt、凭据、环境值或远端 receipt。
+- bootstrap、CI、仓库诊断与文档统一为递归子模块、Python 3、中央 materialize／check 和唯一 Remotion
+  聚合入口。全新检出验证必须证明可递归恢复、生成入口 current、冻结树无漂移，以及缺少本地 FFmpeg
+  或私密 `.env` 时只报告能力缺失、不伪造成功。
+
+中央与消费候选均已通过结构测试、完整回归、合成对抗测试、真实 materialization、运行时边界测试和
+全新检出前向验证。提交／推送仍是独立操作；发布时必须先推送中央提交并确认远端可取，再提交和推送
+引用该提交的 `daily-work`。

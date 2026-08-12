@@ -208,6 +208,181 @@ def test_package_route_subcommands_are_finite_safe_and_unique() -> None:
     with pytest.raises(context_config.ContextConfigError, match="lowercase hyphen"):
         context_config.validate_materialized_context(_repository(), config)
 
+
+def _billable_package_route() -> dict:
+    return {
+        "id": "bounded-generate",
+        "adapter": "package-script-v2",
+        "manifest_fact_ref": "package",
+        "script": "generate",
+        "subcommands": ["image"],
+        "argument_bindings": [
+            {
+                "key": "model",
+                "kind": "value",
+                "value_type": "string",
+                "required": True,
+                "cardinality": "one",
+            },
+            {
+                "key": "count",
+                "kind": "value",
+                "value_type": "int",
+                "required": True,
+                "cardinality": "one",
+            },
+            {
+                "key": "prompt-file",
+                "kind": "input-path",
+                "authority": "user-provided",
+                "required": True,
+                "cardinality": "one",
+            },
+            {
+                "key": "out",
+                "kind": "output-base",
+                "required": True,
+                "cardinality": "one",
+            },
+            {
+                "key": "metadata",
+                "kind": "value",
+                "value_type": "bool",
+                "required": False,
+                "cardinality": "one",
+            },
+            {
+                "key": "last-frame-out",
+                "kind": "target-path",
+                "required": False,
+                "cardinality": "one",
+            },
+        ],
+        "output_bindings": [
+            {
+                "id": "images",
+                "kind": "indexed-by-count",
+                "source_argument": "out",
+                "count_argument": "count",
+                "condition": {"kind": "always"},
+            },
+            {
+                "id": "metadata-sidecar",
+                "kind": "suffix",
+                "source_argument": "out",
+                "suffix": ".json",
+                "condition": {
+                    "kind": "argument-true",
+                    "argument": "metadata",
+                },
+            },
+        ],
+        "billing_bindings": {
+            "provider": {"kind": "literal", "value": "fixture-provider"},
+            "model_or_tier": {"kind": "argument", "argument": "model"},
+            "count": {"kind": "argument", "argument": "count"},
+            "request_bounds": {
+                "count": {"kind": "argument", "argument": "count"},
+                "format": {"kind": "literal", "value": "png"},
+            },
+        },
+        "effects": {
+            "billable": True,
+            "remote": True,
+            "destructive": False,
+            "publish": False,
+        },
+    }
+
+
+def test_declarative_package_bindings_are_canonical_and_strict() -> None:
+    config = _config()
+    route = _billable_package_route()
+    config["routes"].append(route)
+    config["profiles"][0]["routes"].append("bounded-generate")
+    result = context_config.validate_materialized_context(_repository(), config)
+    materialized = next(
+        item
+        for item in result["context"]["configuration"]["routes"]
+        if item["id"] == "bounded-generate"
+    )
+    assert [item["key"] for item in materialized["argument_bindings"]] == sorted(
+        item["key"] for item in route["argument_bindings"]
+    )
+    assert [item["id"] for item in materialized["output_bindings"]] == [
+        "images",
+        "metadata-sidecar",
+    ]
+    assert list(materialized["billing_bindings"]["request_bounds"]) == [
+        "count",
+        "format",
+    ]
+
+    assert context_config.validate_materialized_context(_repository(), _config())
+
+    old_shape = _config()
+    package_route = old_shape["routes"][1]
+    package_route["adapter"] = "package-script-v2"
+    with pytest.raises(context_config.ContextConfigError, match="unknown fields"):
+        context_config.validate_materialized_context(_repository(), old_shape)
+
+    missing_billing = _config()
+    billable = _billable_package_route()
+    del billable["billing_bindings"]
+    missing_billing["routes"].append(billable)
+    with pytest.raises(context_config.ContextConfigError, match="missing fields"):
+        context_config.validate_materialized_context(_repository(), missing_billing)
+
+    unexpected_billing = _config()
+    unexpected_billing["routes"][1]["billing_bindings"] = copy.deepcopy(
+        _billable_package_route()["billing_bindings"]
+    )
+    with pytest.raises(context_config.ContextConfigError, match="unknown fields"):
+        context_config.validate_materialized_context(_repository(), unexpected_billing)
+
+
+def test_output_and_billing_bindings_reject_unrecomputable_shapes() -> None:
+    config = _config()
+    route = _billable_package_route()
+    route["output_bindings"][0]["source_argument"] = "prompt-file"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="output-base"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    count = next(
+        item for item in route["argument_bindings"] if item["key"] == "count"
+    )
+    count["required"] = False
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="required scalar"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    route["output_bindings"][1]["suffix"] = "../metadata.json"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="filename suffix"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    route["output_bindings"] = []
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="does not derive"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    route["billing_bindings"]["model_or_tier"] = {
+        "kind": "argument",
+        "argument": "prompt-file",
+    }
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="required scalar"):
+        context_config.validate_materialized_context(_repository(), config)
+
     config = _config()
     config["routes"][1]["argument_keys"] = ["target-path", "target-path"]
     with pytest.raises(context_config.ContextConfigError, match="duplicates"):
@@ -217,6 +392,138 @@ def test_package_route_subcommands_are_finite_safe_and_unique() -> None:
     config["routes"][1]["argument_keys"] = ["--api-key"]
     with pytest.raises(context_config.ContextConfigError, match="lowercase hyphen"):
         context_config.validate_materialized_context(_repository(), config)
+
+
+def test_value_bindings_require_strict_types_and_constants() -> None:
+    config = _config()
+    route = _billable_package_route()
+    model = next(
+        item for item in route["argument_bindings"] if item["key"] == "model"
+    )
+    del model["value_type"]
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="missing fields"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    metadata = next(
+        item for item in route["argument_bindings"] if item["key"] == "metadata"
+    )
+    metadata["const"] = "true"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="exactly match"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    metadata = next(
+        item for item in route["argument_bindings"] if item["key"] == "metadata"
+    )
+    metadata["const"] = True
+    metadata["cardinality"] = "many"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="cardinality 'one'"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    route["output_bindings"][1]["condition"]["argument"] = "model"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="scalar value argument"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    route["billing_bindings"]["model_or_tier"]["argument"] = "count"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="value_type 'string'"):
+        context_config.validate_materialized_context(_repository(), config)
+
+    config = _config()
+    route = _billable_package_route()
+    route["billing_bindings"]["count"]["argument"] = "model"
+    config["routes"].append(route)
+    with pytest.raises(context_config.ContextConfigError, match="value_type 'int'"):
+        context_config.validate_materialized_context(_repository(), config)
+
+
+def _observation_package_route() -> dict:
+    return {
+        "id": "observe-job",
+        "adapter": "package-script-v2",
+        "manifest_fact_ref": "package",
+        "script": "observe",
+        "subcommands": ["status"],
+        "argument_bindings": [
+            {
+                "key": "job-id",
+                "kind": "value",
+                "value_type": "string",
+                "required": True,
+                "cardinality": "one",
+            }
+        ],
+        "output_bindings": [],
+        "observation_receipt_argument": "job-id",
+        "effects": {
+            "billable": False,
+            "remote": True,
+            "destructive": False,
+            "publish": False,
+        },
+    }
+
+
+def test_observation_package_route_is_explicit_and_receipt_bound() -> None:
+    config = _config()
+    route = _observation_package_route()
+    config["routes"].append(route)
+    config["profiles"][0]["routes"].append("observe-job")
+    result = context_config.validate_materialized_context(_repository(), config)
+    materialized = next(
+        item
+        for item in result["context"]["configuration"]["routes"]
+        if item["id"] == "observe-job"
+    )
+    assert materialized["observation_receipt_argument"] == "job-id"
+
+    for mutate, message in (
+        (lambda item: item["effects"].update({"remote": False}), "remote"),
+        (
+            lambda item: item["argument_bindings"][0].update({"required": False}),
+            "required",
+        ),
+        (
+            lambda item: item["argument_bindings"][0].update(
+                {"value_type": "int"}
+            ),
+            "scalar string",
+        ),
+        (
+            lambda item: item["argument_bindings"][0].update(
+                {"const": "fixed-job"}
+            ),
+            "non-constant",
+        ),
+        (
+            lambda item: item["argument_bindings"].append(
+                {
+                    "key": "out",
+                    "kind": "target-path",
+                    "required": False,
+                    "cardinality": "one",
+                }
+            ),
+            "must not declare outputs",
+        ),
+    ):
+        invalid = _config()
+        route = _observation_package_route()
+        mutate(route)
+        invalid["routes"].append(route)
+        with pytest.raises(context_config.ContextConfigError, match=message):
+            context_config.validate_materialized_context(_repository(), invalid)
 
 
 def test_repository_fact_text_rejects_urls_and_credential_like_values() -> None:

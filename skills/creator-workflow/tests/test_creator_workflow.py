@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -713,6 +714,166 @@ def _managed_fixture(tmp_path: Path) -> tuple[dict, Path]:
                     "publish": False,
                 },
             },
+            {
+                "id": "bounded-generator",
+                "adapter": "package-script-v2",
+                "manifest_fact_ref": "package",
+                "script": "generate",
+                "subcommands": ["image"],
+                "argument_bindings": [
+                    {
+                        "key": "model",
+                        "kind": "value",
+                        "value_type": "string",
+                        "required": True,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "count",
+                        "kind": "value",
+                        "value_type": "int",
+                        "required": True,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "prompt-file",
+                        "kind": "input-path",
+                        "authority": "user-provided",
+                        "required": True,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "reference",
+                        "kind": "input-path",
+                        "authority": "user-provided",
+                        "required": False,
+                        "cardinality": "many",
+                    },
+                    {
+                        "key": "out",
+                        "kind": "output-base",
+                        "required": True,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "cover-out",
+                        "kind": "output-base",
+                        "required": False,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "emit-metadata",
+                        "kind": "value",
+                        "value_type": "bool",
+                        "required": False,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "no-wait",
+                        "kind": "value",
+                        "value_type": "bool",
+                        "const": True,
+                        "required": True,
+                        "cardinality": "one",
+                    },
+                    {
+                        "key": "last-frame-out",
+                        "kind": "target-path",
+                        "required": False,
+                        "cardinality": "one",
+                    },
+                ],
+                "output_bindings": [
+                    {
+                        "id": "batch",
+                        "kind": "indexed-by-count",
+                        "source_argument": "out",
+                        "count_argument": "count",
+                        "condition": {"kind": "always"},
+                    },
+                    {
+                        "id": "cover",
+                        "kind": "exact",
+                        "source_argument": "cover-out",
+                        "condition": {
+                            "kind": "argument-present",
+                            "argument": "cover-out",
+                        },
+                    },
+                    {
+                        "id": "metadata",
+                        "kind": "suffix",
+                        "source_argument": "out",
+                        "suffix": ".json",
+                        "condition": {
+                            "kind": "argument-true",
+                            "argument": "emit-metadata",
+                        },
+                    },
+                ],
+                "billing_bindings": {
+                    "provider": {"kind": "literal", "value": "fixture-provider"},
+                    "model_or_tier": {"kind": "argument", "argument": "model"},
+                    "count": {"kind": "argument", "argument": "count"},
+                    "request_bounds": {
+                        "count": {"kind": "argument", "argument": "count"},
+                        "format": {"kind": "literal", "value": "png"},
+                    },
+                },
+                "effects": {
+                    "billable": True,
+                    "remote": True,
+                    "destructive": False,
+                    "publish": False,
+                },
+            },
+            {
+                "id": "observe-job",
+                "adapter": "package-script-v2",
+                "manifest_fact_ref": "package",
+                "script": "observe",
+                "subcommands": ["status"],
+                "argument_bindings": [
+                    {
+                        "key": "job-id",
+                        "kind": "value",
+                        "value_type": "string",
+                        "required": True,
+                        "cardinality": "one",
+                    }
+                ],
+                "output_bindings": [],
+                "observation_receipt_argument": "job-id",
+                "effects": {
+                    "billable": False,
+                    "remote": True,
+                    "destructive": False,
+                    "publish": False,
+                },
+            },
+            {
+                "id": "remote-status",
+                "adapter": "package-script-v2",
+                "manifest_fact_ref": "package",
+                "script": "observe",
+                "subcommands": ["status"],
+                "argument_bindings": [
+                    {
+                        "key": "job-id",
+                        "kind": "value",
+                        "value_type": "string",
+                        "required": True,
+                        "cardinality": "one",
+                    }
+                ],
+                "output_bindings": [],
+                "effects": {
+                    "billable": False,
+                    "remote": True,
+                    "destructive": False,
+                    "publish": False,
+                },
+            },
         ],
         "profiles": [
             {
@@ -722,7 +883,13 @@ def _managed_fixture(tmp_path: Path) -> tuple[dict, Path]:
                 "work_root": "work",
                 "output_root": "outputs",
                 "template_fact_ref": "template",
-                "routes": ["browser", "workspace-check"],
+                "routes": [
+                    "bounded-generator",
+                    "browser",
+                    "observe-job",
+                    "remote-status",
+                    "workspace-check",
+                ],
             }
         ],
         "protected_roots": [".creator-workflow/blocked", "projects/managed/frozen"],
@@ -870,6 +1037,545 @@ def test_managed_prepare_enforces_profile_route_write_and_protected_roots(tmp_pa
     )
     with pytest.raises(runtime.WorkflowError, match="unknown fields|sensitive"):
         runtime.prepare_managed_operation(tmp_path, wrapper, undeclared_argument)
+
+
+def test_package_route_mechanically_binds_inputs_outputs_and_billing(
+    tmp_path: Path,
+) -> None:
+    wrapper, _context_path = _managed_fixture(tmp_path)
+    prompt = tmp_path / "projects" / "managed" / "demo" / "prompt.txt"
+    reference = tmp_path / "projects" / "managed" / "demo" / "reference.png"
+    prompt.parent.mkdir(parents=True)
+    prompt.write_text("bounded prompt", encoding="utf-8")
+    reference.write_bytes(b"reference")
+    package_digest = runtime._sha((tmp_path / "package.json").read_bytes())
+    prompt_digest = runtime._sha(prompt.read_bytes())
+    reference_digest = runtime._sha(reference.read_bytes())
+
+    arguments = {
+        "model": "image-v1",
+        "count": 2,
+        "prompt-file": "projects/managed/demo/prompt.txt",
+        "reference": ["projects/managed/demo/reference.png"],
+        "out": "outputs/managed/demo/render.png",
+        "cover-out": "outputs/managed/demo/cover.png",
+        "emit-metadata": True,
+        "no-wait": True,
+        "last-frame-out": "outputs/managed/demo/last.png",
+    }
+    inputs = [
+        {
+            "path": "package.json",
+            "sha256": package_digest,
+            "authority": "managed-fact",
+        },
+        {
+            "path": "projects/managed/demo/prompt.txt",
+            "sha256": prompt_digest,
+            "authority": "user-provided",
+        },
+        {
+            "path": "projects/managed/demo/reference.png",
+            "sha256": reference_digest,
+            "authority": "user-provided",
+        },
+    ]
+    targets = [
+        {"path": path, "before_sha256": runtime.ABSENT}
+        for path in (
+            "outputs/managed/demo/cover.png",
+            "outputs/managed/demo/last.png",
+            "outputs/managed/demo/render-1.png",
+            "outputs/managed/demo/render-2.png",
+            "outputs/managed/demo/render.png.json",
+        )
+    ]
+    billing = {
+        "provider": "fixture-provider",
+        "model_or_tier": "image-v1",
+        "count": 2,
+        "request_bounds": {"count": 2, "format": "png"},
+        "cost_boundary": {
+            "kind": "estimate-only",
+            "currency": "USD",
+            "amount": "1.00",
+        },
+        "one_attempt_max": True,
+    }
+
+    def proposal(**updates: object) -> dict:
+        value = _proposal(
+            route_id="bounded-generator",
+            inputs=inputs,
+            targets=targets,
+            parameters={"subcommand": "image", "arguments": arguments},
+            billing=billing,
+        )
+        value.update(updates)
+        return value
+
+    plan = runtime.prepare_managed_operation(tmp_path, wrapper, proposal())
+    assert [item["path"] for item in plan["targets"]] == sorted(
+        [item["path"] for item in targets], key=str.casefold
+    )
+    assert plan["required_grants"] == ["billable"]
+
+    single_arguments = dict(arguments)
+    single_arguments["count"] = 1
+    single_billing = copy.deepcopy(billing)
+    single_billing["count"] = 1
+    single_billing["request_bounds"]["count"] = 1
+    single_targets = [
+        {"path": path, "before_sha256": runtime.ABSENT}
+        for path in (
+            "outputs/managed/demo/cover.png",
+            "outputs/managed/demo/last.png",
+            "outputs/managed/demo/render.png",
+            "outputs/managed/demo/render.png.json",
+        )
+    ]
+    single_plan = runtime.prepare_managed_operation(
+        tmp_path,
+        wrapper,
+        proposal(
+            targets=single_targets,
+            parameters={"subcommand": "image", "arguments": single_arguments},
+            billing=single_billing,
+        ),
+    )
+    assert "outputs/managed/demo/render.png" in {
+        item["path"] for item in single_plan["targets"]
+    }
+    assert "outputs/managed/demo/render-1.png" not in {
+        item["path"] for item in single_plan["targets"]
+    }
+
+    for key, wrong in (
+        ("model", 7),
+        ("count", True),
+        ("emit-metadata", "true"),
+        ("no-wait", False),
+    ):
+        wrong_arguments = dict(arguments)
+        wrong_arguments[key] = wrong
+        with pytest.raises(
+            runtime.WorkflowError,
+            match="value_type|configured constant",
+        ):
+            runtime.prepare_managed_operation(
+                tmp_path,
+                wrapper,
+                proposal(
+                    parameters={
+                        "subcommand": "image",
+                        "arguments": wrong_arguments,
+                    }
+                ),
+            )
+
+    one_arguments = dict(arguments)
+    one_arguments["count"] = 1
+    one_targets = [
+        {"path": path, "before_sha256": runtime.ABSENT}
+        for path in (
+            "outputs/managed/demo/cover.png",
+            "outputs/managed/demo/last.png",
+            "outputs/managed/demo/render.png",
+            "outputs/managed/demo/render.png.json",
+        )
+    ]
+    one_billing = copy.deepcopy(billing)
+    one_billing["count"] = 1
+    one_billing["request_bounds"]["count"] = 1
+    one_plan = runtime.prepare_managed_operation(
+        tmp_path,
+        wrapper,
+        proposal(
+            targets=one_targets,
+            parameters={"subcommand": "image", "arguments": one_arguments},
+            billing=one_billing,
+        ),
+    )
+    assert "outputs/managed/demo/render.png" in {
+        item["path"] for item in one_plan["targets"]
+    }
+
+    wrong_input_arguments = dict(arguments)
+    wrong_input_arguments["prompt-file"] = "projects/managed/demo/other.txt"
+    with pytest.raises(runtime.WorkflowError, match="inputs must exactly equal"):
+        runtime.prepare_managed_operation(
+            tmp_path,
+            wrapper,
+            proposal(
+                parameters={
+                    "subcommand": "image",
+                    "arguments": wrong_input_arguments,
+                }
+            ),
+        )
+
+    with pytest.raises(runtime.WorkflowError, match="inputs must exactly equal"):
+        runtime.prepare_managed_operation(
+            tmp_path,
+            wrapper,
+            proposal(inputs=inputs[:-1]),
+        )
+
+    mismatched_targets = [dict(item) for item in targets]
+    mismatched_targets[2]["path"] = "outputs/managed/demo/not-derived.png"
+    with pytest.raises(runtime.WorkflowError, match="targets must exactly equal"):
+        runtime.prepare_managed_operation(
+            tmp_path,
+            wrapper,
+            proposal(targets=mismatched_targets),
+        )
+
+    no_metadata_arguments = dict(arguments)
+    no_metadata_arguments["emit-metadata"] = False
+    with pytest.raises(runtime.WorkflowError, match="targets must exactly equal"):
+        runtime.prepare_managed_operation(
+            tmp_path,
+            wrapper,
+            proposal(
+                parameters={
+                    "subcommand": "image",
+                    "arguments": no_metadata_arguments,
+                }
+            ),
+        )
+
+    missing_cover_arguments = dict(arguments)
+    del missing_cover_arguments["cover-out"]
+    with pytest.raises(runtime.WorkflowError, match="targets must exactly equal"):
+        runtime.prepare_managed_operation(
+            tmp_path,
+            wrapper,
+            proposal(
+                parameters={
+                    "subcommand": "image",
+                    "arguments": missing_cover_arguments,
+                }
+            ),
+        )
+
+    for field, value in (
+        ("model_or_tier", "image-v2"),
+        ("count", 1),
+        ("request_bounds", {"count": 2, "format": "webp"}),
+    ):
+        mismatched_billing = copy.deepcopy(billing)
+        mismatched_billing[field] = value
+        with pytest.raises(runtime.WorkflowError, match="billing must exactly match"):
+            runtime.prepare_managed_operation(
+                tmp_path,
+                wrapper,
+                proposal(billing=mismatched_billing),
+            )
+
+    stale_inputs = copy.deepcopy(inputs)
+    stale_inputs[1]["sha256"] = "9" * 64
+    with pytest.raises(runtime.WorkflowError, match="input digest changed"):
+        runtime.prepare_managed_operation(
+            tmp_path,
+            wrapper,
+            proposal(inputs=stale_inputs),
+        )
+
+    workflow = runtime.initialize_managed_workflow(
+        tmp_path, wrapper, plan["workflow_id"], plan["profile_id"]
+    )
+    runtime.record_prepared(
+        workflow,
+        plan,
+        "bounded-prepared",
+        TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=plan["operation_id"],
+        state="authorized",
+        event_type="operation-authorized",
+        payload={"authorization": _authorization(plan)},
+        event_id="bounded-authorized",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=plan["operation_id"],
+        state="dispatching",
+        event_type="remote-dispatching",
+        payload={},
+        event_id="bounded-dispatching",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    artifacts = []
+    for index, target in enumerate(plan["targets"], start=1):
+        path = tmp_path / Path(target["path"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f"artifact-{index}".encode())
+        artifacts.append(
+            {"path": target["path"], "sha256": runtime._sha(path.read_bytes())}
+        )
+
+    with pytest.raises(runtime.WorkflowError, match="artifact evidence"):
+        runtime.append_state(
+            workflow,
+            operation_id=plan["operation_id"],
+            state="succeeded",
+            event_type="operation-succeeded",
+            payload={"remote_receipt": "bounded-job"},
+            event_id="bounded-missing-evidence",
+            occurred_at=TIME,
+            repo=tmp_path,
+            wrapper=wrapper,
+        )
+
+    with pytest.raises(runtime.WorkflowError, match="exactly cover"):
+        runtime.append_state(
+            workflow,
+            operation_id=plan["operation_id"],
+            state="succeeded",
+            event_type="operation-succeeded",
+            payload={
+                "remote_receipt": "bounded-job",
+                "artifacts": artifacts[:-1],
+            },
+            event_id="bounded-missing-target",
+            occurred_at=TIME,
+            repo=tmp_path,
+            wrapper=wrapper,
+        )
+
+    wrong_artifacts = copy.deepcopy(artifacts)
+    wrong_artifacts[0]["sha256"] = "8" * 64
+    with pytest.raises(runtime.WorkflowError, match="digest does not match"):
+        runtime.append_state(
+            workflow,
+            operation_id=plan["operation_id"],
+            state="succeeded",
+            event_type="operation-succeeded",
+            payload={
+                "remote_receipt": "bounded-job",
+                "artifacts": wrong_artifacts,
+            },
+            event_id="bounded-wrong-digest",
+            occurred_at=TIME,
+            repo=tmp_path,
+            wrapper=wrapper,
+        )
+
+    non_regular = tmp_path / Path(artifacts[0]["path"])
+    non_regular.unlink()
+    non_regular.mkdir()
+    with pytest.raises(runtime.WorkflowError, match="regular file"):
+        runtime.append_state(
+            workflow,
+            operation_id=plan["operation_id"],
+            state="succeeded",
+            event_type="operation-succeeded",
+            payload={"remote_receipt": "bounded-job", "artifacts": artifacts},
+            event_id="bounded-non-regular",
+            occurred_at=TIME,
+            repo=tmp_path,
+            wrapper=wrapper,
+        )
+    non_regular.rmdir()
+    non_regular.write_bytes(b"artifact-1")
+
+    config_path = tmp_path / ".agent-skills-config" / "creator-workflow.json"
+    config_bytes = config_path.read_bytes()
+    config_path.write_text("{}", encoding="utf-8")
+    with pytest.raises(runtime.WorkflowError, match="digest changed"):
+        runtime.append_state(
+            workflow,
+            operation_id=plan["operation_id"],
+            state="succeeded",
+            event_type="operation-succeeded",
+            payload={"remote_receipt": "bounded-job", "artifacts": artifacts},
+            event_id="bounded-config-drift",
+            occurred_at=TIME,
+            repo=tmp_path,
+            wrapper=wrapper,
+        )
+    config_path.write_bytes(config_bytes)
+
+    runtime.append_state(
+        workflow,
+        operation_id=plan["operation_id"],
+        state="succeeded",
+        event_type="operation-succeeded",
+        payload={"remote_receipt": "bounded-job", "artifacts": artifacts},
+        event_id="bounded-succeeded",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    succeeded = runtime.verify_workflow(workflow)["snapshot"]["operations"][
+        plan["operation_id"]
+    ]
+    assert succeeded["artifacts"] == artifacts
+
+
+def test_observation_route_binds_exact_unknown_receipt_and_is_observation_only(
+    tmp_path: Path,
+) -> None:
+    wrapper, _context_path = _managed_fixture(tmp_path)
+    package_input = {
+        "path": "package.json",
+        "sha256": runtime._sha((tmp_path / "package.json").read_bytes()),
+        "authority": "managed-fact",
+    }
+
+    original_proposal = _proposal(
+        workflow_id="receipt-observation",
+        operation_id="original-status-call",
+        kind="verify",
+        route_id="remote-status",
+        billable=False,
+        remote=True,
+        inputs=[package_input],
+        targets=[],
+        parameters={
+            "subcommand": "status",
+            "arguments": {"job-id": "original-request"},
+        },
+    )
+    original = runtime.prepare_managed_operation(
+        tmp_path, wrapper, original_proposal
+    )
+
+    observation_proposal = _proposal(
+        workflow_id="receipt-observation",
+        operation_id="observe-original",
+        kind="verify",
+        route_id="observe-job",
+        billable=False,
+        remote=True,
+        inputs=[package_input],
+        targets=[],
+        dependencies=[],
+        parameters={
+            "subcommand": "status",
+            "arguments": {"job-id": "opaque-original-job"},
+        },
+        observation_of="original-status-call",
+        observed_receipt="opaque-original-job",
+    )
+    observation = runtime.prepare_managed_operation(
+        tmp_path, wrapper, observation_proposal
+    )
+    assert observation["observed_receipt"] == "opaque-original-job"
+
+    mismatch = copy.deepcopy(observation_proposal)
+    mismatch["parameters"]["arguments"]["job-id"] = "different-job"
+    with pytest.raises(runtime.WorkflowError, match="exactly match"):
+        runtime.prepare_managed_operation(tmp_path, wrapper, mismatch)
+
+    ordinary = copy.deepcopy(observation_proposal)
+    ordinary.pop("observation_of")
+    ordinary.pop("observed_receipt")
+    with pytest.raises(runtime.WorkflowError, match="observation-only"):
+        runtime.prepare_managed_operation(tmp_path, wrapper, ordinary)
+
+    unbound = copy.deepcopy(observation_proposal)
+    unbound["route_id"] = "remote-status"
+    with pytest.raises(runtime.WorkflowError, match="receipt-bound route"):
+        runtime.prepare_managed_operation(tmp_path, wrapper, unbound)
+
+    workflow = runtime.initialize_managed_workflow(
+        tmp_path, wrapper, "receipt-observation", "content-project"
+    )
+    runtime.record_prepared(
+        workflow,
+        original,
+        "original-prepared",
+        TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=original["operation_id"],
+        state="running",
+        event_type="operation-running",
+        payload={},
+        event_id="original-running",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=original["operation_id"],
+        state="dispatching",
+        event_type="remote-dispatching",
+        payload={},
+        event_id="original-dispatching",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=original["operation_id"],
+        state="unknown",
+        event_type="remote-outcome-unknown",
+        payload={"remote_receipt": "opaque-original-job"},
+        event_id="original-unknown",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.record_prepared(
+        workflow,
+        observation,
+        "observation-prepared",
+        TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=observation["operation_id"],
+        state="running",
+        event_type="operation-running",
+        payload={},
+        event_id="observation-running",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=observation["operation_id"],
+        state="dispatching",
+        event_type="remote-dispatching",
+        payload={},
+        event_id="observation-dispatching",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    runtime.append_state(
+        workflow,
+        operation_id=observation["operation_id"],
+        state="succeeded",
+        event_type="operation-succeeded",
+        payload={"remote_receipt": "observation-request", "artifacts": []},
+        event_id="observation-succeeded",
+        occurred_at=TIME,
+        repo=tmp_path,
+        wrapper=wrapper,
+    )
+    operations = runtime.verify_workflow(workflow)["snapshot"]["operations"]
+    assert operations["original-status-call"]["state"] == "unknown"
+    assert operations["observe-original"]["state"] == "succeeded"
 
 
 def test_existing_directory_is_not_an_absent_target(tmp_path: Path) -> None:

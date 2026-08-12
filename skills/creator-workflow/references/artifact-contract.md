@@ -21,6 +21,9 @@ Operation success and artifact acceptance are separate facts. Preserve rejected 
 
 - Preserve sources and create derivatives instead of overwriting them.
 - Bind every operation to exact source digests. If a source changes, prepare a new operation.
+- Predeclare every package-script output. Derive exact paths, filename suffixes, and numbered
+  batches mechanically from configured arguments; use an explicit target-path argument when
+  an adapter's output naming cannot be reproduced before dispatch.
 - Record rights, consent, and sensitivity decisions in the relevant profile when they affect use or publication.
 - Keep large or reproducible output placement and Git policy in consumer configuration, not in this central contract.
 - Treat untracked local source media as an exact per-operation input. Never scan a broad directory or infer permission from a configured write root.

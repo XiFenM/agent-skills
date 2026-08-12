@@ -411,6 +411,289 @@ def _package_arguments(
     return normalized
 
 
+def _package_scalar(value: Any, label: str) -> bool | int | float | str:
+    if isinstance(value, bool) or type(value) is int:
+        return value
+    if isinstance(value, float):
+        if not (float("-inf") < value < float("inf")):
+            _fail("malformed", f"{label} must be finite")
+        return value
+    if isinstance(value, str):
+        return _string(value, label, maximum=500, allow_empty=False)
+    _fail("malformed", f"{label} must be a JSON scalar")
+
+
+def _matches_package_value_type(value: Any, value_type: str) -> bool:
+    if value_type == "bool":
+        return isinstance(value, bool)
+    if value_type == "int":
+        return type(value) is int
+    return isinstance(value, str)
+
+
+def _bound_argument_values(
+    arguments: dict[str, Any],
+    binding: dict[str, Any],
+    label: str,
+) -> list[bool | int | float | str]:
+    key = binding["key"]
+    if key not in arguments:
+        if binding["required"]:
+            _fail("safety", f"{label}.{key} is required by the selected route")
+        return []
+    raw = arguments[key]
+    if binding["cardinality"] == "one":
+        if isinstance(raw, list):
+            _fail("malformed", f"{label}.{key} must be a scalar")
+        values = [_package_scalar(raw, f"{label}.{key}")]
+    else:
+        if not isinstance(raw, list) or not raw or len(raw) > 32:
+            _fail(
+                "malformed",
+                f"{label}.{key} must be a non-empty array with at most 32 values",
+            )
+        values = [
+            _package_scalar(item, f"{label}.{key}") for item in raw
+        ]
+    if binding["kind"] in {"input-path", "output-base", "target-path"}:
+        normalized: list[str] = []
+        for value in values:
+            if not isinstance(value, str):
+                _fail("malformed", f"{label}.{key} must contain only paths")
+            normalized.append(_safe_relative(value, f"{label}.{key}"))
+        return normalized
+    for value in values:
+        if not _matches_package_value_type(value, binding["value_type"]):
+            _fail(
+                "malformed",
+                f"{label}.{key} must exactly match declared value_type {binding['value_type']!r}",
+            )
+    if "const" in binding and not _same_json_scalar(values[0], binding["const"]):
+        _fail(
+            "safety",
+            f"{label}.{key} must equal its configured constant",
+        )
+    return values
+
+
+def _condition_enabled(
+    condition: dict[str, Any], arguments: dict[str, Any]
+) -> bool:
+    if condition["kind"] == "always":
+        return True
+    argument = condition["argument"]
+    if condition["kind"] == "argument-present":
+        return argument in arguments
+    return arguments.get(argument) is True
+
+
+def _indexed_target(path: str, index: int) -> str:
+    source = PurePosixPath(path)
+    suffix = source.suffix if source.name != source.suffix else ""
+    stem = source.name[: -len(suffix)] if suffix else source.name
+    name = f"{stem}-{index}{suffix}"
+    return _safe_relative(
+        (source.parent / name).as_posix(), "indexed output target"
+    )
+
+
+def _resolved_billing_source(
+    source: dict[str, Any], arguments: dict[str, Any]
+) -> bool | int | float | str:
+    if source["kind"] == "literal":
+        return source["value"]
+    argument = source["argument"]
+    if argument not in arguments:
+        _fail("safety", "billing source argument is missing", argument=argument)
+    return _package_scalar(arguments[argument], f"billing argument {argument}")
+
+
+def _same_json_scalar(left: Any, right: Any) -> bool:
+    return type(left) is type(right) and left == right
+
+
+def _validate_package_route_bindings(
+    plan: dict[str, Any],
+    route: dict[str, Any],
+    manifest_path: str,
+) -> None:
+    parameters = _object(
+        plan["parameters"],
+        "plan.parameters",
+        {"subcommand", "arguments"},
+        {"subcommand", "arguments"},
+    )
+    subcommand = _id(parameters["subcommand"], "plan.parameters.subcommand")
+    if subcommand not in route["subcommands"]:
+        _fail(
+            "safety",
+            "package subcommand is not enabled by the selected route",
+            route_id=route["id"],
+            subcommand=subcommand,
+        )
+    bindings = {item["key"]: item for item in route["argument_bindings"]}
+    arguments = _object(
+        parameters["arguments"],
+        "plan.parameters.arguments",
+        set(bindings),
+        set(),
+    )
+    values = {
+        key: _bound_argument_values(
+            arguments, binding, "plan.parameters.arguments"
+        )
+        for key, binding in bindings.items()
+    }
+
+    receipt_argument = route.get("observation_receipt_argument")
+    if receipt_argument is not None:
+        if "observation_of" not in plan:
+            _fail(
+                "safety",
+                "selected package route is observation-only",
+                route_id=route["id"],
+            )
+        receipt_values = values[receipt_argument]
+        if (
+            len(receipt_values) != 1
+            or not isinstance(receipt_values[0], str)
+            or receipt_values[0] != plan.get("observed_receipt")
+        ):
+            _fail(
+                "safety",
+                "observation receipt argument must exactly match observed_receipt",
+            )
+    elif "observation_of" in plan:
+        _fail(
+            "safety",
+            "package observation requires an observation-only receipt-bound route",
+        )
+
+    expected_inputs: list[tuple[str, str]] = [(manifest_path, "managed-fact")]
+    for key, binding in bindings.items():
+        if binding["kind"] == "input-path":
+            expected_inputs.extend(
+                (path, binding["authority"]) for path in values[key]
+            )
+    folded_inputs: set[str] = set()
+    for path, _authority in expected_inputs:
+        folded = path.casefold()
+        if folded in folded_inputs:
+            _fail(
+                "safety",
+                "package arguments bind the same input path more than once",
+                path=path,
+            )
+        folded_inputs.add(folded)
+    actual_inputs = [(item["path"], item["authority"]) for item in plan["inputs"]]
+    if sorted(expected_inputs, key=lambda item: item[0].casefold()) != actual_inputs:
+        _fail(
+            "safety",
+            "package plan inputs must exactly equal its manifest and input-path arguments",
+        )
+
+    expected_targets: list[str] = []
+    for key, binding in bindings.items():
+        if binding["kind"] == "target-path":
+            expected_targets.extend(values[key])
+    enabled_bases: set[str] = set()
+    for output in route["output_bindings"]:
+        if not _condition_enabled(output["condition"], arguments):
+            continue
+        source = output["source_argument"]
+        if not values[source]:
+            _fail(
+                "safety",
+                "enabled output binding requires its output-base argument",
+                binding=output["id"],
+                argument=source,
+            )
+        enabled_bases.add(source)
+        base = values[source][0]
+        assert isinstance(base, str)
+        if output["kind"] == "exact":
+            expected_targets.append(base)
+        elif output["kind"] == "suffix":
+            expected_targets.append(
+                _safe_relative(base + output["suffix"], "suffixed output target")
+            )
+        else:
+            count_values = values[output["count_argument"]]
+            count = count_values[0] if count_values else None
+            if type(count) is not int or not 1 <= count <= 32:
+                _fail(
+                    "malformed",
+                    "indexed output count must be an integer from 1 to 32",
+                    binding=output["id"],
+                )
+            if count == 1:
+                expected_targets.append(base)
+            else:
+                expected_targets.extend(
+                    _indexed_target(base, index) for index in range(1, count + 1)
+                )
+    for key, binding in bindings.items():
+        if (
+            binding["kind"] == "output-base"
+            and values[key]
+            and key not in enabled_bases
+        ):
+            _fail(
+                "safety",
+                "output-base argument has no enabled derivation",
+                argument=key,
+            )
+    folded_targets: set[str] = set()
+    for path in expected_targets:
+        folded = path.casefold()
+        if folded in folded_targets:
+            _fail(
+                "safety",
+                "package output bindings derive duplicate target paths",
+                path=path,
+            )
+        folded_targets.add(folded)
+    actual_targets = [item["path"] for item in plan["targets"]]
+    if sorted(expected_targets, key=str.casefold) != actual_targets:
+        _fail(
+            "safety",
+            "package plan targets must exactly equal its target arguments and derived outputs",
+        )
+
+    if route["effects"]["billable"]:
+        billing_bindings = route["billing_bindings"]
+        expected_provider = _resolved_billing_source(
+            billing_bindings["provider"], arguments
+        )
+        expected_model = _resolved_billing_source(
+            billing_bindings["model_or_tier"], arguments
+        )
+        expected_count = _resolved_billing_source(
+            billing_bindings["count"], arguments
+        )
+        expected_bounds = {
+            key: _resolved_billing_source(source, arguments)
+            for key, source in billing_bindings["request_bounds"].items()
+        }
+        billing = plan.get("billing")
+        if not isinstance(billing, dict):
+            _fail("authorization", "billable package route requires billing")
+        if not (
+            _same_json_scalar(billing.get("provider"), expected_provider)
+            and _same_json_scalar(billing.get("model_or_tier"), expected_model)
+            and _same_json_scalar(billing.get("count"), expected_count)
+            and set(billing.get("request_bounds", {})) == set(expected_bounds)
+            and all(
+                _same_json_scalar(billing["request_bounds"][key], value)
+                for key, value in expected_bounds.items()
+            )
+        ):
+            _fail(
+                "authorization",
+                "package billing must exactly match its declarative argument bindings",
+            )
+
+
 def _billing(value: Any, label: str) -> dict[str, Any]:
     record = _object(
         value,
@@ -511,6 +794,28 @@ def _normalize_refs(value: Any, label: str, *, before: bool = False) -> list[dic
                         paths=[left["path"], right["path"]],
                     )
     return result
+
+
+def _success_artifacts(value: Any, label: str) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        _fail("integrity", f"{label} must be an array")
+    artifacts: list[dict[str, str]] = []
+    paths: set[str] = set()
+    for index, raw in enumerate(value):
+        item_label = f"{label}[{index}]"
+        item = _object(raw, item_label, {"path", "sha256"}, {"path", "sha256"})
+        path = _safe_relative(item["path"], f"{item_label}.path")
+        folded = path.casefold()
+        if folded in paths:
+            _fail("integrity", f"{label} contains duplicate paths", path=path)
+        paths.add(folded)
+        artifacts.append(
+            {
+                "path": path,
+                "sha256": _digest(item["sha256"], f"{item_label}.sha256"),
+            }
+        )
+    return sorted(artifacts, key=lambda item: item["path"].casefold())
 
 
 def prepare_operation(proposal: Any, context_digest: str) -> dict[str, Any]:
@@ -1058,6 +1363,74 @@ def _profile_roots(wrapper: dict[str, Any], profile_id: str) -> tuple[dict[str, 
     return profile, roots
 
 
+def _configured_route(
+    wrapper: dict[str, Any], plan: dict[str, Any]
+) -> dict[str, Any]:
+    routes = {
+        item["id"]: item
+        for item in wrapper["context"]["configuration"]["routes"]
+    }
+    route = routes.get(plan["route_id"])
+    if route is None:
+        _fail("safety", "plan route is not present in managed context")
+    return route
+
+
+def _validate_managed_v2_success(
+    repo: Path,
+    plan: dict[str, Any],
+    route: dict[str, Any],
+    payload: dict[str, Any],
+) -> None:
+    if route["adapter"] != "package-script-v2":
+        return
+    if "artifacts" not in payload:
+        _fail(
+            "integrity",
+            "managed package-script-v2 success requires exact artifact evidence",
+        )
+    artifacts = _success_artifacts(
+        payload["artifacts"], "event.payload.artifacts"
+    )
+    if artifacts != payload["artifacts"]:
+        _fail("integrity", "success artifacts must use canonical path order")
+    expected_paths = [item["path"] for item in plan["targets"]]
+    actual_paths = [item["path"] for item in artifacts]
+    if actual_paths != expected_paths:
+        _fail(
+            "integrity",
+            "success artifacts must exactly cover the package plan targets",
+        )
+    for artifact in artifacts:
+        path = _repo_path(repo, artifact["path"])
+        try:
+            regular = (
+                path.is_file()
+                and not _is_link(path)
+                and stat.S_ISREG(path.lstat().st_mode)
+            )
+            digest = _sha(path.read_bytes()) if regular else None
+        except OSError as exc:
+            _fail(
+                "integrity",
+                "cannot inspect a succeeded package artifact",
+                path=artifact["path"],
+                reason=str(exc),
+            )
+        if not regular:
+            _fail(
+                "integrity",
+                "succeeded package artifact must be a regular file",
+                path=artifact["path"],
+            )
+        if digest != artifact["sha256"]:
+            _fail(
+                "conflict",
+                "succeeded package artifact digest does not match current bytes",
+                path=artifact["path"],
+            )
+
+
 def validate_plan_against_wrapper(plan: dict[str, Any], wrapper: dict[str, Any]) -> None:
     validate_plan(plan)
     if plan["context_digest"] != managed_context_digest(wrapper):
@@ -1065,11 +1438,7 @@ def validate_plan_against_wrapper(plan: dict[str, Any], wrapper: dict[str, Any])
     profile, roots = _profile_roots(wrapper, plan["profile_id"])
     if plan["route_id"] not in profile["routes"]:
         _fail("safety", "plan route is not enabled by its profile")
-    routes = {
-        item["id"]: item
-        for item in wrapper["context"]["configuration"]["routes"]
-    }
-    route = routes[plan["route_id"]]
+    route = _configured_route(wrapper, plan)
     effects = route["effects"]
     for field in ("billable", "remote", "destructive"):
         if plan[field] is not effects[field]:
@@ -1085,26 +1454,7 @@ def validate_plan_against_wrapper(plan: dict[str, Any], wrapper: dict[str, Any])
             "plan publish kind does not match the selected route",
             route_id=route["id"],
         )
-    if route["adapter"] == "package-script-v1":
-        parameters = _object(
-            plan["parameters"],
-            "plan.parameters",
-            {"subcommand", "arguments"},
-            {"subcommand", "arguments"},
-        )
-        subcommand = _id(parameters["subcommand"], "plan.parameters.subcommand")
-        if subcommand not in route["subcommands"]:
-            _fail(
-                "safety",
-                "package subcommand is not enabled by the selected route",
-                route_id=route["id"],
-                subcommand=subcommand,
-            )
-        _package_arguments(
-            parameters["arguments"],
-            "plan.parameters.arguments",
-            set(route["argument_keys"]),
-        )
+    if route["adapter"] in {"package-script-v1", "package-script-v2"}:
         manifest_fact = wrapper["context"]["repository"]["facts"].get(
             route["manifest_fact_ref"]
         )
@@ -1112,18 +1462,42 @@ def validate_plan_against_wrapper(plan: dict[str, Any], wrapper: dict[str, Any])
             manifest_fact.get("path"), str
         ):
             _fail("integrity", "package route manifest fact is unavailable")
-        manifest_inputs = [
-            item
-            for item in plan["inputs"]
-            if item["path"] == manifest_fact["path"]
-            and item["authority"] == "managed-fact"
-        ]
-        if len(manifest_inputs) != 1:
-            _fail(
-                "safety",
-                "package route requires its exact manifest as a managed-fact input",
-                path=manifest_fact["path"],
+        if route["adapter"] == "package-script-v2":
+            _validate_package_route_bindings(plan, route, manifest_fact["path"])
+        else:
+            parameters = _object(
+                plan["parameters"],
+                "plan.parameters",
+                {"subcommand", "arguments"},
+                {"subcommand", "arguments"},
             )
+            subcommand = _id(
+                parameters["subcommand"], "plan.parameters.subcommand"
+            )
+            if subcommand not in route["subcommands"]:
+                _fail(
+                    "safety",
+                    "package subcommand is not enabled by the selected route",
+                    route_id=route["id"],
+                    subcommand=subcommand,
+                )
+            _package_arguments(
+                parameters["arguments"],
+                "plan.parameters.arguments",
+                set(route["argument_keys"]),
+            )
+            manifest_inputs = [
+                item
+                for item in plan["inputs"]
+                if item["path"] == manifest_fact["path"]
+                and item["authority"] == "managed-fact"
+            ]
+            if len(manifest_inputs) != 1:
+                _fail(
+                    "safety",
+                    "package route requires its exact manifest as a managed-fact input",
+                    path=manifest_fact["path"],
+                )
     protected = wrapper["context"]["configuration"]["protected_roots"]
     writes = wrapper["allowlist"]["write_paths"]
     for target in plan["targets"]:
@@ -1165,12 +1539,16 @@ def _validate_one_off_plan(plan: dict[str, Any]) -> None:
         _fail("safety", "one-off operations may only bind user-provided inputs")
 
 
-def verify_dependencies(repo: Path, plan: dict[str, Any]) -> None:
-    validate_plan(plan)
+def _verify_inputs(repo: Path, plan: dict[str, Any]) -> None:
     for item in plan["inputs"]:
         path = _repo_path(repo, item["path"])
         if not _path_present(path) or not path.is_file() or _sha(path.read_bytes()) != item["sha256"]:
             _fail("conflict", "input digest changed", path=item["path"])
+
+
+def verify_dependencies(repo: Path, plan: dict[str, Any]) -> None:
+    validate_plan(plan)
+    _verify_inputs(repo, plan)
     for item in plan["targets"]:
         path = _repo_path(repo, item["path"])
         if _path_present(path) and not path.is_file():
@@ -1342,6 +1720,23 @@ def reduce_events(events: list[dict[str, Any]]) -> dict[str, Any]:
                         operation_id=operation_id,
                     )
                 current["remote_receipt"] = receipt
+            if "artifacts" in payload:
+                if state != "succeeded":
+                    _fail(
+                        "integrity",
+                        "success artifacts may only be recorded on a succeeded event",
+                        operation_id=operation_id,
+                    )
+                artifacts = _success_artifacts(
+                    payload["artifacts"], "event.payload.artifacts"
+                )
+                if artifacts != payload["artifacts"]:
+                    _fail(
+                        "integrity",
+                        "success artifacts must use canonical path order",
+                        operation_id=operation_id,
+                    )
+                current["artifacts"] = artifacts
             if state == "submitted" and current["remote_receipt"] is None:
                 _fail(
                     "integrity",
@@ -1972,10 +2367,17 @@ def _append_state_locked(
     candidate = [*events, event]
     snapshot = reduce_events(candidate)
     operation = snapshot["operations"][operation_id]
+    managed_route: dict[str, Any] | None = None
     if wrapper is not None:
         assert repo is not None
         wrapper = _require_managed_context(wrapper, repo)
         validate_plan_against_wrapper(operation["plan"], wrapper)
+        managed_route = _configured_route(wrapper, operation["plan"])
+        if state == "succeeded" and managed_route["adapter"] == "package-script-v2":
+            _verify_inputs(repo, operation["plan"])
+            _validate_managed_v2_success(
+                repo, operation["plan"], managed_route, payload
+            )
     if state in {"prepared", "running", "dispatching"} and repo is not None:
         verify_dependencies(repo, operation["plan"])
     if state in {"running", "dispatching"}:

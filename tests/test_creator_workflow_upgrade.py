@@ -143,11 +143,19 @@ def test_creator_materializes_strict_context_and_enforces_protected_package(tmp_
             },
             {
                 "id": "check",
-                "adapter": "package-script-v1",
+                "adapter": "package-script-v2",
                 "manifest_fact_ref": "package",
                 "script": "check",
                 "subcommands": ["run"],
-                "argument_keys": ["target-path"],
+                "argument_bindings": [
+                    {
+                        "key": "target-path",
+                            "kind": "target-path",
+                        "required": False,
+                        "cardinality": "one",
+                    }
+                ],
+                "output_bindings": [],
                 "effects": {
                     "billable": False,
                     "remote": False,
@@ -218,6 +226,7 @@ def test_creator_materializes_strict_context_and_enforces_protected_package(tmp_
     }
     assert runtime.prepare_managed_operation(consumer, managed, proposal)["operation_id"] == "write-new-package"
     proposal["targets"] = [{"path": "publications/existing-draft/publication.json", "before_sha256": runtime.ABSENT}]
+    proposal["parameters"]["arguments"]["target-path"] = "publications/existing-draft/publication.json"
     with pytest.raises(runtime.WorkflowError, match="protected"):
         runtime.prepare_managed_operation(consumer, managed, proposal)
     assert _git(consumer, "status", "--porcelain") == ""

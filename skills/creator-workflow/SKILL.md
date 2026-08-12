@@ -22,8 +22,9 @@ When a materialized context exists, verify it before reading repository facts or
 1. Capture the goal, audience, scope, acceptance criteria, required sources, rights or sensitivity constraints, and requested delivery form.
 2. Divide the work into explicit operations. Use only the stages that matter: intake, research, design, production, assembly, verification, packaging, publication, and maintenance.
 3. Resolve each operation through an allowed route. Read [references/capability-routing.md](references/capability-routing.md) before delegating to browser, generation, composition, validation, or publication tools.
-4. For a durable project, read [references/workflow-contract.md](references/workflow-contract.md) and use the deterministic runtime to prepare the plan and preview digest before changing managed state.
-5. Read [references/artifact-contract.md](references/artifact-contract.md) before accepting inputs or registering artifacts.
+4. For a new package-script route, use `package-script-v2` and bind every argument through its typed value, input-path, output-base, or target-path rule. Accept only the exact input, derived-target, billing, fixed-constant, and observation-receipt bindings that the runtime recomputes.
+5. For a durable project, read [references/workflow-contract.md](references/workflow-contract.md) and use the deterministic runtime to prepare the plan and preview digest before changing managed state.
+6. Read [references/artifact-contract.md](references/artifact-contract.md) before accepting inputs or registering artifacts.
 
 ## Apply exact authorization gates
 

@@ -1,6 +1,6 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成五个学习核心及 `creator-workflow` 的评审、通用化升级与校验，并发布既有学习批次到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)。六个 first-party Skill 均采用中央通用核心、严格消费配置和受管上下文；`daily-work` 的消费迁移在中央 creator 候选通过后独立进行。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成五个学习核心及 `creator-workflow` 的评审、通用化升级与校验，并发布既有学习批次到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)。六个 first-party Skill 均采用中央通用核心、严格消费配置和受管上下文；`daily-work` 的 version 2 消费适配、旧副本退役与历史保护验证也已完成候选，等待独立提交与发布。
 
 ## 当前范围
 
@@ -12,7 +12,7 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D42 决策、实现设计和后续迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D42 与创作工作流的 D43–D44 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。
 
 ## 目录
 

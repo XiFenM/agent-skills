@@ -40,8 +40,18 @@ model or tier, count, non-empty request bounds, cost boundary (`hard-cap` or
 extra grants are rejected. Prompts, headers, credentials, and opaque request bodies never
 belong in this envelope—bind larger request inputs by digest.
 
-Any plan, input, route, profile, configuration, manifest, or target drift invalidates the
-grant. Generation permission does not imply publication permission.
+Any plan, input, route, profile, configuration, manifest, argument binding, derived target,
+or billing-bound value drift invalidates the grant. For a package route, the manifest plus
+all input-path arguments must be the complete plan input set; direct target arguments plus
+configured derivations must be the complete target set; and provider, model or tier, count,
+and request bounds must exactly equal the configured literal or argument sources.
+Generation permission does not imply publication permission.
+
+A managed `package-script-v2` operation may enter `succeeded` only with canonical artifact evidence that
+lists every planned target exactly once as `path` plus SHA-256. The managed append reloads the current
+context, revalidates the route and bindings, rechecks bound input digests, and verifies that each artifact
+is a real regular file whose current bytes match the recorded digest. Legacy `package-script-v1` and
+repository-external one-off ledgers retain their existing success semantics.
 
 ## Durable files
 

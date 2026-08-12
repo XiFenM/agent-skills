@@ -28,7 +28,7 @@ Use a version 2 consumer index and point `config.skills.creator-workflow` to a G
       "work_root": "work",
       "output_root": "outputs",
       "template_fact_ref": "project-template",
-      "routes": ["browser", "check"]
+      "routes": ["browser", "generate"]
     }
   ],
   "routes": [
@@ -39,13 +39,33 @@ Use a version 2 consumer index and point `config.skills.creator-workflow` to a G
       "effects": {"billable": false, "remote": true, "destructive": false, "publish": false}
     },
     {
-      "id": "check",
-      "adapter": "package-script-v1",
+      "id": "generate",
+      "adapter": "package-script-v2",
       "manifest_fact_ref": "package",
-      "script": "check",
-      "subcommands": ["run"],
-      "argument_keys": ["target-path"],
-      "effects": {"billable": false, "remote": false, "destructive": false, "publish": false}
+      "script": "generate",
+      "subcommands": ["image"],
+      "argument_bindings": [
+        {"key": "model", "kind": "value", "value_type": "string", "required": true, "cardinality": "one"},
+        {"key": "count", "kind": "value", "value_type": "int", "required": true, "cardinality": "one"},
+        {"key": "prompt-file", "kind": "input-path", "authority": "user-provided", "required": true, "cardinality": "one"},
+        {"key": "out", "kind": "output-base", "required": true, "cardinality": "one"},
+        {"key": "metadata", "kind": "value", "value_type": "bool", "const": true, "required": false, "cardinality": "one"},
+        {"key": "last-frame-out", "kind": "target-path", "required": false, "cardinality": "one"}
+      ],
+      "output_bindings": [
+        {"id": "images", "kind": "indexed-by-count", "source_argument": "out", "count_argument": "count", "condition": {"kind": "always"}},
+        {"id": "metadata", "kind": "suffix", "source_argument": "out", "suffix": ".json", "condition": {"kind": "argument-true", "argument": "metadata"}}
+      ],
+      "billing_bindings": {
+        "provider": {"kind": "literal", "value": "configured-provider"},
+        "model_or_tier": {"kind": "argument", "argument": "model"},
+        "count": {"kind": "argument", "argument": "count"},
+        "request_bounds": {
+          "count": {"kind": "argument", "argument": "count"},
+          "format": {"kind": "literal", "value": "png"}
+        }
+      },
+      "effects": {"billable": true, "remote": true, "destructive": false, "publish": false}
     }
   ],
   "protected_roots": ["projects/frozen-project"]
@@ -60,15 +80,64 @@ publication). Billable work, remote dispatch, overwrite or deletion, and publica
 normal operation preview and exact grants.
 
 `selected-skill-v1` accepts one lowercase-hyphen Skill name, rejects `creator-workflow` recursion, and makes
-that Skill a required selection on every host where `creator-workflow` is materialized. Several routes may use the same Skill; the
-materializer verifies one sorted, unique dependency with matching host coverage. `package-script-v1` accepts only a selected
-`package-manifest` file fact, one safe package-script token, a finite non-empty list of safe subcommand
-tokens, and a finite allowlist of data argument keys. A package plan binds exactly one subcommand plus an
-`arguments` object whose keys are a subset of that allowlist. Every package plan must also bind the route's
-exact package-manifest file as one digest-checked `managed-fact` input, so a script-definition change
-invalidates the preview before execution. Neither adapter stores or executes arbitrary
-commands, flags, working directories, environment values, URLs, headers, credentials, or complete prompt
-bodies; bind larger inputs as digest-checked artifacts.
+that Skill a required selection on every host where `creator-workflow` is materialized. Several routes may
+use the same Skill; the materializer verifies one sorted, unique dependency with matching host coverage.
+
+`package-script-v1` remains the compatibility adapter for existing finite `argument_keys` routes. It
+checks the selected package manifest but does not claim mechanical path, output, or billing binding. Do not
+use it for a new billable or artifact-producing route.
+
+`package-script-v2` accepts only a selected `package-manifest` file fact, one safe package-script token,
+a finite non-empty list of safe subcommand tokens, typed `argument_bindings`, deterministic
+`output_bindings`, and exact `billing_bindings` when `effects.billable` is true. Neither adapter stores or
+executes arbitrary commands, flags, working directories, environment values, URLs, headers, credentials,
+or complete prompt bodies; bind larger inputs as digest-checked artifacts.
+
+## Declarative package bindings
+
+Every argument binding contains `key`, `kind`, `required`, and `cardinality` (`one` or `many`). A `value`
+also declares the exact scalar `value_type` (`bool`, `int`, or `string`) and may declare a same-type
+canonical `const` when cardinality is `one`. An `input-path` additionally declares `authority` as
+`managed-fact` or `user-provided`.
+
+| Argument kind | Mechanical meaning |
+| --- | --- |
+| `value` | A bounded scalar or scalar list of the declared exact type. A configured `const` must match type and value exactly. It creates no file authority. |
+| `input-path` | Each value equals one plan input path with the declared authority; its digest is verified against the exact file. |
+| `output-base` | A scalar portable path consumed by one or more output rules. It is not itself a target. |
+| `target-path` | Each value is an exact plan target, for adapters that expose the final output path directly. |
+
+Every actual argument key must have one binding, every required key must be present, and cardinality is
+strict. The complete plan input set must be exactly the manifest plus all input-path values; extra evidence
+or an omitted argument input is an error. Large prompts, references, and media therefore travel by an exact
+path and digest, not as inline configuration or ledger payloads.
+
+An output rule consumes one `output-base` and has a unique ID plus a condition:
+
+- `exact` emits the base path;
+- `suffix` appends one configured portable filename suffix to the base path;
+- `indexed-by-count` emits the base path when the bound count is one; for larger counts it inserts
+  `-1` through `-N` before the base path's final extension, where `N` comes from a required scalar
+  `int` count argument;
+- `always`, `argument-present`, and `argument-true` conditions make optional outputs explicit.
+
+The runtime recomputes the complete target set from enabled output rules and target-path arguments. An
+enabled rule requires its base argument; a supplied base must have an enabled rule; duplicate derived paths
+are rejected. If a provider has an output such as a last frame whose name cannot be deterministically
+derived, expose a dedicated target-path argument or leave that option out of the route.
+
+A billable route must bind `provider`, `model_or_tier`, `count`, and a non-empty `request_bounds` object.
+Each value comes from either a required scalar value argument or a credential-free public literal. The
+runtime requires type-sensitive exact equality between these resolved values and the plan's sanitized
+billing envelope. The cost boundary and one-attempt maximum remain explicit authorization limits rather
+than tool arguments.
+
+A remote, non-billable v2 route may declare `observation_receipt_argument`. It must name a required,
+non-constant scalar `string` value argument; the route must be non-destructive, non-publishing, and declare
+no outputs. This declaration makes the route observation-only. The plan must declare `observation_of`, and
+the named argument must equal `observed_receipt` exactly. A v2 package observation cannot use an ordinary
+route without this declaration; define separate ordinary-status and observation-status route IDs when both
+behaviors are needed.
 
 ## Fact and profile binding
 
