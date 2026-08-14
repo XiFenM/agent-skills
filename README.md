@@ -12,6 +12,16 @@
 
 完整来源、分类、生命周期和消费仓库记录在 [`catalog.json`](catalog.json)。schema v2 还记录替代关系与选择组：materializer 会拒绝 rollback-only 或已退役名称，并提示最终 active 替代项；`primary-learning` 规定一个消费配置跨所有 host 最多选择一个不同的主学习 Skill，同一个 `guide-learning` 同时分发给 Codex 与 Claude 仍然合法。
 
+## 学习类 Skill 用户说明
+
+面向学习者的整体分工和组合流程见[学习类 Skill 组合使用指南](docs/learning-skills-user-guide.md)。也可以直接阅读各 Skill 的独立说明：
+
+- [`guide-learning`](docs/user-guides/guide-learning.md)
+- [`english-coach`](docs/user-guides/english-coach.md)
+- [`study-log`](docs/user-guides/study-log.md)
+- [`memo-cards`](docs/user-guides/memo-cards.md)
+- [`resource-planning`](docs/user-guides/resource-planning.md)
+
 迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 的 D1–D42 与创作工作流的 D43–D44 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。
 
 ## 目录

@@ -8,6 +8,22 @@ description: "Guide human learners through source-grounded explanation, post-exp
 围绕人类学习者组织最小充分的教学流程。让学习者掌握中心模型、边界和迁移方法；保留学习者对核心
 练习工件的控制权；只在证据、恢复或授权确有需要时写入状态。
 
+## 首次启用时提示用户说明
+
+在当前对话第一次启用本 Skill 时，用一条简短、非阻塞且不带独立标题或卡片的提示建议用户先浏览本
+Skill 的 `docs/user-guides/guide-learning.md` 和组合指南 `docs/learning-skills-user-guide.md`；说明它们介绍
+交互流程、用户需要参与的环节和授权边界。
+
+定位本地文档时，只按顺序检查三个候选根：当前 `SKILL.md` 所在 Skill 目录的上两级目录、当前工作区
+仓库根、当前工作区仓库根下的 `.agent-skills`。把实际存在的文件解析为绝对路径并提供可点击链接，不
+搜索其他目录。没有本地文件时，改为提供[本 Skill 公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/guide-learning.md)
+和[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+
+用户没有要求先暂停阅读时继续处理当前请求；不要求用户确认，不在同一对话重复提示，也不创建文件
+记录是否已经提示。同一对话已经提供组合指南时只补本 Skill 说明；同一回复首次启用多个学习 Skill 时
+合并为一条提示，并且只列一次组合指南。
+一次答疑中的首次提示不构成固定开场卡片，不创建 ID、计划或持久状态；提示后直接解决当前问题。
+
 ## 选择最窄运行范围
 
 先根据用户当轮意图选择一种范围；不要因为仓库已有学习记录就自动升级范围。

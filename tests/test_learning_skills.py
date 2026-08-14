@@ -7,6 +7,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE_ROOT = ROOT / "skills" / "guide-learning"
 RETIRED_SKILL_NAMES = {"learn-by-practice", "study-companion"}
+LEARNING_USER_GUIDES = {
+    "english-coach": "english-coach.md",
+    "guide-learning": "guide-learning.md",
+    "memo-cards": "memo-cards.md",
+    "resource-planning": "resource-planning.md",
+    "study-log": "study-log.md",
+}
 
 REFERENCE_FILES = {
     "article-artifacts.md",
@@ -106,7 +113,28 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
     slash_command = re.compile(
         r"(?<![A-Za-z0-9_)])/(?!/)[A-Za-z0-9_\-\u3400-\u9fff]+"
     )
-    assert slash_command.search(combined) is None
+    without_urls = re.sub(r"https?://[^\s)>]+", "", combined)
+    assert slash_command.search(without_urls) is None
+
+
+def test_learning_skills_announce_user_guides_once_per_conversation() -> None:
+    combined_guide = ROOT / "docs" / "learning-skills-user-guide.md"
+    assert combined_guide.is_file()
+
+    for skill_name, guide_name in LEARNING_USER_GUIDES.items():
+        skill = (ROOT / "skills" / skill_name / "SKILL.md").read_text(encoding="utf-8")
+        compact_skill = re.sub(r"\s+", "", skill)
+        assert (ROOT / "docs" / "user-guides" / guide_name).is_file()
+        assert "## 首次启用时提示用户说明" in skill
+        assert "在当前对话第一次启用" in skill
+        assert f"docs/user-guides/{guide_name}" in skill
+        assert "docs/learning-skills-user-guide.md" in skill
+        assert f"https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/{guide_name}" in skill
+        assert "https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md" in skill
+        assert "不要求用户确认" in skill
+        assert "不在同一对话重复提示" in skill
+        assert "不创建文件记录是否已经提示" in compact_skill
+        assert "同一回复首次启用多个学习 Skill 时" in skill
 
 
 def test_retired_learning_skills_leave_no_runtime_entry_or_route() -> None:

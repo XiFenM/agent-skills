@@ -5,6 +5,21 @@ description: 研究、刷新与治理学习或工作资料组合，支持证据�
 
 # Resource Planning
 
+## 首次启用时提示用户说明
+
+在当前对话第一次启用本 Skill 时，用一条简短、非阻塞且不带独立标题或卡片的提示建议用户先浏览本
+Skill 的 `docs/user-guides/resource-planning.md` 和组合指南 `docs/learning-skills-user-guide.md`；说明它们
+介绍交互流程、用户需要参与的环节和授权边界。
+
+定位本地文档时，只按顺序检查三个候选根：当前 `SKILL.md` 所在 Skill 目录的上两级目录、当前工作区
+仓库根、当前工作区仓库根下的 `.agent-skills`。把实际存在的文件解析为绝对路径并提供可点击链接，不
+搜索其他目录。没有本地文件时，改为提供[本 Skill 公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/resource-planning.md)
+和[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+
+用户没有要求先暂停阅读时继续处理当前请求；不要求用户确认，不在同一对话重复提示，也不创建文件
+记录是否已经提示。同一对话已经提供组合指南时只补本 Skill 说明；同一回复首次启用多个学习 Skill 时
+合并为一条提示，并且只列一次组合指南。
+
 在开始时明确选择一种模式；不自动串联模式：
 
 - `research`：围绕当前问题搜索、比较和推荐。默认只在对话中预览；只有用户当次明确要求保存，才准备独立 brief。保存的 brief 不进入 registry。
