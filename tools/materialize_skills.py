@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -794,6 +795,15 @@ def _validate_utf8_file(path: Path, label: str) -> None:
         raise SyncError(f"cannot read {label} as UTF-8: {path}: {exc}") from exc
 
 
+def _validate_readable_file(path: Path, label: str) -> None:
+    try:
+        with path.open("rb") as handle:
+            while handle.read(1024 * 1024):
+                pass
+    except OSError as exc:
+        raise SyncError(f"cannot read {label}: {path}: {exc}") from exc
+
+
 def _tracked_collection(
     repo: Path,
     raw_path: Any,
@@ -802,10 +812,14 @@ def _tracked_collection(
     tracked: set[str],
     gitlinks: set[str],
     intent_to_add: set[str],
+    binary_extensions: set[str],
 ) -> tuple[str, list[str]]:
     path, relative = _declared_path(repo, raw_path, label, gitlinks=gitlinks)
     if not _path_present(path) or _is_link_or_junction(path) or not path.is_dir():
-        raise SyncError(f"{label} must be a real directory: {relative}")
+        raise SyncError(
+            f"{label} must be a real directory using the Git index's exact path casing: "
+            f"{relative}"
+        )
     prefix = relative.rstrip("/") + "/"
     members = sorted(item for item in tracked if item.startswith(prefix))
     if not members:
@@ -824,7 +838,10 @@ def _tracked_collection(
         )
         if normalized != member or not member_path.is_file():
             raise SyncError(f"{label} contains a non-regular tracked entry: {member}")
-        _validate_utf8_file(member_path, f"{label} member")
+        if PurePosixPath(member).suffix.casefold() in binary_extensions:
+            _validate_readable_file(member_path, f"{label} member")
+        else:
+            _validate_utf8_file(member_path, f"{label} member")
     return relative, members
 
 
@@ -1002,7 +1019,11 @@ def _materialized_context(
     except Exception as exc:
         raise SyncError(f"invalid context config for {name!r}: {exc}") from exc
     required_keys = {"context", "tracked_files", "tracked_collections", "write_paths"}
-    optional_keys = {"read_handoffs", "required_skills"}
+    optional_keys = {
+        "read_handoffs",
+        "required_skills",
+        "binary_collection_extensions",
+    }
     if (
         not isinstance(result, dict)
         or not required_keys <= set(result)
@@ -1011,7 +1032,8 @@ def _materialized_context(
         raise SyncError(
             f"context validator for {name!r} must return "
             + ", ".join(sorted(required_keys))
-            + " and may return read_handoffs and required_skills"
+            + " and may return read_handoffs, required_skills, and "
+            "binary_collection_extensions"
         )
     if not isinstance(result["context"], dict):
         raise SyncError(f"context validator for {name!r} context must be an object")
@@ -1034,6 +1056,41 @@ def _materialized_context(
         for raw_path in result["tracked_files"]
     }
     declared_tracked = sorted(explicit_tracked)
+    raw_binary_extensions = result.get("binary_collection_extensions", {})
+    if not isinstance(raw_binary_extensions, dict) or not all(
+        isinstance(collection, str) and isinstance(extensions, list)
+        for collection, extensions in raw_binary_extensions.items()
+    ):
+        raise SyncError(
+            f"context validator for {name!r} binary_collection_extensions must "
+            "be an object of string arrays"
+        )
+    undeclared_binary_collections = sorted(
+        set(raw_binary_extensions) - set(result["tracked_collections"])
+    )
+    if undeclared_binary_collections:
+        raise SyncError(
+            f"context validator for {name!r} binary_collection_extensions names "
+            "undeclared tracked collections: "
+            + ", ".join(undeclared_binary_collections)
+        )
+    binary_collection_extensions: dict[str, set[str]] = {}
+    for collection, raw_extensions in raw_binary_extensions.items():
+        if not all(
+            isinstance(extension, str)
+            and re.fullmatch(r"\.[a-z0-9]{1,16}", extension)
+            for extension in raw_extensions
+        ):
+            raise SyncError(
+                f"context validator for {name!r} binary extensions for "
+                f"{collection!r} must be lowercase dot extensions"
+            )
+        if len(raw_extensions) != len(set(raw_extensions)):
+            raise SyncError(
+                f"context validator for {name!r} binary extensions for "
+                f"{collection!r} contain duplicates"
+            )
+        binary_collection_extensions[collection] = set(raw_extensions)
     read_handoffs: list[tuple[str, str]] = []
     raw_handoffs = result.get("read_handoffs", [])
     if not isinstance(raw_handoffs, list):
@@ -1100,6 +1157,7 @@ def _materialized_context(
             tracked=tracked,
             gitlinks=gitlinks,
             intent_to_add=intent_to_add,
+            binary_extensions=binary_collection_extensions.get(raw_path, set()),
         )
         normalized_collections.append(collection)
         explicit_tracked.update(members)

@@ -11,7 +11,6 @@ from typing import Any
 
 from tools import materialize_skills
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CONFIGURABLE_SKILLS = (
     "english-coach",
@@ -303,6 +302,8 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
         path.write_text(body, encoding="utf-8")
     binary_sibling = consumer / "articles" / "diagram.png"
     binary_sibling.write_bytes(b"\x89PNG\r\n\x1a\n\xff\x00")
+    managed_workbook = consumer / "cards" / "tracked-technical-qa.xlsx"
+    managed_workbook.write_bytes(b"PK\x03\x04\xff\x00 managed XLSX fixture")
 
     (consumer / ".gitignore").write_text(
         ".agent-skills/\n.agents/\n.claude/\n.agent-skills-state.json\n.agent-skills-sync.lock\n",
@@ -316,6 +317,7 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
         ".agent-skills.json",
         ".agent-skills-config",
         "articles/diagram.png",
+        "cards/tracked-technical-qa.xlsx",
         *tracked_files,
     )
     _git(consumer, "commit", "-q", "-m", "configure shared Skills")
@@ -424,6 +426,7 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
     assert "articles/diagram.png" not in memo_files
     assert "notes/tracked.md" in memo_files
     assert "cards/tracked.md" in memo_files
+    assert "cards/tracked-technical-qa.xlsx" in memo_files
     assert "english/logs/tracked.md" in memo_files
     assert "notes/untracked.md" not in memo_files
     assert "cards/untracked.md" not in memo_files

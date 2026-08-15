@@ -1,4 +1,4 @@
 interface:
   display_name: "Memo Cards / 记忆卡"
-  short_description: "把成熟学习素材整理为可审阅、可安全刷新的墨墨记忆卡暂存文档"
-  default_prompt: "Use $memo-cards to preview high-value Markji cards from the verified learning material I specify."
+  short_description: "把成熟素材拆成清晰、分层的受管墨墨卡片与 XLSX"
+  default_prompt: "Use $memo-cards to preview high-value Markji cards with concise prompts, layered answers, and managed per-template XLSX files from the verified learning material I specify."

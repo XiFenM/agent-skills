@@ -2,23 +2,41 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import threading
+import zipfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "memo_cards.py"
+SYNTAX_PDF = Path(__file__).resolve().parents[1] / "references" / "markji-content-syntax.pdf"
+SYNTAX_PDF_SHA256 = "57438a84a630ab9f8897bed53cedb8899b09a55b816c09edc480eeed96a88201"
 SPEC = importlib.util.spec_from_file_location("memo_cards", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 memo_cards = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = memo_cards
 SPEC.loader.exec_module(memo_cards)
+
+
+def test_bundled_markji_syntax_pdf_is_pinned_and_routed() -> None:
+    payload = SYNTAX_PDF.read_bytes()
+    assert payload.startswith(b"%PDF-")
+    assert hashlib.sha256(payload).hexdigest() == SYNTAX_PDF_SHA256
+
+    skill = (SYNTAX_PDF.parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    compatibility = (SYNTAX_PDF.parent / "markji-3.8-compatibility.md").read_text(
+        encoding="utf-8"
+    )
+    assert "references/markji-content-syntax.pdf" in skill
+    assert "markji-content-syntax.pdf" in compatibility
+    assert SYNTAX_PDF_SHA256 in compatibility
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -146,6 +164,14 @@ def _card(
             "锚点": f"anchor-{key}",
             "来源": "topic.md §1",
         }
+    elif template_id == "correction":
+        fields = {
+            "意图": f"Correct {key}",
+            "场景": "A verified learning correction",
+            "正确": answer,
+            "错误": f"Incorrect form for {key}",
+            "说明": "The verified reason and boundary.",
+        }
     elif template_id == "oral":
         fields = {
             "问题": f"Explain {key} in 45–90 seconds.",
@@ -225,6 +251,7 @@ def test_context_validator_is_pure_strict_and_returns_path_arrays() -> None:
     }
     assert result["tracked_collections"] == ["cards", "notes"]
     assert result["write_paths"] == ["cards"]
+    assert result["binary_collection_extensions"] == {"cards": [".xlsx"]}
     assert all(isinstance(path, str) for path in result["tracked_collections"])
 
     bad = _skill_config()
@@ -339,8 +366,15 @@ def test_expanded_allowlist_excludes_untracked_sources_and_inventory(tmp_path: P
     environment = _environment(tmp_path)
     tracked_card = environment["repo"] / "cards" / "tracked.md"
     private_card = environment["repo"] / "cards" / "private.md"
+    binary_card = environment["repo"] / "cards" / "binary.md"
+    malformed_card = environment["repo"] / "cards" / "malformed.md"
     tracked_card.write_text("tracked legacy\n", encoding="utf-8")
     private_card.write_text("private legacy\n", encoding="utf-8")
+    binary_card.write_bytes(b"\xff\xfe")
+    malformed_card.write_text(
+        '---\n{"schema": "memo-cards.artifact/v2"}\n---\ninvalid\n',
+        encoding="utf-8",
+    )
     _set_tracked(environment, "cards/tracked.md")
 
     verified = memo_cards.verify(environment["repo"], environment["context"])
@@ -412,31 +446,424 @@ def test_identity_ignores_wording_and_source_but_tracks_scope_and_assessment(tmp
     assert third["included"][0]["logical_id"] != first_id
 
 
-def test_reserved_syntax_and_unsafe_tsv_are_rejected(tmp_path: Path) -> None:
+def test_reserved_syntax_and_unsafe_spreadsheet_cells_are_rejected(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
     for answer in ("unsafe\tcell", "unsafe\nline", "[T#B#injection]", "unsafe]close", "---", "```tsv"):
-        with pytest.raises(memo_cards.MemoCardsError, match="single TSV-safe|reserved"):
+        with pytest.raises(memo_cards.MemoCardsError, match="single spreadsheet-safe|reserved"):
             _prepare(environment, [_card("unsafe", 1, answer=answer)])
+
+    for separator in ("\u0085", "\u2028", "\u2029"):
+        with pytest.raises(memo_cards.MemoCardsError, match="line-separator"):
+            _prepare(environment, [_card("unicode-line", 1, answer=f"left{separator}right")])
 
 
 def test_structured_formula_and_public_link_are_compiled(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
     answer = {
-        "parts": [
-            {"type": "text", "text": "Cost is "},
-            {"type": "formula", "katex": "O(n\\log n)"},
-            {"type": "text", "text": "; see "},
-            {"type": "link", "url": "https://example.org/reference", "label": "reference"},
+        "blocks": [
+            {
+                "type": "lead",
+                "parts": [
+                    {"type": "text", "text": "See "},
+                    {
+                        "type": "link",
+                        "url": "https://example.org/reference",
+                        "label": "reference",
+                    },
+                ],
+            },
+            {
+                "type": "display",
+                "parts": [{"type": "formula", "katex": "O(n\\log n)"}],
+            },
         ]
     }
-    result = _prepare(environment, [_card("rich", 1, answer=answer)])
+    request, _value = _request(environment, [_card("rich", 1, answer=answer)])
+    result = memo_cards.prepare(environment["repo"], environment["context"], request)
+    memo_cards.publish(
+        environment["repo"], environment["context"], request, result["preview_digest"], "request"
+    )
+    workbook = environment["repo"] / result["candidate_sidecars"][0]["path"]
+    _headers, rows = memo_cards._parse_xlsx(workbook.read_bytes(), "test workbook")
 
-    assert "[E##O(n\\log n)]" in result["candidate_markdown"]
-    assert '[T#link/"https://example.org/reference"#reference]' in result["candidate_markdown"]
+    assert "[E##O(n\\log n)]" in rows[0][1]
+    assert '[T#link/"https://example.org/reference"#reference]' in rows[0][1]
 
     private = {"parts": [{"type": "link", "url": "http://127.0.0.1/x", "label": "private"}]}
     with pytest.raises(memo_cards.MemoCardsError, match="not a public URL"):
         _prepare(environment, [_card("private", 1, answer=private)])
+
+
+def test_structured_mechanism_answer_compiles_exact_markji_layout(
+    tmp_path: Path,
+) -> None:
+    environment = _environment(tmp_path)
+    answer = {
+        "blocks": [
+            {
+                "type": "lead",
+                "parts": [
+                    {"type": "text", "text": "单遍流中，先验证基线是否可执行。"}
+                ],
+            },
+            {
+                "type": "point",
+                "label": "访问限制",
+                "parts": [
+                    {
+                        "type": "text",
+                        "text": "双层枚举依赖回看或随机访问；已消费元素不能重新枚举",
+                    }
+                ],
+            },
+            {
+                "type": "point",
+                "label": "有序性",
+                "parts": [
+                    {
+                        "type": "text",
+                        "text": "若非递减，x 与 x 之间任一 y 满足 x≤y≤x，故 y=x",
+                    }
+                ],
+            },
+            {
+                "type": "point",
+                "label": "状态",
+                "parts": [
+                    {"type": "text", "text": "只保存前值，相等即重复，否则更新"}
+                ],
+            },
+            {
+                "type": "point",
+                "label": "复杂度",
+                "parts": [
+                    {"type": "text", "text": "O(n) 时间、O(1) 额外空间"}
+                ],
+            },
+            {
+                "type": "boundary",
+                "parts": [
+                    {
+                        "type": "text",
+                        "text": "任意顺序流不保证重复相邻，因此该状态不足以精确判重。",
+                    }
+                ],
+            },
+        ]
+    }
+    card = _card(
+        "stream-dedup",
+        1,
+        answer=answer,
+        layer="mechanism",
+        assessment="mechanism",
+    )
+    card["fields"]["问题"] = "单遍非递减数据流怎样以 O(1) 空间精确判重？"
+    request, _value = _request(environment, [card])
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+    memo_cards.publish(
+        environment["repo"],
+        environment["context"],
+        request,
+        preview["preview_digest"],
+        "request",
+    )
+    workbook = environment["repo"] / preview["candidate_sidecars"][0]["path"]
+    headers, rows = memo_cards._parse_xlsx(workbook.read_bytes(), "mechanism workbook")
+
+    assert rows[0][headers.index("问题")] == card["fields"]["问题"]
+    assert rows[0][headers.index("答案")] == (
+        "[T#B,!36b59d#结论]：单遍流中，先验证基线是否可执行。\n"
+        "\n"
+        "• [T#B#访问限制]：双层枚举依赖回看或随机访问；已消费元素不能重新枚举\n"
+        "• [T#B#有序性]：若非递减，x 与 x 之间任一 y 满足 x≤y≤x，故 y=x\n"
+        "• [T#B#状态]：只保存前值，相等即重复，否则更新\n"
+        "• [T#B#复杂度]：O(n) 时间、O(1) 额外空间\n"
+        "\n"
+        "[T#B,!c47f17#边界]：任意顺序流不保证重复相邻，因此该状态不足以精确判重。"
+    )
+
+
+def test_content_blocks_nest_existing_parts_and_preserve_legacy_content() -> None:
+    assert memo_cards._render_content("plain answer", "answer") == "plain answer"
+    assert memo_cards._render_content(
+        {"parts": [{"type": "text", "text": "legacy parts"}]}, "answer"
+    ) == "legacy parts"
+
+    value = {
+        "blocks": [
+            {
+                "type": "point",
+                "label": "推导",
+                "parts": [
+                    {"type": "text", "text": "详情见 "},
+                    {
+                        "type": "link",
+                        "url": "https://example.org/reference",
+                        "label": "来源",
+                    },
+                ],
+            },
+            {
+                "type": "display",
+                "parts": [{"type": "formula", "katex": "O(n\\log n)"}],
+            },
+        ]
+    }
+
+    assert memo_cards._render_content(value, "answer") == (
+        '• [T#B#推导]：详情见 [T#link/"https://example.org/reference"#来源]\n'
+        "[E##O(n\\log n)]"
+    )
+
+    english_labels = {
+        "blocks": [
+            {
+                "type": "lead",
+                "label": "Answer",
+                "parts": [{"type": "text", "text": "Keep one previous value."}],
+            },
+            {
+                "type": "boundary",
+                "label": "Limit",
+                "parts": [{"type": "text", "text": "The stream must be sorted."}],
+            },
+        ]
+    }
+    assert memo_cards._render_content(english_labels, "answer") == (
+        "[T#B,!36b59d#Answer]：Keep one previous value.\n\n"
+        "[T#B,!c47f17#Limit]：The stream must be sorted."
+    )
+
+
+def test_content_blocks_reject_unbounded_or_request_injected_layout() -> None:
+    point = {
+        "type": "point",
+        "label": "要点",
+        "parts": [{"type": "text", "text": "安全内容"}],
+    }
+    too_many = {"blocks": [dict(point) for _index in range(9)]}
+    with pytest.raises(memo_cards.MemoCardsError, match="1-8 blocks"):
+        memo_cards._render_content(too_many, "answer")
+
+    long_label = {
+        "blocks": [{**point, "label": "标" * 21}],
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="too long"):
+        memo_cards._render_content(long_label, "answer")
+
+    injected_label = {
+        "blocks": [{**point, "label": "[T#B#伪造标签]"}],
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="reserved"):
+        memo_cards._render_content(injected_label, "answer")
+
+    injected_body = {
+        "blocks": [
+            {
+                **point,
+                "parts": [{"type": "text", "text": "第一行\n第二行"}],
+            }
+        ],
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="spreadsheet-safe"):
+        memo_cards._render_content(injected_body, "answer")
+
+    lead_after_point = {
+        "blocks": [
+            point,
+            {"type": "lead", "parts": [{"type": "text", "text": "结论"}]},
+        ]
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="lead must be the first"):
+        memo_cards._render_content(lead_after_point, "answer")
+
+    boundary_before_point = {
+        "blocks": [
+            {
+                "type": "boundary",
+                "parts": [{"type": "text", "text": "边界内容"}],
+            },
+            point,
+        ]
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="boundary must be the last"):
+        memo_cards._render_content(boundary_before_point, "answer")
+
+    mixed_formula = {
+        "parts": [
+            {"type": "text", "text": "复杂度为 "},
+            {"type": "formula", "katex": "O(n)"},
+        ]
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="occupy the whole line"):
+        memo_cards._render_content(mixed_formula, "answer")
+
+    inline_formula = {
+        "blocks": [
+            {
+                "type": "point",
+                "label": "复杂度",
+                "parts": [{"type": "formula", "katex": "O(n)"}],
+            }
+        ]
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="require a display block"):
+        memo_cards._render_content(inline_formula, "answer")
+
+    bad_display = {
+        "blocks": [
+            {
+                "type": "display",
+                "parts": [
+                    {"type": "formula", "katex": "O(n)"},
+                    {"type": "text", "text": "not a whole-line formula"},
+                ],
+            }
+        ]
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="display block"):
+        memo_cards._render_content(bad_display, "answer")
+
+
+def test_template_embedded_content_rejects_blocks_and_generated_markji(
+    tmp_path: Path,
+) -> None:
+    environment = _environment(tmp_path)
+    blocks = {
+        "blocks": [
+            {
+                "type": "lead",
+                "parts": [{"type": "text", "text": "A nested answer"}],
+            }
+        ]
+    }
+    correction = _card("nested-correction", 1, template_id="correction", answer=blocks)
+    with pytest.raises(memo_cards.MemoCardsError, match="missing parts; unknown blocks"):
+        _prepare(environment, [correction])
+
+    generated_link = {
+        "parts": [
+            {
+                "type": "link",
+                "url": "https://example.org/reference",
+                "label": "reference",
+            }
+        ]
+    }
+    correction["fields"]["正确"] = generated_link
+    with pytest.raises(memo_cards.MemoCardsError, match="accepts text parts only"):
+        _prepare(environment, [correction])
+
+    correction["fields"]["正确"] = {
+        "parts": [
+            {"type": "text", "text": "A "},
+            {"type": "text", "text": "plain answer"},
+        ]
+    }
+    assert _prepare(environment, [correction])["included"]
+
+    choice = _card(
+        "nested-choice",
+        1,
+        template_id="technical-qa",
+        assessment="discrimination",
+    )
+    choice["template_id"] = "choice-2"
+    choice["fields"] = {
+        "题干": "Which statement is valid?",
+        "答案": "A",
+        "选项1": {"parts": [{"type": "formula", "katex": "x^2"}]},
+        "选项2": "The alternative",
+        "解析": blocks,
+        "场景": "A verified distinction",
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="accepts text parts only"):
+        _prepare(environment, [choice])
+
+    choice["fields"]["选项1"] = "The valid statement"
+    assert _prepare(environment, [choice])["included"]
+
+    padded = memo_cards.Template(
+        "padded",
+        "1.0.0",
+        "qa",
+        "Padded",
+        (("答案", "content"),),
+        " {{答案}}",
+    )
+    assert memo_cards._template_field_is_standalone(padded, "答案") is False
+
+    nested_choice = memo_cards.Template(
+        "nested-choice",
+        "1.0.0",
+        "discrimination",
+        "Nested choice",
+        (("选项", "content"),),
+        "[Choice#ans/A#\n{{选项}}\n]",
+    )
+    assert memo_cards._template_field_is_standalone(nested_choice, "选项") is False
+
+
+def test_registry_content_field_capability_matrix_is_explicit() -> None:
+    registry = memo_cards.load_template_registry()
+    actual = {
+        (template.template_id, field_name): memo_cards._template_field_is_standalone(
+            template, field_name
+        )
+        for template in registry.templates
+        for field_name, field_type in template.fields
+        if field_type == "content"
+    }
+    expected = {
+        ("correction", "正确"): False,
+        ("correction", "错误"): False,
+        ("correction", "说明"): True,
+        ("active-production", "目标表达"): False,
+        ("active-production", "边界"): True,
+        ("choice-2", "选项1"): False,
+        ("choice-2", "选项2"): False,
+        ("choice-2", "解析"): True,
+        ("choice-3", "选项1"): False,
+        ("choice-3", "选项2"): False,
+        ("choice-3", "选项3"): False,
+        ("choice-3", "解析"): True,
+        ("choice-4", "选项1"): False,
+        ("choice-4", "选项2"): False,
+        ("choice-4", "选项3"): False,
+        ("choice-4", "选项4"): False,
+        ("choice-4", "解析"): True,
+        ("qa", "答案"): True,
+        ("qa", "例子"): False,
+        ("technical-qa", "答案"): True,
+        ("technical-qa", "锚点"): False,
+        ("cloze", "说明"): True,
+        ("oral", "参考回答"): True,
+    }
+    assert actual == expected
+
+
+def test_display_block_accepts_only_a_formula_or_pure_images() -> None:
+    images = {
+        "blocks": [
+            {
+                "type": "display",
+                "parts": [
+                    {"type": "image", "id": "Image1"},
+                    {"type": "image", "id": "Image2", "mask_id": "Mask2"},
+                ],
+            }
+        ]
+    }
+    assert memo_cards._render_content(images, "answer") == (
+        "[Pic#ID/Image1#][Pic#ID/Image2,MID/Mask2#]"
+    )
+
+
+def test_xlsx_cell_limit_counts_utf16_code_units() -> None:
+    assert memo_cards._xlsx_cell_text("😀" * 16_383 + "x", "cell")
+    with pytest.raises(memo_cards.MemoCardsError, match="cell character limit"):
+        memo_cards._xlsx_cell_text("😀" * 16_384, "cell")
 
 
 def test_cloze_is_optional_and_limited_to_three_words(tmp_path: Path) -> None:
@@ -628,6 +1055,19 @@ def test_verify_reports_mechanism_dependency_digest_drift(tmp_path: Path) -> Non
         card for card in manifest["cards"] if card["logical_id"] == child_id
     )
     child_manifest["content_sha256"] = "0" * 64
+    sidecar_row = next(
+        row
+        for sidecar in manifest["sidecars"]
+        for row in sidecar["rows"]
+        if row["logical_id"] == child_id
+    )
+    sidecar_row["content_sha256"] = "0" * 64
+    manifest["artifact_set_sha256"] = memo_cards._digest_value(
+        {
+            "managed_body_sha256": manifest["managed_body_sha256"],
+            "sidecars": manifest["sidecars"],
+        }
+    )
     payload = {
         key: value
         for key, value in manifest.items()
@@ -897,12 +1337,407 @@ def test_child_content_drift_moves_oral_card_to_review(tmp_path: Path) -> None:
     assert second["required_authorization"] == "confirmed"
 
 
+def test_markdown_has_no_tsv_and_each_template_gets_one_xlsx(tmp_path: Path) -> None:
+    environment = _environment(tmp_path, maximum=10)
+    cards = [
+        _card("correction", 1, template_id="correction", answer="Correct answer."),
+        _card("technical", 2, answer="Technical answer."),
+    ]
+    request, _value = _request(environment, cards)
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+
+    assert "```tsv" not in preview["candidate_markdown"]
+    assert "Correct answer." not in preview["candidate_markdown"]
+    assert [item["template_id"] for item in preview["candidate_sidecars"]] == [
+        "correction",
+        "technical-qa",
+    ]
+    assert [item["row_count"] for item in preview["candidate_sidecars"]] == [1, 1]
+    published = memo_cards.publish(
+        environment["repo"], environment["context"], request, preview["preview_digest"], "request"
+    )
+
+    assert published["written"] is True
+    assert len(published["files"]) == 3
+    correction_path = environment["repo"] / "cards" / "topic-correction.xlsx"
+    technical_path = environment["repo"] / "cards" / "topic-technical-qa.xlsx"
+    correction_headers, correction_rows = memo_cards._parse_xlsx(
+        correction_path.read_bytes(), "correction workbook"
+    )
+    technical_headers, technical_rows = memo_cards._parse_xlsx(
+        technical_path.read_bytes(), "technical workbook"
+    )
+    assert correction_headers == ("意图", "场景", "正确", "错误", "说明")
+    assert correction_rows[0][2] == "Correct answer."
+    assert technical_headers == ("问题", "答案", "锚点", "来源")
+    assert technical_rows[0][1] == "Technical answer."
+
+
+def test_xlsx_is_deterministic_unicode_safe_and_formula_literal() -> None:
+    headers = ("字段",)
+    rows = (("=1+1 😀 & <literal>",),)
+    first = memo_cards._render_xlsx(headers, rows)
+    second = memo_cards._render_xlsx(headers, rows)
+
+    assert first == second
+    assert memo_cards._parse_xlsx(first, "deterministic workbook") == (headers, rows)
+    with zipfile.ZipFile(io.BytesIO(first), "r") as archive:
+        worksheet = archive.read("xl/worksheets/sheet1.xml")
+        assert b"<f" not in worksheet
+        assert b't="inlineStr"' in worksheet
+        assert b"=1+1" in worksheet
+
+
+def test_missing_or_modified_sidecar_requires_confirmed_repair(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    request, _value = _request(environment, [_card("repair", 1)])
+    first = memo_cards.prepare(environment["repo"], environment["context"], request)
+    memo_cards.publish(
+        environment["repo"], environment["context"], request, first["preview_digest"], "request"
+    )
+    workbook = environment["repo"] / "cards" / "topic-technical-qa.xlsx"
+    workbook.unlink()
+
+    missing = memo_cards.prepare(environment["repo"], environment["context"], request)
+    assert missing["operation"] == "update"
+    assert "sidecar-missing" in missing["risk_reasons"]
+    assert missing["required_authorization"] == "confirmed"
+    memo_cards.publish(
+        environment["repo"], environment["context"], request, missing["preview_digest"], "confirmed"
+    )
+    workbook.write_bytes(workbook.read_bytes() + b"drift")
+
+    drifted = memo_cards.prepare(environment["repo"], environment["context"], request)
+    assert "sidecar-drift" in drifted["risk_reasons"]
+    assert drifted["required_authorization"] == "confirmed"
+
+
+def test_artifact_v1_target_migrates_only_with_confirmation(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    request, _value = _request(environment, [_card("migrate", 1)])
+    candidate = memo_cards.prepare(environment["repo"], environment["context"], request)
+    match = re.match(
+        r"\A---\n(?P<header>.*?)\n---\n(?P<body>.*)\Z",
+        candidate["candidate_markdown"],
+        re.DOTALL,
+    )
+    assert match is not None
+    manifest = json.loads(match.group("header"))
+    legacy_body = "# Legacy managed TSV staging\n"
+    manifest["schema"] = memo_cards.ARTIFACT_SCHEMA_V1
+    manifest.pop("sidecars")
+    manifest.pop("artifact_set_sha256")
+    manifest["managed_body_sha256"] = memo_cards._sha256_text(legacy_body)
+    manifest["manifest_payload_sha256"] = memo_cards._digest_value(
+        {key: value for key, value in manifest.items() if key != "manifest_payload_sha256"}
+    )
+    target = environment["repo"] / "cards" / "topic.md"
+    target.write_text(memo_cards._artifact_text(manifest, legacy_body), encoding="utf-8")
+    (environment["repo"] / "cards" / "topic-technical-qa.xlsx").write_bytes(
+        b"unmanaged workbook"
+    )
+
+    migration = memo_cards.prepare(environment["repo"], environment["context"], request)
+    assert migration["operation"] == "update"
+    assert migration["format_transition"] == {
+        "from": memo_cards.ARTIFACT_SCHEMA_V1,
+        "to": memo_cards.ARTIFACT_SCHEMA,
+    }
+    assert "artifact-v1-migration" in migration["risk_reasons"]
+    assert "unmanaged-sidecar-adoption" in migration["risk_reasons"]
+    assert migration["required_authorization"] == "confirmed"
+    with pytest.raises(memo_cards.MemoCardsError, match="requires explicit"):
+        memo_cards.publish(
+            environment["repo"], environment["context"], request, migration["preview_digest"], "request"
+        )
+    memo_cards.publish(
+        environment["repo"], environment["context"], request, migration["preview_digest"], "confirmed"
+    )
+    assert memo_cards.verify(environment["repo"], environment["context"], request)[
+        "request_check"
+    ]["operation"] == "no-op"
+
+
+def test_inventory_verify_reports_sidecar_drift(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    request, _value = _request(environment, [_card("inventory-sidecar", 1)])
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+    memo_cards.publish(
+        environment["repo"], environment["context"], request, preview["preview_digest"], "request"
+    )
+    _set_tracked(
+        environment,
+        "cards/topic.md",
+        "cards/topic-technical-qa.xlsx",
+    )
+    workbook = environment["repo"] / "cards" / "topic-technical-qa.xlsx"
+    workbook.write_bytes(workbook.read_bytes() + b"drift")
+
+    verified = memo_cards.verify(environment["repo"], environment["context"])
+    assert verified["managed_artifacts"][0]["artifact_set_drifted"] is True
+    assert verified["managed_artifacts"][0]["sidecars"][0]["status"] == "sha256-mismatch"
+    assert verified["sidecar_drift"][0]["path"] == "cards/topic-technical-qa.xlsx"
+
+
+def test_removing_last_card_for_template_removes_owned_sidecar(tmp_path: Path) -> None:
+    environment = _environment(tmp_path, maximum=10)
+    request, _value = _request(
+        environment,
+        [
+            _card("correction", 1, template_id="correction"),
+            _card("technical", 2),
+        ],
+    )
+    first = memo_cards.prepare(environment["repo"], environment["context"], request)
+    memo_cards.publish(
+        environment["repo"], environment["context"], request, first["preview_digest"], "request"
+    )
+    correction = environment["repo"] / "cards" / "topic-correction.xlsx"
+    assert correction.is_file()
+
+    second_request, _value = _request(environment, [_card("technical", 2)])
+    second = memo_cards.prepare(environment["repo"], environment["context"], second_request)
+    assert "card-removal" in second["risk_reasons"]
+    assert "sidecar-removal" in second["risk_reasons"]
+    assert any(
+        file["path"] == "cards/topic-correction.xlsx" and file["operation"] == "remove"
+        for file in second["files"]
+    )
+    memo_cards.publish(
+        environment["repo"],
+        environment["context"],
+        second_request,
+        second["preview_digest"],
+        "confirmed",
+    )
+    assert not correction.exists()
+
+
+def test_multifile_install_failure_rolls_back_new_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    environment = _environment(tmp_path, maximum=10)
+    request, _value = _request(
+        environment,
+        [
+            _card("correction", 1, template_id="correction"),
+            _card("technical", 2),
+        ],
+    )
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+    original_link = memo_cards.os.link
+
+    def fail_markdown_install(source: Path, destination: Path) -> None:
+        if Path(destination).suffix == ".md":
+            raise OSError("synthetic Markdown installation failure")
+        original_link(source, destination)
+
+    monkeypatch.setattr(memo_cards.os, "link", fail_markdown_install)
+    with pytest.raises(OSError, match="synthetic Markdown"):
+        memo_cards.publish(
+            environment["repo"], environment["context"], request, preview["preview_digest"], "request"
+        )
+
+    assert not (environment["repo"] / "cards" / "topic.md").exists()
+    assert list((environment["repo"] / "cards").glob("topic-*.xlsx")) == []
+    assert list((environment["repo"] / "cards").glob("*.tmp")) == []
+    assert list((environment["repo"] / "cards").glob("*transaction.json")) == []
+
+
 def test_source_cas_detects_drift(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
     request, _value = _request(environment, [_card("source", 1)])
     environment["source"].write_text("changed", encoding="utf-8")
 
     with pytest.raises(memo_cards.MemoCardsError, match="source changed"):
+        memo_cards.prepare(environment["repo"], environment["context"], request)
+
+
+def test_source_must_be_utf8_even_when_collection_allows_binary_members(
+    tmp_path: Path,
+) -> None:
+    environment = _environment(tmp_path)
+    environment["source"].write_bytes(b"\xff\xfebinary")
+    request, _value = _request(environment, [_card("utf8-source", 1)])
+
+    with pytest.raises(memo_cards.MemoCardsError, match="UTF-8"):
+        memo_cards.prepare(environment["repo"], environment["context"], request)
+
+
+def test_publish_rechecks_source_inside_artifact_set_transaction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    environment = _environment(tmp_path)
+    request, _value = _request(environment, [_card("source-window", 1)])
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+    original_publish_set = memo_cards._atomic_publish_set
+
+    def mutate_before_transaction(
+        files: Any, target: Path, source_preconditions: Any = ()
+    ) -> None:
+        environment["source"].write_text("changed during publication\n", encoding="utf-8")
+        original_publish_set(files, target, source_preconditions)
+
+    monkeypatch.setattr(memo_cards, "_atomic_publish_set", mutate_before_transaction)
+    with pytest.raises(memo_cards.MemoCardsError, match="source changed during publication"):
+        memo_cards.publish(
+            environment["repo"],
+            environment["context"],
+            request,
+            preview["preview_digest"],
+            "request",
+        )
+
+    assert not (environment["repo"] / "cards" / "topic.md").exists()
+    assert list((environment["repo"] / "cards").glob("topic-*.xlsx")) == []
+    assert not (
+        environment["repo"] / "cards" / memo_cards.PUBLICATION_LOCK_NAME
+    ).exists()
+
+
+def test_repository_lock_serializes_cross_target_inventory_planning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    environment = _environment(tmp_path)
+    request_a, value_a = _request(
+        environment, [_card("shared-logical-id", 1)], target="cards/a.md"
+    )
+    request_a = environment["repo"] / "request-a.json"
+    _write_json(request_a, value_a)
+    request_b, value_b = _request(
+        environment, [_card("shared-logical-id", 1)], target="cards/b.md"
+    )
+    request_b = environment["repo"] / "request-b.json"
+    _write_json(request_b, value_b)
+    preview_a = memo_cards.prepare(environment["repo"], environment["context"], request_a)
+    preview_b = memo_cards.prepare(environment["repo"], environment["context"], request_b)
+
+    entered = threading.Event()
+    release = threading.Event()
+    original_prepare = memo_cards._prepare_plan
+
+    def block_first_plan(*args: Any, **kwargs: Any) -> Any:
+        if threading.current_thread().name == "first-publisher":
+            entered.set()
+            assert release.wait(timeout=5)
+        return original_prepare(*args, **kwargs)
+
+    monkeypatch.setattr(memo_cards, "_prepare_plan", block_first_plan)
+    first_result: list[Any] = []
+
+    def run_first() -> None:
+        try:
+            first_result.append(
+                memo_cards.publish(
+                    environment["repo"],
+                    environment["context"],
+                    request_a,
+                    preview_a["preview_digest"],
+                    "request",
+                )
+            )
+        except Exception as exc:  # pragma: no cover - asserted below
+            first_result.append(exc)
+
+    thread = threading.Thread(target=run_first, name="first-publisher")
+    thread.start()
+    assert entered.wait(timeout=5)
+    assert (environment["repo"] / "cards" / memo_cards.PUBLICATION_LOCK_NAME).is_file()
+    assert not (environment["repo"] / memo_cards.PUBLICATION_LOCK_NAME).exists()
+    try:
+        with pytest.raises(memo_cards.MemoCardsError, match="another memo-cards publication"):
+            memo_cards.publish(
+                environment["repo"],
+                environment["context"],
+                request_b,
+                preview_b["preview_digest"],
+                "request",
+            )
+    finally:
+        release.set()
+        thread.join(timeout=5)
+
+    assert len(first_result) == 1 and isinstance(first_result[0], dict)
+    assert (environment["repo"] / "cards" / "a.md").is_file()
+    assert not (environment["repo"] / "cards" / "b.md").exists()
+    with pytest.raises(memo_cards.MemoCardsError, match="preview digest no longer matches"):
+        memo_cards.publish(
+            environment["repo"],
+            environment["context"],
+            request_b,
+            preview_b["preview_digest"],
+            "request",
+        )
+    assert not (environment["repo"] / "cards" / "b.md").exists()
+
+
+def test_verify_finds_orphan_transaction_without_markdown(
+    tmp_path: Path,
+) -> None:
+    environment = _environment(tmp_path)
+    journal = (
+        environment["repo"]
+        / "cards"
+        / f".topic.md{memo_cards.TRANSACTION_JOURNAL_SUFFIX}"
+    )
+    journal.write_text("{}\n", encoding="utf-8")
+    (environment["repo"] / "cards" / "topic-technical-qa.xlsx").write_bytes(b"orphan")
+
+    verified = memo_cards.verify(environment["repo"], environment["context"])
+
+    assert verified["inventory_unavailable"] is True
+    assert verified["managed_artifacts"] == []
+    assert verified["interrupted_transactions"] == [
+        {
+            "path": "cards/.topic.md.memo-cards-transaction.json",
+            "sha256": _digest(journal),
+            "status": "present",
+        }
+    ]
+    request, _value = _request(environment, [_card("blocked-by-journal", 1)])
+    with pytest.raises(memo_cards.MemoCardsError, match="requires recovery"):
+        memo_cards.prepare(environment["repo"], environment["context"], request)
+
+
+def test_verify_reports_update_journal_before_missing_tracked_markdown(
+    tmp_path: Path,
+) -> None:
+    environment = _environment(tmp_path)
+    request, _value = _request(environment, [_card("tracked-update", 1)])
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+    memo_cards.publish(
+        environment["repo"],
+        environment["context"],
+        request,
+        preview["preview_digest"],
+        "request",
+    )
+    _set_tracked(
+        environment,
+        "cards/topic.md",
+        "cards/topic-technical-qa.xlsx",
+    )
+    target = environment["repo"] / "cards" / "topic.md"
+    target.rename(environment["repo"] / "cards" / ".topic.md.synthetic-hold")
+    journal = (
+        environment["repo"]
+        / "cards"
+        / f".topic.md{memo_cards.TRANSACTION_JOURNAL_SUFFIX}"
+    )
+    journal.write_text("{}\n", encoding="utf-8")
+
+    verified = memo_cards.verify(environment["repo"], environment["context"], request)
+
+    assert verified["inventory_unavailable"] is True
+    assert verified["interrupted_transactions"][0]["path"] == (
+        "cards/.topic.md.memo-cards-transaction.json"
+    )
+    assert verified["request_check"] == {
+        "operation": "blocked",
+        "would_write": True,
+        "blocking_reasons": ["interrupted-publication"],
+    }
+    with pytest.raises(memo_cards.MemoCardsError, match="requires recovery"):
         memo_cards.prepare(environment["repo"], environment["context"], request)
 
 
@@ -1277,7 +2112,9 @@ def test_cli_publish_then_verify_uses_the_same_request(
 
     assert memo_cards.main(["verify", *shared, "--request", str(request)]) == 0
     verified = json.loads(capsys.readouterr().out)["data"]
-    assert verified["managed_artifacts"] == []
+    assert [artifact["path"] for artifact in verified["managed_artifacts"]] == [
+        "cards/topic.md"
+    ]
     assert verified["request_check"]["operation"] == "no-op"
     assert verified["request_check"]["would_write"] is False
 
@@ -1319,4 +2156,5 @@ def test_cli_prepare_is_ascii_safe_when_stdout_is_cp936(tmp_path: Path) -> None:
     payload = json.loads(result.stdout.decode("ascii"))
     assert payload["ok"] is True
     assert payload["command"] == "prepare"
-    assert emoji in payload["data"]["candidate_markdown"]
+    assert emoji not in payload["data"]["candidate_markdown"]
+    assert payload["data"]["candidate_sidecars"][0]["row_count"] == 1

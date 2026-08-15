@@ -1518,3 +1518,69 @@ PlanA 的首轮历史产物适配边界同时确认：
 中央与消费候选均已通过结构测试、完整回归、合成对抗测试、真实 materialization、运行时边界测试和
 全新检出前向验证。提交／推送仍是独立操作；发布时必须先推送中央提交并确认远端可取，再提交和推送
 引用该提交的 `daily-work`。
+
+## D45：`memo-cards` 升级为受管 Markdown＋每模板一个 XLSX（2026-08-15）
+
+用户在实际导入中确认纯文本 TSV 代码块不能作为网页端上传文件，并明确要求升级中央 Skill。D28–D34
+保留为当时的设计历史；现役产物合同由本决策取代其中的 Markdown＋TSV 表示：
+
+- request 仍以一个 `.md` 为主目标；Markdown frontmatter 保存卡片身份、来源、模板与 sidecar 完整性，
+  正文只保留模板和 XLSX 链接，不再复制卡片数据或生成 TSV。
+- 每个实际包含 active 卡片的模板生成一个同目录、确定性命名的 `.xlsx`。工作簿只有 `cards` sheet，
+  首行为严格模板字段，所有单元格均为 inline string；不同模板不能借多个 sheet 合并到一个文件。
+- artifact schema 升为 v2，并绑定逐 XLSX 路径、模板、字段、行映射、表格摘要与文件 hash。v1 继续可读
+  和参与去重，但缺少 rendered fields，只有在用户提供同目标 request、查看迁移 diff 并确认后才定向迁移。
+- prepare／publish／verify 和 preview digest 覆盖完整 Markdown＋XLSX 文件集。发布先执行全量 CAS，再隔离
+  旧文件、先安装 XLSX、最后安装 Markdown；失败时回滚并保留无法安全恢复的 recovery／journal，不能把
+  多文件更新描述为文件系统原生事务。
+- materializer 默认继续要求 collection member 为 UTF-8；只有 validator 对具体 collection 显式声明的
+  `.xlsx` 扩展名可以按二进制读取。`memo-cards` 的 request source 仍二次要求 UTF-8，受管 XLSX 则由其
+  严格校验 OOXML。
+- publish 在全部授权 output root 的锁集内重新规划，并把已发布但尚未 materialize 的受管 Markdown 纳入
+  inventory，防止不同目标并发或顺序绕过跨文件去重；来源快照在 artifact-set 提交前后都执行 CAS。
+  `verify` 先以恢复模式加载 context 并独立扫描输出根中的 journal，即使 tracked Markdown 提交点缺失也
+  会报告并停止后续发布。
+
+本升级不上传 Markji、不改变远端卡片、不自动提交或推送。真实消费仓的 v1 目标迁移仍须使用相同 request
+通过精确预览、确认和发布后 no-op 验证。
+
+## D46：`memo-cards` 采用先拆卡、再分层的受控内容版式（2026-08-15）
+
+用户在真实复习界面中发现：模板本身已经可用，但复合题面和单段长答案仍会形成连续多行大字与正文，
+锚点和来源也会进一步拉长卡片。本轮结合用户提供的官方内容语法 PDF、墨墨官方论坛关于密集卡的回复、
+SuperMemo 的 minimum information／optimize wording 原则，以及 signaling 研究，确定如下现役规则：
+
+- 版式不能补救过载。Agent 先把材料改写为单一、短促的回忆目标；两个可独立评分的问题优先拆卡，
+  只有不可拆的 2–5 步因果链保留为机制卡。可见来源使用短标签，完整路径与 hash 留在受管 manifest。
+- 普通短内容继续使用单行 string 或 `parts`。复杂答案可用与 `parts` 二选一的 `blocks`；工具支持
+  `lead`、`point`、`display`、`boundary`，绝对上限 8 个。lead／boundary 可按卡片语言覆盖短标签，
+  point 使用短维度标签，display 只承载整行公式或图片。
+- 工具确定性生成视觉层级：绿色粗体只标示结论标签，普通粗体和项目符号标示步骤，橙色粗体标示条件／
+  失效边界，红色继续专用于真实错误，灰色继续专用于来源元数据。lead 后和 boundary 前生成留白；正文
+  不为装饰叠加颜色、背景、字号或重复 emoji。
+- Agent 仍不得手写 Markji。`T` 只包同一行的短标签；`E` 与 `Pic` 按官方说明独占渲染行，不与普通
+  inline part 混排或嵌入 `T`。此前可把公式／图片与文本拼在同一 `parts` 行的宽松行为改为 fail closed。
+  只有占位符精确独占模板一行的 content 保持完整 parts 能力，并支持 blocks／display；被 `T`／`P`
+  包裹、位于 Choice 选项或带行前缀的 content 收紧为 string／纯 text parts，旧的 link、媒体和整行元素
+  请求必须移动到独占行字段或改写为安全文本。
+- XLSX 继续把生成结果保存为 inline string，不产生电子表格公式。换行、样式、卡片内容 hash、逐行 hash
+  与 artifact-set CAS 都由同一受控渲染结果派生；本次不改变模板字段、逻辑身份算法或发布事务。
+
+本轮只升级中央 Skill、参考与测试，不改写消费仓现有卡片，不上传 Markji，也不提交或推送 Git。消费仓
+后续刷新旧卡时，内容变化仍须经过正常预览和授权边界。
+
+## D47：`memo-cards` 随 Skill 固定保存 Markji 内容语法 PDF（2026-08-15）
+
+用户明确要求把本轮核验使用的《墨墨记忆卡「内容语法」说明》PDF 纳入中央 `memo-cards` Skill。D29
+与 D34 中“不随中央 Skill 分发完整原文”的表述保留为当时的历史决策；现役参考分发边界由本决策取代：
+
+- 用户提供的 PDF 以 `references/markji-content-syntax.pdf` 固定保存，SHA-256 为
+  `57438a84a630ab9f8897bed53cedb8899b09a55b816c09edc480eeed96a88201`。仓库不再依赖工作区外路径，
+  也不另存第二份 Markdown 原文。
+- `SKILL.md` 继续优先路由到精简兼容说明；只有修改渲染器、核对原始示例或判断当前精简面未覆盖的
+  语法时，才按需加载 PDF。固定快照不替代 Markji 当前网页帮助、表格导入协议或真实客户端验收。
+- PDF 作为二进制 reference 随 Skill 源摘要和 materialization 一起复制；`.gitattributes` 明确按 binary
+  处理。聚焦测试固定文件签名与 SHA-256，并验证入口和兼容说明都能定位该参考。
+
+本决策只增加中央参考资料及其路由和完整性验证，不改变模板 registry、内容渲染、XLSX 格式、卡片身份
+或发布授权边界，也不自动刷新消费仓卡片、提交或推送 Git。

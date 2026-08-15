@@ -701,11 +701,41 @@ def validate_materialized_context(repository_config, skill_config):
         ):
             materialize_skills.build_plan(self.repo, self.central, self.config)
 
-    def test_v2_rejects_non_utf8_collection_members(self) -> None:
+    def test_v2_rejects_undeclared_binary_collection_members(self) -> None:
         self.enable_context_fixture()
-        binary = self.repo / "records" / "binary.md"
+        binary = self.repo / "records" / "cards.xlsx"
         binary.write_bytes(b"\xff\xfe")
-        git(self.repo, "add", "records/binary.md")
+        git(self.repo, "add", "records/cards.xlsx")
+
+        with self.assertRaisesRegex(materialize_skills.SyncError, "valid UTF-8"):
+            materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_allows_only_declared_binary_collection_extensions(self) -> None:
+        self.enable_context_fixture()
+        validator = self.central / "skills" / "demo-skill" / "scripts" / "context.py"
+        source = validator.read_text(encoding="utf-8")
+        source = source.replace(
+            '        "write_paths": [skill_config["output_path"]],\n',
+            '        "write_paths": [skill_config["output_path"]],\n'
+            '        "binary_collection_extensions": {skill_config["collection"]: [".xlsx"]},\n',
+        )
+        validator.write_text(source, encoding="utf-8")
+        self.commit_central("declare fixture binary collection extension")
+        binary = self.repo / "records" / "cards.xlsx"
+        binary.write_bytes(b"\xff\xfe")
+        git(self.repo, "add", "records/cards.xlsx")
+
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+        context = json.loads(
+            (self.target() / materialize_skills.CONTEXT_FILE).read_text(encoding="utf-8")
+        )
+        self.assertIn("records/cards.xlsx", context["allowlist"]["tracked_files"])
+
+    def test_v2_still_rejects_non_utf8_explicit_tracked_files(self) -> None:
+        self.enable_context_fixture()
+        explicit = self.repo / "facts" / "input.md"
+        explicit.write_bytes(b"\xff\xfe")
+        git(self.repo, "add", "facts/input.md")
 
         with self.assertRaisesRegex(materialize_skills.SyncError, "valid UTF-8"):
             materialize_skills.build_plan(self.repo, self.central, self.config)

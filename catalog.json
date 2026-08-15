@@ -155,6 +155,9 @@
         "state": "implemented",
         "topics": [
           "managed-markji-staging",
+          "managed-markdown-per-template-xlsx",
+          "retrieval-first-content-layout",
+          "bundled-markji-syntax-snapshot",
           "deterministic-artifacts-and-cas",
           "source-and-inventory-safety"
         ]

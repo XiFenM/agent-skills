@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Deterministically prepare, verify, and publish managed Markji staging cards.
+"""Deterministically prepare, verify, and publish managed Markji card bundles.
 
 The agent owns semantic judgement.  This standard-library tool owns the fragile
-mechanics: strict configuration, stable identities, templates, TSV validation,
-managed manifests, derived inventory, previews, CAS, and atomic publication.
+mechanics: strict configuration, stable identities, templates, deterministic
+XLSX rendering, managed manifests, derived inventory, previews, CAS, and
+artifact-set publication.
 """
 
 from __future__ import annotations
@@ -11,25 +12,32 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import io
 import ipaddress
 import json
 import os
 import re
-import sys
 import tempfile
 import unicodedata
 import uuid
+import zipfile
+from collections.abc import Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Mapping, Sequence, cast
+from typing import Any, Iterator, cast
 from urllib.parse import urlsplit
-
+from xml.etree import ElementTree
+from xml.sax.saxutils import escape as xml_escape
 
 REPOSITORY_SCHEMA = "agent-skills.repository/v1"
 CONFIG_SCHEMA = "agent-skills.memo-cards/v1"
 CONTEXT_SCHEMA = "memo-cards.context/v1"
 REQUEST_SCHEMA = "memo-cards.request/v1"
-ARTIFACT_SCHEMA = "memo-cards.artifact/v1"
+ARTIFACT_SCHEMA_V1 = "memo-cards.artifact/v1"
+ARTIFACT_SCHEMA = "memo-cards.artifact/v2"
+ARTIFACT_SCHEMAS = {ARTIFACT_SCHEMA_V1, ARTIFACT_SCHEMA}
+PREVIEW_SCHEMA = "memo-cards.preview/v2"
 REGISTRY_SCHEMA = "memo-cards.markji-template-registry/v1"
 WRAPPER_VERSION = 1
 MINIMUM_MARKJI_VERSION = (3, 8, 0)
@@ -57,7 +65,6 @@ COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 MARKJI_ID_RE = re.compile(r"^[A-Za-z0-9]+$")
 PLACEHOLDER_RE = re.compile(r"\{\{([^{}]+)\}\}")
 RESERVED_RE = re.compile(r"\[(?:T|F|Choice|P|Audio|Card|Pic|E)#")
-CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 WINDOWS_RESERVED_NAMES = {
     "con",
     "prn",
@@ -92,9 +99,27 @@ FIELD_TYPES = {
     "cloze-answer",
     "anchors-3-5",
 }
+CONTENT_BLOCK_TYPES = {"lead", "point", "display", "boundary"}
+CONTENT_BLOCK_MAXIMUM = 8
+CONTENT_BLOCK_LABEL_MAXIMUM = 20
+CONTENT_LEAD_COLOR = "36b59d"
+CONTENT_BOUNDARY_COLOR = "c47f17"
 
 TEMPLATE_ASSET = (
     Path(__file__).resolve().parents[1] / "assets" / "markji-3.8-templates.json"
+)
+XLSX_SHEET_NAME = "cards"
+XLSX_MAX_BYTES = 32 * 1024 * 1024
+XLSX_MAX_MEMBER_BYTES = 16 * 1024 * 1024
+XLSX_MAX_CELL_CHARACTERS = 32_767
+PUBLICATION_LOCK_NAME = ".memo-cards-publication.lock"
+TRANSACTION_JOURNAL_SUFFIX = ".memo-cards-transaction.json"
+XLSX_MEMBERS = (
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/worksheets/sheet1.xml",
 )
 
 
@@ -156,6 +181,8 @@ class Artifact:
     sha256: str
     body_drifted: bool
     header_drifted: bool
+    sidecar_reports: tuple[dict[str, Any], ...] = ()
+    sidecar_issues: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,12 +194,54 @@ class Inventory:
 
 
 @dataclass(frozen=True, slots=True)
+class PlannedFile:
+    relative_path: str
+    path: Path
+    role: str
+    template_id: str | None
+    current_sha256: str | None
+    candidate_sha256: str | None
+    candidate_bytes: bytes | None
+    operation: str
+
+
+@dataclass(frozen=True, slots=True)
+class SourcePrecondition:
+    relative_path: str
+    path: Path
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class Plan:
     data: dict[str, Any]
     candidate_text: str | None
     candidate_sha256: str | None
     current_sha256: str | None
     target_path: Path
+    files: tuple[PlannedFile, ...]
+    source_preconditions: tuple[SourcePrecondition, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateTable:
+    template_id: str
+    template_version: str
+    display_name: str
+    headers: tuple[str, ...]
+    rows: tuple[tuple[str, ...], ...]
+    logical_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class XlsxArtifact:
+    template_id: str
+    relative_path: str
+    content: bytes
+    sha256: str
+    byte_size: int
+    table_sha256: str
+    row_sha256: tuple[str, ...]
 
 
 def _canonical_bytes(value: Any) -> bytes:
@@ -198,7 +267,11 @@ def _sha256_text(value: str) -> str:
 
 def _sha256_file(path: Path) -> str:
     try:
-        return _sha256_bytes(path.read_bytes())
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
     except OSError as exc:
         raise MemoCardsError(
             "integrity", "cannot hash file", details={"path": str(path)}
@@ -554,6 +627,16 @@ def validate_materialized_context(
             for pattern in record["patterns"]
         }
     )
+    binary_collection_extensions = {
+        collection: [".xlsx"]
+        for collection in sorted(
+            {
+                _collection_root(pattern, f"inventory {record['id']}")
+                for record in skill["output_collections"]
+                for pattern in record["inventory_patterns"]
+            }
+        )
+    }
     read_handoffs = sorted(
         (
             {"path": pattern, "producer": record["producer"]}
@@ -568,6 +651,7 @@ def validate_materialized_context(
         "tracked_files": tracked_files,
         "tracked_collections": tracked_collections,
         "write_paths": write_paths,
+        "binary_collection_extensions": binary_collection_extensions,
         "read_handoffs": read_handoffs,
     }
 
@@ -689,7 +773,12 @@ def _windows_alias_relative(root: Path, absolute_path: Path) -> str:
     raise ValueError("context has no repository-root ancestor")
 
 
-def _load_runtime_context(root: Path, context_path: Path) -> dict[str, Any]:
+def _load_runtime_context(
+    root: Path,
+    context_path: Path,
+    *,
+    check_tracked_files: bool = True,
+) -> dict[str, Any]:
     try:
         absolute_context = Path(os.path.abspath(os.fspath(context_path)))
         common = Path(os.path.commonpath([root, absolute_context]))
@@ -763,15 +852,16 @@ def _load_runtime_context(root: Path, context_path: Path) -> dict[str, Any]:
                 "materialized context contains a tracked file outside declared collections",
                 details={"path": relative},
             )
-        path = _resolve_under(
-            root, relative, label="materialized tracked file", must_exist=True
-        )
-        if not path.is_file() or _is_link_or_junction(path):
-            raise MemoCardsError(
-                "safety",
-                "materialized tracked file must remain a regular non-link file",
-                details={"path": relative},
+        if check_tracked_files:
+            path = _resolve_under(
+                root, relative, label="materialized tracked file", must_exist=True
             )
+            if not path.is_file() or _is_link_or_junction(path):
+                raise MemoCardsError(
+                    "safety",
+                    "materialized tracked file must remain a regular non-link file",
+                    details={"path": relative},
+                )
     return wrapper
 
 
@@ -929,9 +1019,11 @@ def _resolve_under(
 def _plain_text(value: Any, label: str, *, maximum: int = 5000) -> str:
     text = _string(value, label, maximum=maximum, kind="integrity")
     if "\t" in text or "\n" in text or "\r" in text:
-        raise MemoCardsError("integrity", f"{label} must be a single TSV-safe line")
-    if CONTROL_RE.search(text):
-        raise MemoCardsError("integrity", f"{label} contains a control character")
+        raise MemoCardsError("integrity", f"{label} must be a single spreadsheet-safe line")
+    if any(unicodedata.category(character) in {"Cc", "Zl", "Zp"} for character in text):
+        raise MemoCardsError(
+            "integrity", f"{label} contains a control or Unicode line-separator character"
+        )
     if "]" in text or RESERVED_RE.search(text) or "---" in text or "```" in text:
         raise MemoCardsError("integrity", f"{label} collides with reserved Markji or staging syntax")
     return text
@@ -971,19 +1063,16 @@ def _markji_id(value: Any, label: str) -> str:
     return result
 
 
-def _render_content(value: Any, label: str) -> str:
-    if isinstance(value, str):
-        return _plain_text(value, label)
-    content = _object(value, label)
-    _strict_keys(content, label=label, required={"parts"}, kind="integrity")
-    parts = content["parts"]
+def _render_content_parts(parts: Any, label: str, *, mode: str = "single-line") -> str:
     if not isinstance(parts, list) or not parts:
-        raise MemoCardsError("integrity", f"{label}.parts must be a non-empty array")
+        raise MemoCardsError("integrity", f"{label} must be a non-empty array")
     rendered: list[str] = []
+    part_types: list[str] = []
     for index, raw in enumerate(parts):
-        part_label = f"{label}.parts[{index}]"
+        part_label = f"{label}[{index}]"
         part = _object(raw, part_label)
         part_type = _string(part.get("type"), f"{part_label}.type", maximum=30, kind="integrity")
+        part_types.append(part_type)
         if part_type == "text":
             _strict_keys(part, label=part_label, required={"type", "text"}, kind="integrity")
             rendered.append(_plain_text(part["text"], f"{part_label}.text"))
@@ -1036,17 +1125,218 @@ def _render_content(value: Any, label: str) -> str:
             rendered.append(f"[Card#ID/{'-'.join(normalized_ids)}#{display}]")
         else:
             raise MemoCardsError("integrity", f"{part_label}.type is unsupported")
+    display_types = {"formula", "image"}
+    has_display_part = bool(display_types.intersection(part_types))
+    if mode == "plain" and any(part_type != "text" for part_type in part_types):
+        raise MemoCardsError(
+            "integrity",
+            f"{label} is embedded by its template and accepts text parts only",
+        )
+    if mode == "inline" and has_display_part:
+        raise MemoCardsError(
+            "integrity",
+            f"{label} formula and image parts require a display block",
+        )
+    if mode == "display":
+        is_formula_line = part_types == ["formula"]
+        is_image_line = bool(part_types) and set(part_types) == {"image"}
+        if not (is_formula_line or is_image_line):
+            raise MemoCardsError(
+                "integrity",
+                f"{label} display block must contain one formula or only images",
+            )
+    elif mode == "single-line" and has_display_part:
+        is_formula_line = part_types == ["formula"]
+        is_image_line = bool(part_types) and set(part_types) == {"image"}
+        if not (is_formula_line or is_image_line):
+            raise MemoCardsError(
+                "integrity",
+                f"{label} formula and image parts must occupy the whole line",
+            )
     result = "".join(rendered)
     if "\t" in result or "\n" in result or "\r" in result:
-        raise MemoCardsError("integrity", f"{label} rendered unsafe TSV whitespace")
+        raise MemoCardsError("integrity", f"{label} rendered unsafe spreadsheet whitespace")
     return result
 
 
-def _render_field(value: Any, field_type: str, label: str) -> str:
+def _content_block_label(value: Any, label: str) -> str:
+    result = _plain_text(value, label, maximum=CONTENT_BLOCK_LABEL_MAXIMUM)
+    if result != result.strip():
+        raise MemoCardsError("integrity", f"{label} cannot have surrounding whitespace")
+    return result
+
+
+def _render_content_blocks(blocks: Any, label: str) -> str:
+    if (
+        not isinstance(blocks, list)
+        or not blocks
+        or len(blocks) > CONTENT_BLOCK_MAXIMUM
+    ):
+        raise MemoCardsError(
+            "integrity",
+            f"{label} must contain 1-{CONTENT_BLOCK_MAXIMUM} blocks",
+        )
+    rendered: list[tuple[str, str]] = []
+    for index, raw in enumerate(blocks):
+        block_label = f"{label}[{index}]"
+        block = _object(raw, block_label)
+        block_type = _string(
+            block.get("type"),
+            f"{block_label}.type",
+            maximum=20,
+            kind="integrity",
+        )
+        if block_type not in CONTENT_BLOCK_TYPES:
+            raise MemoCardsError(
+                "integrity", f"{block_label}.type is unsupported"
+            )
+        if block_type == "lead":
+            _strict_keys(
+                block,
+                label=block_label,
+                required={"type", "parts"},
+                optional={"label"},
+                kind="integrity",
+            )
+            if index != 0:
+                raise MemoCardsError(
+                    "integrity", f"{block_label} lead must be the first block"
+                )
+            body = _render_content_parts(
+                block["parts"], f"{block_label}.parts", mode="inline"
+            )
+            lead_label = _content_block_label(
+                block.get("label", "结论"), f"{block_label}.label"
+            )
+            rendered.append(
+                (
+                    block_type,
+                    f"[T#B,!{CONTENT_LEAD_COLOR}#{lead_label}]：{body}",
+                )
+            )
+            continue
+        if block_type == "point":
+            _strict_keys(
+                block,
+                label=block_label,
+                required={"type", "label", "parts"},
+                kind="integrity",
+            )
+            point_label = _content_block_label(
+                block["label"], f"{block_label}.label"
+            )
+            body = _render_content_parts(
+                block["parts"], f"{block_label}.parts", mode="inline"
+            )
+            rendered.append(
+                (block_type, f"• [T#B#{point_label}]：{body}")
+            )
+            continue
+        if block_type == "display":
+            _strict_keys(
+                block,
+                label=block_label,
+                required={"type", "parts"},
+                kind="integrity",
+            )
+            rendered.append(
+                (
+                    block_type,
+                    _render_content_parts(
+                        block["parts"],
+                        f"{block_label}.parts",
+                        mode="display",
+                    ),
+                )
+            )
+            continue
+        _strict_keys(
+            block,
+            label=block_label,
+            required={"type", "parts"},
+            optional={"label"},
+            kind="integrity",
+        )
+        if index != len(blocks) - 1:
+            raise MemoCardsError(
+                "integrity", f"{block_label} boundary must be the last block"
+            )
+        boundary_label = _content_block_label(
+            block.get("label", "边界"), f"{block_label}.label"
+        )
+        body = _render_content_parts(
+            block["parts"], f"{block_label}.parts", mode="inline"
+        )
+        rendered.append(
+            (
+                block_type,
+                f"[T#B,!{CONTENT_BOUNDARY_COLOR}#{boundary_label}]：{body}",
+            )
+        )
+    lines: list[str] = []
+    for index, (block_type, text) in enumerate(rendered):
+        if index and (rendered[index - 1][0] == "lead" or block_type == "boundary"):
+            lines.append("")
+        lines.append(text)
+    return "\n".join(lines)
+
+
+def _render_content(value: Any, label: str) -> str:
+    if isinstance(value, str):
+        return _plain_text(value, label)
+    content = _object(value, label)
+    if "parts" in content:
+        _strict_keys(content, label=label, required={"parts"}, kind="integrity")
+        return _render_content_parts(content["parts"], f"{label}.parts")
+    if "blocks" in content:
+        _strict_keys(content, label=label, required={"blocks"}, kind="integrity")
+        return _render_content_blocks(content["blocks"], f"{label}.blocks")
+    raise MemoCardsError(
+        "integrity", f"{label} must contain exactly one of parts or blocks"
+    )
+
+
+def _render_embedded_content(value: Any, label: str) -> str:
+    if isinstance(value, str):
+        return _plain_text(value, label)
+    content = _object(value, label)
+    _strict_keys(content, label=label, required={"parts"}, kind="integrity")
+    return _render_content_parts(content["parts"], f"{label}.parts", mode="plain")
+
+
+def _template_field_is_standalone(template: Template, field_name: str) -> bool:
+    placeholder = "{{" + field_name + "}}"
+    matching_contexts: list[tuple[str, bool]] = []
+    inside_choice = False
+    for line in template.body.splitlines():
+        if placeholder in line:
+            matching_contexts.append((line, inside_choice))
+        if line.startswith("[Choice#"):
+            inside_choice = True
+        elif inside_choice and line == "]":
+            inside_choice = False
+    if len(matching_contexts) != 1:
+        raise MemoCardsError(
+            "integrity",
+            f"template {template.template_id} field {field_name} must occur on one line",
+        )
+    line, nested_in_choice = matching_contexts[0]
+    return line == placeholder and not nested_in_choice
+
+
+def _render_field(
+    value: Any,
+    field_type: str,
+    label: str,
+    *,
+    standalone_content: bool = False,
+) -> str:
     if field_type == "text":
         return _plain_text(value, label)
     if field_type == "content":
-        return _render_content(value, label)
+        if standalone_content:
+            return _render_content(value, label)
+        return _render_embedded_content(value, label)
     if field_type.startswith("choice-answer-"):
         count = int(field_type.rsplit("-", 1)[1])
         answer = _plain_text(value, label, maximum=count)
@@ -1240,7 +1530,12 @@ def _validate_request(value: Any, context: Mapping[str, Any], registry: Registry
         if set(fields) != set(expected_fields):
             raise MemoCardsError("integrity", f"{label}.fields do not exactly match template {template_id}")
         rendered_fields = {
-            name: _render_field(fields[name], field_type, f"{label}.fields.{name}")
+            name: _render_field(
+                fields[name],
+                field_type,
+                f"{label}.fields.{name}",
+                standalone_content=_template_field_is_standalone(template, name),
+            )
             for name, field_type in template.fields
         }
         references = card["source_ids"]
@@ -1402,7 +1697,8 @@ def _verify_sources(
     root: Path,
     sources: Sequence[Mapping[str, str]],
     tracked_files: set[str],
-) -> None:
+) -> tuple[SourcePrecondition, ...]:
+    preconditions: list[SourcePrecondition] = []
     for source in sources:
         if source["path"] not in tracked_files:
             raise MemoCardsError(
@@ -1413,12 +1709,58 @@ def _verify_sources(
         path = _resolve_under(root, source["path"], label=f"source {source['id']}", must_exist=True)
         if not path.is_file() or _is_link_or_junction(path):
             raise MemoCardsError("safety", "source must be a regular non-link file", details={"path": source["path"]})
-        actual = _sha256_file(path)
+        try:
+            content = path.read_bytes()
+            content.decode("utf-8")
+        except UnicodeError as exc:
+            raise MemoCardsError(
+                "integrity",
+                "source must be valid UTF-8 text",
+                details={"path": source["path"]},
+            ) from exc
+        except OSError as exc:
+            raise MemoCardsError(
+                "integrity",
+                "cannot read source",
+                details={"path": source["path"]},
+            ) from exc
+        actual = _sha256_bytes(content)
         if actual != source["sha256"]:
             raise MemoCardsError(
                 "conflict",
                 "source changed after the request was prepared",
                 details={"path": source["path"], "expected": source["sha256"], "actual": actual},
+            )
+        preconditions.append(SourcePrecondition(source["path"], path, actual))
+    return tuple(preconditions)
+
+
+def _check_source_preconditions(
+    preconditions: Sequence[SourcePrecondition],
+) -> None:
+    for source in preconditions:
+        if (
+            not source.path.is_file()
+            or _is_link_or_junction(source.path)
+        ):
+            raise MemoCardsError(
+                "conflict",
+                "source changed during publication",
+                details={"path": source.relative_path, "expected": source.sha256, "actual": None},
+            )
+        try:
+            actual = _sha256_file(source.path)
+        except OSError as exc:
+            raise MemoCardsError(
+                "conflict",
+                "source changed during publication",
+                details={"path": source.relative_path, "expected": source.sha256, "actual": None},
+            ) from exc
+        if actual != source.sha256:
+            raise MemoCardsError(
+                "conflict",
+                "source changed during publication",
+                details={"path": source.relative_path, "expected": source.sha256, "actual": actual},
             )
 
 
@@ -1431,26 +1773,30 @@ def _validate_manifest(
     value: Any, body: str, path: str
 ) -> tuple[dict[str, Any], bool, bool]:
     manifest = _object(value, f"manifest {path}")
+    schema = manifest.get("schema")
+    if schema not in ARTIFACT_SCHEMAS:
+        raise MemoCardsError("integrity", f"managed manifest {path} has an unsupported schema")
+    required = {
+        "schema",
+        "adapter",
+        "template_registry_version",
+        "template_registry_sha256",
+        "target_collection",
+        "sources",
+        "source_fingerprint",
+        "candidate_sha256",
+        "cards",
+        "managed_body_sha256",
+        "manifest_payload_sha256",
+    }
+    if schema == ARTIFACT_SCHEMA:
+        required |= {"sidecars", "artifact_set_sha256"}
     _strict_keys(
         manifest,
         label=f"manifest {path}",
-        required={
-            "schema",
-            "adapter",
-            "template_registry_version",
-            "template_registry_sha256",
-            "target_collection",
-            "sources",
-            "source_fingerprint",
-            "candidate_sha256",
-            "cards",
-            "managed_body_sha256",
-            "manifest_payload_sha256",
-        },
+        required=required,
         kind="integrity",
     )
-    if manifest["schema"] != ARTIFACT_SCHEMA:
-        raise MemoCardsError("integrity", f"managed manifest {path} has an unsupported schema")
     _digest(manifest["template_registry_sha256"], f"manifest {path}.template_registry_sha256", kind="integrity")
     _digest(manifest["source_fingerprint"], f"manifest {path}.source_fingerprint", kind="integrity")
     _digest(manifest["candidate_sha256"], f"manifest {path}.candidate_sha256", kind="integrity")
@@ -1722,6 +2068,157 @@ def _validate_manifest(
 
     for logical_id in sorted(cards_by_id):
         visit_manifest_dependency(logical_id)
+    if schema == ARTIFACT_SCHEMA:
+        sidecars = manifest["sidecars"]
+        if not isinstance(sidecars, list):
+            raise MemoCardsError("integrity", f"manifest {path}.sidecars must be an array")
+        normalized_sidecars: list[dict[str, Any]] = []
+        exported_ids: list[str] = []
+        template_ids: list[str] = []
+        for index, raw in enumerate(sidecars):
+            label = f"manifest {path}.sidecars[{index}]"
+            sidecar = _object(raw, label, kind="integrity")
+            _strict_keys(
+                sidecar,
+                label=label,
+                required={
+                    "kind",
+                    "path",
+                    "sha256",
+                    "byte_size",
+                    "table_sha256",
+                    "template_id",
+                    "template_version",
+                    "sheet_name",
+                    "columns",
+                    "row_count",
+                    "rows",
+                },
+                kind="integrity",
+            )
+            template_id = _string(
+                sidecar["template_id"], f"{label}.template_id", maximum=80, kind="integrity"
+            )
+            if not TEMPLATE_ID_RE.fullmatch(template_id):
+                raise MemoCardsError("integrity", f"{label}.template_id is invalid")
+            template_version = _string(
+                sidecar["template_version"],
+                f"{label}.template_version",
+                maximum=32,
+                kind="integrity",
+            )
+            if not re.fullmatch(r"\d+\.\d+\.\d+", template_version):
+                raise MemoCardsError("integrity", f"{label}.template_version is invalid")
+            relative = _safe_relative(sidecar["path"], f"{label}.path")
+            if relative != _xlsx_relative_path(path, template_id):
+                raise MemoCardsError("integrity", f"{label}.path is not derived from its Markdown target")
+            byte_size = sidecar["byte_size"]
+            row_count = sidecar["row_count"]
+            if (
+                not isinstance(byte_size, int)
+                or isinstance(byte_size, bool)
+                or not 1 <= byte_size <= XLSX_MAX_BYTES
+                or not isinstance(row_count, int)
+                or isinstance(row_count, bool)
+                or row_count < 1
+            ):
+                raise MemoCardsError("integrity", f"{label} has invalid size or row count")
+            columns = sidecar["columns"]
+            if not isinstance(columns, list) or not columns:
+                raise MemoCardsError("integrity", f"{label}.columns must be a non-empty array")
+            normalized_columns = [
+                _plain_text(column, f"{label}.columns[{column_index}]", maximum=100)
+                for column_index, column in enumerate(columns)
+            ]
+            if normalized_columns != columns or len(set(columns)) != len(columns):
+                raise MemoCardsError("integrity", f"{label}.columns are not canonical")
+            raw_rows = sidecar["rows"]
+            if not isinstance(raw_rows, list) or len(raw_rows) != row_count:
+                raise MemoCardsError("integrity", f"{label}.rows do not match row_count")
+            normalized_rows: list[dict[str, str]] = []
+            for row_index, raw_row in enumerate(raw_rows):
+                row = _object(raw_row, f"{label}.rows[{row_index}]", kind="integrity")
+                _strict_keys(
+                    row,
+                    label=f"{label}.rows[{row_index}]",
+                    required={"logical_id", "content_sha256", "row_sha256"},
+                    kind="integrity",
+                )
+                logical_id = _plain_text(
+                    row["logical_id"], f"{label}.rows[{row_index}].logical_id", maximum=27
+                )
+                if not LOGICAL_ID_RE.fullmatch(logical_id):
+                    raise MemoCardsError("integrity", f"{label} contains an invalid logical ID")
+                card = cards_by_id.get(logical_id)
+                if (
+                    card is None
+                    or card["lifecycle"] != "active"
+                    or card["template_id"] != template_id
+                    or card["template_version"] != template_version
+                    or card["content_sha256"] != row["content_sha256"]
+                ):
+                    raise MemoCardsError("integrity", f"{label} row does not match its active card")
+                normalized_rows.append(
+                    {
+                        "logical_id": logical_id,
+                        "content_sha256": _digest(
+                            row["content_sha256"],
+                            f"{label}.rows[{row_index}].content_sha256",
+                            kind="integrity",
+                        ),
+                        "row_sha256": _digest(
+                            row["row_sha256"],
+                            f"{label}.rows[{row_index}].row_sha256",
+                            kind="integrity",
+                        ),
+                    }
+                )
+                exported_ids.append(logical_id)
+            normalized_sidecars.append(
+                {
+                    "kind": _string(sidecar["kind"], f"{label}.kind", maximum=50, kind="integrity"),
+                    "path": relative,
+                    "sha256": _digest(sidecar["sha256"], f"{label}.sha256", kind="integrity"),
+                    "byte_size": byte_size,
+                    "table_sha256": _digest(
+                        sidecar["table_sha256"], f"{label}.table_sha256", kind="integrity"
+                    ),
+                    "template_id": template_id,
+                    "template_version": template_version,
+                    "sheet_name": _string(
+                        sidecar["sheet_name"], f"{label}.sheet_name", maximum=31, kind="integrity"
+                    ),
+                    "columns": normalized_columns,
+                    "row_count": row_count,
+                    "rows": normalized_rows,
+                }
+            )
+            if sidecar["kind"] != "markji-import-xlsx" or sidecar["sheet_name"] != XLSX_SHEET_NAME:
+                raise MemoCardsError("integrity", f"{label} has an unsupported workbook contract")
+            template_ids.append(template_id)
+        expected_exported = [
+            card["logical_id"]
+            for template_id in template_ids
+            for card in cards
+            if card["lifecycle"] == "active" and card["template_id"] == template_id
+        ]
+        if (
+            normalized_sidecars != sidecars
+            or len(template_ids) != len(set(template_ids))
+            or exported_ids != expected_exported
+        ):
+            raise MemoCardsError("integrity", f"manifest {path} sidecars are not canonical")
+        artifact_set_basis = {
+            "managed_body_sha256": manifest["managed_body_sha256"],
+            "sidecars": sidecars,
+        }
+        artifact_set_digest = _digest(
+            manifest["artifact_set_sha256"],
+            f"manifest {path}.artifact_set_sha256",
+            kind="integrity",
+        )
+        if _digest_value(artifact_set_basis) != artifact_set_digest:
+            raise MemoCardsError("integrity", f"manifest {path} artifact-set digest is invalid")
     return manifest, _sha256_text(body) != body_digest, header_drifted
 
 
@@ -1733,7 +2230,7 @@ def _parse_artifact(text: str, path: str, *, file_sha256: str | None = None) -> 
         value = json.loads(match.group("header"))
     except json.JSONDecodeError:
         return None
-    if not isinstance(value, dict) or value.get("schema") != ARTIFACT_SCHEMA:
+    if not isinstance(value, dict) or value.get("schema") not in ARTIFACT_SCHEMAS:
         return None
     body = text[match.end() :]
     manifest, body_drifted, header_drifted = _validate_manifest(value, body, path)
@@ -1748,13 +2245,104 @@ def _parse_artifact(text: str, path: str, *, file_sha256: str | None = None) -> 
     )
 
 
+def _inspect_artifact_sidecars(
+    root: Path, artifact: Artifact
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+    if artifact.manifest["schema"] != ARTIFACT_SCHEMA:
+        return (), ()
+    reports: list[dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
+    for sidecar in artifact.manifest["sidecars"]:
+        relative = sidecar["path"]
+        path = _resolve_under(root, relative, label="managed XLSX sidecar", must_exist=False)
+        report: dict[str, Any] = {
+            "path": relative,
+            "template_id": sidecar["template_id"],
+            "expected_sha256": sidecar["sha256"],
+            "actual_sha256": None,
+            "row_count": sidecar["row_count"],
+            "status": "missing",
+        }
+        if not path.exists():
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        if not path.is_file() or _is_link_or_junction(path):
+            report["status"] = "unsafe-file-type"
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        try:
+            content = path.read_bytes()
+        except OSError as exc:
+            report["status"] = "unreadable"
+            report["error"] = str(exc)
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        actual_sha256 = _sha256_bytes(content)
+        report["actual_sha256"] = actual_sha256
+        report["actual_byte_size"] = len(content)
+        if actual_sha256 != sidecar["sha256"]:
+            report["status"] = "sha256-mismatch"
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        if len(content) != sidecar["byte_size"]:
+            report["status"] = "byte-size-mismatch"
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        try:
+            headers, rows = _parse_xlsx(content, f"managed XLSX sidecar {relative}")
+        except MemoCardsError as exc:
+            report["status"] = "invalid-xlsx"
+            report["error"] = exc.message
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        row_sha256 = [_digest_value(list(row)) for row in rows]
+        table_sha256 = _digest_value(
+            {"columns": list(headers), "rows": [list(row) for row in rows]}
+        )
+        expected_rows = [row["row_sha256"] for row in sidecar["rows"]]
+        if (
+            list(headers) != sidecar["columns"]
+            or len(rows) != sidecar["row_count"]
+            or row_sha256 != expected_rows
+            or table_sha256 != sidecar["table_sha256"]
+        ):
+            report["status"] = "table-mismatch"
+            reports.append(report)
+            issues.append(dict(report))
+            continue
+        report["status"] = "ok"
+        reports.append(report)
+    return tuple(reports), tuple(issues)
+
+
 def _inventory_files(
     root: Path, patterns: Sequence[str], tracked_files: set[str]
 ) -> list[Path]:
+    relatives = {
+        relative for relative in tracked_files if _matches(relative, patterns)
+    }
+    # A newly published managed target is intentionally usable before the next
+    # Git add/materialization cycle.  Discover output candidates inside the
+    # already-authorized inventory roots so sequential publishes cannot bypass
+    # cross-file logical-ID uniqueness during that window.
+    for pattern in patterns:
+        for candidate in root.glob(pattern):
+            try:
+                relative = candidate.relative_to(root).as_posix()
+            except ValueError as exc:  # pragma: no cover - Path.glob is rooted
+                raise MemoCardsError(
+                    "safety", "inventory candidate escapes the repository"
+                ) from exc
+            relatives.add(relative)
     return [
         root.joinpath(*PurePosixPath(relative).parts)
-        for relative in sorted(tracked_files)
-        if _matches(relative, patterns)
+        for relative in sorted(relatives)
     ]
 
 
@@ -1774,21 +2362,55 @@ def _scan_inventory(root: Path, runtime: Mapping[str, Any]) -> Inventory:
     fingerprint_rows: list[dict[str, Any]] = []
     for path in _inventory_files(root, patterns, tracked_files):
         relative = path.relative_to(root).as_posix()
-        safe = _resolve_under(root, relative, label="inventory path", must_exist=True)
+        is_tracked = relative in tracked_files
+        try:
+            safe = _resolve_under(
+                root, relative, label="inventory path", must_exist=True
+            )
+        except MemoCardsError:
+            if not is_tracked:
+                continue
+            raise
         if not safe.is_file() or _is_link_or_junction(safe):
+            if not is_tracked:
+                continue
             raise MemoCardsError("safety", "inventory contains a link or special file", details={"path": relative})
         try:
             raw = safe.read_bytes()
             text = raw.decode("utf-8")
         except (OSError, UnicodeError) as exc:
+            if not is_tracked:
+                continue
             raise MemoCardsError("integrity", "cannot read inventory file", details={"path": relative}) from exc
         file_sha256 = _sha256_bytes(raw)
-        artifact = _parse_artifact(text, relative, file_sha256=file_sha256)
+        try:
+            artifact = _parse_artifact(text, relative, file_sha256=file_sha256)
+        except MemoCardsError:
+            if not is_tracked:
+                continue
+            raise
         if artifact is None:
+            if not is_tracked:
+                # Untracked arbitrary Markdown is not inventory.  Only a
+                # self-validating managed artifact may bridge the short window
+                # before the next materialization.
+                continue
             digest = file_sha256
             legacy.append({"path": relative, "sha256": digest})
             fingerprint_rows.append({"path": relative, "sha256": digest, "kind": "legacy"})
             continue
+        sidecar_reports, sidecar_issues = _inspect_artifact_sidecars(root, artifact)
+        artifact = Artifact(
+            artifact.path,
+            artifact.text,
+            artifact.manifest,
+            artifact.body,
+            artifact.sha256,
+            artifact.body_drifted,
+            artifact.header_drifted,
+            sidecar_reports,
+            sidecar_issues,
+        )
         artifacts.append(artifact)
         fingerprint_rows.append(
             {
@@ -1796,6 +2418,7 @@ def _scan_inventory(root: Path, runtime: Mapping[str, Any]) -> Inventory:
                 "sha256": artifact.sha256,
                 "body_drifted": artifact.body_drifted,
                 "header_drifted": artifact.header_drifted,
+                "sidecars": list(artifact.sidecar_reports),
                 "kind": "managed",
             }
         )
@@ -1952,22 +2575,346 @@ def _lifecycle_allowed(previous: str | None, current: str) -> bool:
     return current in allowed.get(previous, set())
 
 
-def _render_body(cards: Sequence[Mapping[str, Any]], registry: Registry) -> str:
-    templates = registry.by_id
-    order = {template.template_id: index for index, template in enumerate(registry.templates)}
+def _template_tables(
+    cards: Sequence[Mapping[str, Any]], registry: Registry
+) -> tuple[TemplateTable, ...]:
     active = [card for card in cards if card["lifecycle"] == "active"]
-    lines = [
-        "# Markji 表格导入暂存",
-        "",
-        "> 供粘贴进 Markji 下载表格；这不是可直接上传的 TSV 文件。",
-        "",
-    ]
-    for template_id in sorted({card["template_id"] for card in active}, key=lambda item: order[item]):
-        template = templates[template_id]
+    tables: list[TemplateTable] = []
+    for template in registry.templates:
         group = sorted(
-            (card for card in active if card["template_id"] == template_id),
+            (card for card in active if card["template_id"] == template.template_id),
             key=lambda card: (card["rank"], card["logical_id"]),
         )
+        if not group:
+            continue
+        headers = tuple(name for name, _field_type in template.fields)
+        rows: list[tuple[str, ...]] = []
+        logical_ids: list[str] = []
+        for card in group:
+            row = tuple(card["rendered_fields"][name] for name in headers)
+            if len(row) != len(headers):
+                raise MemoCardsError(
+                    "integrity", f"card {card['logical_id']} rendered the wrong column count"
+                )
+            rows.append(row)
+            logical_ids.append(card["logical_id"])
+        tables.append(
+            TemplateTable(
+                template.template_id,
+                template.version,
+                template.display_name,
+                headers,
+                tuple(rows),
+                tuple(logical_ids),
+            )
+        )
+    return tuple(tables)
+
+
+def _xlsx_relative_path(markdown_target: str, template_id: str) -> str:
+    target = PurePosixPath(markdown_target)
+    if target.suffix != ".md":
+        raise MemoCardsError("integrity", "managed card target must end in .md")
+    filename = f"{target.stem}-{template_id}.xlsx"
+    if len(filename.encode("utf-8")) > 255 or len(filename.encode("utf-16-le")) // 2 > 255:
+        raise MemoCardsError("safety", "derived XLSX filename is too long")
+    return _safe_relative(
+        (target.parent / filename).as_posix(),
+        f"derived XLSX path for {template_id}",
+    )
+
+
+def _xlsx_column(index: int) -> str:
+    if index < 1 or index > 16_384:
+        raise MemoCardsError("integrity", "XLSX column index is outside Excel limits")
+    result = ""
+    remaining = index
+    while remaining:
+        remaining, remainder = divmod(remaining - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def _xlsx_cell_text(value: str, label: str) -> str:
+    utf16_units = sum(2 if ord(character) > 0xFFFF else 1 for character in value)
+    if utf16_units > XLSX_MAX_CELL_CHARACTERS:
+        raise MemoCardsError("integrity", f"{label} exceeds the XLSX cell character limit")
+    for character in value:
+        point = ord(character)
+        if not (
+            point in {0x09, 0x0A, 0x0D}
+            or 0x20 <= point <= 0xD7FF
+            or 0xE000 <= point <= 0xFFFD
+            or 0x10000 <= point <= 0x10FFFF
+        ):
+            raise MemoCardsError("integrity", f"{label} contains an XML-illegal character")
+    return xml_escape(value)
+
+
+def _xlsx_xml_documents(
+    headers: Sequence[str], rows: Sequence[Sequence[str]]
+) -> tuple[bytes, ...]:
+    if not headers or len(headers) > 16_384:
+        raise MemoCardsError("integrity", "XLSX headers must contain 1..16384 columns")
+    if len(rows) + 1 > 1_048_576:
+        raise MemoCardsError("integrity", "XLSX row count exceeds Excel limits")
+    if len(set(headers)) != len(headers):
+        raise MemoCardsError("integrity", "XLSX headers must be unique")
+    normalized_rows: list[tuple[str, ...]] = []
+    for row_index, raw_row in enumerate(rows, start=2):
+        row = tuple(raw_row)
+        if len(row) != len(headers):
+            raise MemoCardsError("integrity", f"XLSX row {row_index} has the wrong column count")
+        if not all(isinstance(cell, str) for cell in row):
+            raise MemoCardsError("integrity", f"XLSX row {row_index} contains a non-string cell")
+        normalized_rows.append(row)
+    all_rows = [tuple(headers), *normalized_rows]
+    row_xml: list[str] = []
+    for row_index, row in enumerate(all_rows, start=1):
+        cells: list[str] = []
+        for column_index, value in enumerate(row, start=1):
+            reference = f"{_xlsx_column(column_index)}{row_index}"
+            escaped = _xlsx_cell_text(value, f"XLSX cell {reference}")
+            cells.append(
+                f'<c r="{reference}" t="inlineStr"><is><t xml:space="preserve">'
+                f"{escaped}</t></is></c>"
+            )
+        row_xml.append(f'<row r="{row_index}">' + "".join(cells) + "</row>")
+    last_reference = f"{_xlsx_column(len(headers))}{len(all_rows)}"
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/xl/workbook.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet1.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        '</Types>\n'
+    )
+    root_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        'Target="xl/workbook.xml"/>'
+        '</Relationships>\n'
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        f'<sheets><sheet name="{XLSX_SHEET_NAME}" sheetId="1" r:id="rId1"/></sheets>'
+        '</workbook>\n'
+    )
+    workbook_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        'Target="worksheets/sheet1.xml"/>'
+        '</Relationships>\n'
+    )
+    worksheet = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<dimension ref="A1:{last_reference}"/><sheetData>{"".join(row_xml)}</sheetData>'
+        '</worksheet>\n'
+    )
+    return tuple(
+        document.encode("utf-8")
+        for document in (content_types, root_rels, workbook, workbook_rels, worksheet)
+    )
+
+
+def _render_xlsx(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> bytes:
+    documents = _xlsx_xml_documents(headers, rows)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(
+        buffer, "w", compression=zipfile.ZIP_STORED, allowZip64=False
+    ) as archive:
+        for name, payload in zip(XLSX_MEMBERS, documents, strict=True):
+            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = 0
+            info.create_version = 20
+            info.extract_version = 20
+            info.external_attr = 0x20
+            info.internal_attr = 0
+            info.extra = b""
+            info.comment = b""
+            archive.writestr(info, payload)
+    content = buffer.getvalue()
+    if len(content) > XLSX_MAX_BYTES:
+        raise MemoCardsError("integrity", "generated XLSX exceeds the managed size limit")
+    return content
+
+
+def _xml_root(payload: bytes, label: str) -> ElementTree.Element:
+    upper = payload.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+        raise MemoCardsError("integrity", f"{label} contains a forbidden XML declaration")
+    try:
+        return ElementTree.fromstring(payload)
+    except ElementTree.ParseError as exc:
+        raise MemoCardsError("integrity", f"{label} is malformed XML") from exc
+
+
+def _parse_xlsx(content: bytes, label: str) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
+    if len(content) > XLSX_MAX_BYTES:
+        raise MemoCardsError("integrity", f"{label} exceeds the managed XLSX size limit")
+    try:
+        with zipfile.ZipFile(io.BytesIO(content), "r") as archive:
+            if archive.comment:
+                raise MemoCardsError("integrity", f"{label} has a noncanonical ZIP comment")
+            infos = archive.infolist()
+            names = tuple(info.filename for info in infos)
+            if names != XLSX_MEMBERS or len(names) != len(set(names)):
+                raise MemoCardsError("integrity", f"{label} has unexpected XLSX package members")
+            payloads: dict[str, bytes] = {}
+            for info in infos:
+                if (
+                    info.flag_bits & 0x1
+                    or info.compress_type != zipfile.ZIP_STORED
+                    or info.file_size > XLSX_MAX_MEMBER_BYTES
+                    or info.extra
+                    or info.comment
+                ):
+                    raise MemoCardsError("integrity", f"{label} has unsafe XLSX ZIP metadata")
+                payloads[info.filename] = archive.read(info)
+    except (zipfile.BadZipFile, OSError, RuntimeError) as exc:
+        raise MemoCardsError("integrity", f"{label} is not a readable XLSX package") from exc
+
+    content_types = _xml_root(payloads[XLSX_MEMBERS[0]], f"{label} content types")
+    relationships = _xml_root(payloads[XLSX_MEMBERS[1]], f"{label} package relationships")
+    workbook = _xml_root(payloads[XLSX_MEMBERS[2]], f"{label} workbook")
+    workbook_rels = _xml_root(payloads[XLSX_MEMBERS[3]], f"{label} workbook relationships")
+    worksheet = _xml_root(payloads[XLSX_MEMBERS[4]], f"{label} worksheet")
+    content_namespace = "{http://schemas.openxmlformats.org/package/2006/content-types}"
+    relationship_namespace = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+    spreadsheet_namespace = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    office_rel_namespace = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+    overrides = {
+        (item.attrib.get("PartName"), item.attrib.get("ContentType"))
+        for item in content_types.findall(f"{content_namespace}Override")
+    }
+    if overrides != {
+        (
+            "/xl/workbook.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+        ),
+        (
+            "/xl/worksheets/sheet1.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+        ),
+    }:
+        raise MemoCardsError("integrity", f"{label} has unexpected XLSX content types")
+    root_relationships = relationships.findall(f"{relationship_namespace}Relationship")
+    workbook_relationships = workbook_rels.findall(f"{relationship_namespace}Relationship")
+    if len(root_relationships) != 1 or root_relationships[0].attrib != {
+        "Id": "rId1",
+        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+        "Target": "xl/workbook.xml",
+    }:
+        raise MemoCardsError("integrity", f"{label} has unexpected package relationships")
+    if len(workbook_relationships) != 1 or workbook_relationships[0].attrib != {
+        "Id": "rId1",
+        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+        "Target": "worksheets/sheet1.xml",
+    }:
+        raise MemoCardsError("integrity", f"{label} has unexpected workbook relationships")
+    sheets = workbook.findall(f"{spreadsheet_namespace}sheets/{spreadsheet_namespace}sheet")
+    if len(sheets) != 1 or sheets[0].attrib != {
+        "name": XLSX_SHEET_NAME,
+        "sheetId": "1",
+        f"{office_rel_namespace}id": "rId1",
+    }:
+        raise MemoCardsError("integrity", f"{label} must contain one '{XLSX_SHEET_NAME}' worksheet")
+
+    sheet_data = worksheet.find(f"{spreadsheet_namespace}sheetData")
+    dimensions = worksheet.findall(f"{spreadsheet_namespace}dimension")
+    if sheet_data is None or len(dimensions) != 1:
+        raise MemoCardsError("integrity", f"{label} has an invalid worksheet structure")
+    parsed_rows: list[tuple[str, ...]] = []
+    expected_width: int | None = None
+    for row_index, row in enumerate(sheet_data.findall(f"{spreadsheet_namespace}row"), start=1):
+        if row.attrib != {"r": str(row_index)}:
+            raise MemoCardsError("integrity", f"{label} has nonsequential XLSX rows")
+        parsed_cells: list[str] = []
+        cells = row.findall(f"{spreadsheet_namespace}c")
+        if expected_width is None:
+            expected_width = len(cells)
+        if not cells or len(cells) != expected_width:
+            raise MemoCardsError("integrity", f"{label} has a sparse or ragged XLSX row")
+        for column_index, cell in enumerate(cells, start=1):
+            expected_reference = f"{_xlsx_column(column_index)}{row_index}"
+            if cell.attrib != {"r": expected_reference, "t": "inlineStr"}:
+                raise MemoCardsError("integrity", f"{label} contains a non-text XLSX cell")
+            children = list(cell)
+            if len(children) != 1 or children[0].tag != f"{spreadsheet_namespace}is":
+                raise MemoCardsError("integrity", f"{label} contains an invalid inline string")
+            text_children = list(children[0])
+            if len(text_children) != 1 or text_children[0].tag != f"{spreadsheet_namespace}t":
+                raise MemoCardsError("integrity", f"{label} contains rich or malformed text")
+            parsed_cells.append(text_children[0].text or "")
+        parsed_rows.append(tuple(parsed_cells))
+    if not parsed_rows:
+        raise MemoCardsError("integrity", f"{label} has no header row")
+    headers = parsed_rows[0]
+    rows = tuple(parsed_rows[1:])
+    expected_dimension = f"A1:{_xlsx_column(len(headers))}{len(parsed_rows)}"
+    if dimensions[0].attrib != {"ref": expected_dimension}:
+        raise MemoCardsError("integrity", f"{label} has an invalid worksheet dimension")
+    rebuilt = _render_xlsx(headers, rows)
+    if rebuilt != content:
+        raise MemoCardsError("integrity", f"{label} is not in canonical memo-cards XLSX form")
+    return headers, rows
+
+
+def _render_workbooks(
+    markdown_target: str, tables: Sequence[TemplateTable]
+) -> tuple[XlsxArtifact, ...]:
+    result: list[XlsxArtifact] = []
+    for table in tables:
+        content = _render_xlsx(table.headers, table.rows)
+        parsed_headers, parsed_rows = _parse_xlsx(
+            content, f"generated XLSX for {table.template_id}"
+        )
+        if parsed_headers != table.headers or parsed_rows != table.rows:
+            raise MemoCardsError("integrity", "generated XLSX failed semantic round-trip")
+        row_sha256 = tuple(_digest_value(list(row)) for row in table.rows)
+        result.append(
+            XlsxArtifact(
+                table.template_id,
+                _xlsx_relative_path(markdown_target, table.template_id),
+                content,
+                _sha256_bytes(content),
+                len(content),
+                _digest_value(
+                    {"columns": list(table.headers), "rows": [list(row) for row in table.rows]}
+                ),
+                row_sha256,
+            )
+        )
+    return tuple(result)
+
+
+def _render_body(
+    tables: Sequence[TemplateTable], workbooks: Sequence[XlsxArtifact], registry: Registry
+) -> str:
+    templates = registry.by_id
+    workbooks_by_template = {workbook.template_id: workbook for workbook in workbooks}
+    lines = [
+        "# Markji 表格导入卡片",
+        "",
+        "> Markdown 保留受管元数据与模板定义；卡片数据请使用下列按模板拆分的 XLSX 文件导入。",
+        "",
+    ]
+    for table in tables:
+        template = templates[table.template_id]
+        workbook = workbooks_by_template[table.template_id]
+        filename = PurePosixPath(workbook.relative_path).name
         lines.extend(
             [
                 f"## {template.display_name}",
@@ -1978,18 +2925,10 @@ def _render_body(cards: Sequence[Mapping[str, Any]], registry: Registry) -> str:
                 template.body,
                 "```",
                 "",
-                "```tsv",
-                "\t".join(name for name, _field_type in template.fields),
+                f"导入文件：[{filename}]({filename})（{len(table.rows)} 张卡）",
+                "",
             ]
         )
-        for card in group:
-            row = [card["rendered_fields"][name] for name, _field_type in template.fields]
-            if any("\t" in cell or "\n" in cell or "\r" in cell for cell in row):
-                raise MemoCardsError("integrity", f"card {card['logical_id']} rendered an unsafe TSV row")
-            if len(row) != len(template.fields):
-                raise MemoCardsError("integrity", f"card {card['logical_id']} rendered the wrong column count")
-            lines.append("\t".join(row))
-        lines.extend(["```", ""])
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -2019,6 +2958,35 @@ def _manifest_card(card: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _manifest_sidecar(
+    table: TemplateTable,
+    workbook: XlsxArtifact,
+    cards_by_id: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "kind": "markji-import-xlsx",
+        "path": workbook.relative_path,
+        "sha256": workbook.sha256,
+        "byte_size": workbook.byte_size,
+        "table_sha256": workbook.table_sha256,
+        "template_id": table.template_id,
+        "template_version": table.template_version,
+        "sheet_name": XLSX_SHEET_NAME,
+        "columns": list(table.headers),
+        "row_count": len(table.rows),
+        "rows": [
+            {
+                "logical_id": logical_id,
+                "content_sha256": cards_by_id[logical_id]["content_sha256"],
+                "row_sha256": row_sha256,
+            }
+            for logical_id, row_sha256 in zip(
+                table.logical_ids, workbook.row_sha256, strict=True
+            )
+        ],
+    }
+
+
 def _unified_diff(current: str, candidate: str, target: str) -> str:
     return "".join(
         difflib.unified_diff(
@@ -2030,6 +2998,90 @@ def _unified_diff(current: str, candidate: str, target: str) -> str:
     )
 
 
+def _interrupted_transactions(
+    root: Path, runtime: Mapping[str, Any]
+) -> tuple[dict[str, Any], ...]:
+    """Find journals even when their Markdown commit point is absent."""
+
+    reports: dict[str, dict[str, Any]] = {}
+
+    def scan_error(error: OSError) -> None:
+        raise MemoCardsError(
+            "integrity",
+            "cannot scan memo-cards output roots for interrupted publications",
+            details={"path": error.filename},
+        ) from error
+
+    for relative_root in runtime["allowlist"]["write_paths"]:
+        output_root = _resolve_under(
+            root, relative_root, label="memo-cards write path", must_exist=False
+        )
+        if not output_root.exists():
+            continue
+        if not output_root.is_dir() or _is_link_or_junction(output_root):
+            raise MemoCardsError(
+                "safety",
+                "memo-cards write path must be a real directory",
+                details={"path": relative_root},
+            )
+        for directory, names, filenames in os.walk(
+            output_root, topdown=True, followlinks=False, onerror=scan_error
+        ):
+            directory_path = Path(directory)
+            names[:] = [
+                name
+                for name in names
+                if not _is_link_or_junction(directory_path / name)
+            ]
+            for filename in filenames:
+                if not (
+                    filename.startswith(".")
+                    and filename.endswith(TRANSACTION_JOURNAL_SUFFIX)
+                    and len(filename) > len(TRANSACTION_JOURNAL_SUFFIX) + 1
+                ):
+                    continue
+                journal = directory_path / filename
+                relative = journal.relative_to(root).as_posix()
+                if journal.is_file() and not _is_link_or_junction(journal):
+                    reports[relative] = {
+                        "path": relative,
+                        "sha256": _sha256_file(journal),
+                        "status": "present",
+                    }
+                else:
+                    reports[relative] = {
+                        "path": relative,
+                        "sha256": None,
+                        "status": "unsafe-entry",
+                    }
+    return tuple(reports[path] for path in sorted(reports))
+
+
+def _publication_lock_states(
+    root: Path, runtime: Mapping[str, Any]
+) -> tuple[dict[str, Any], ...]:
+    reports: list[dict[str, Any]] = []
+    for relative_root in runtime["allowlist"]["write_paths"]:
+        output_root = _resolve_under(
+            root, relative_root, label="memo-cards write path", must_exist=False
+        )
+        lock = output_root / PUBLICATION_LOCK_NAME
+        if not lock.exists() and not lock.is_symlink():
+            continue
+        relative = lock.relative_to(root).as_posix()
+        if lock.is_file() and not _is_link_or_junction(lock):
+            try:
+                digest = _sha256_file(lock)
+            except OSError:
+                digest = None
+            reports.append({"path": relative, "sha256": digest, "status": "present"})
+        else:
+            reports.append(
+                {"path": relative, "sha256": None, "status": "unsafe-entry"}
+            )
+    return tuple(sorted(reports, key=lambda report: report["path"]))
+
+
 def _prepare_plan(
     root: Path,
     runtime: Mapping[str, Any],
@@ -2039,7 +3091,14 @@ def _prepare_plan(
     context = runtime["context"]
     tracked_files = set(runtime["allowlist"]["tracked_files"])
     request = _validate_request(request_value, context, registry)
-    _verify_sources(root, request["sources"], tracked_files)
+    source_preconditions = _verify_sources(root, request["sources"], tracked_files)
+    interrupted_transactions = _interrupted_transactions(root, runtime)
+    if interrupted_transactions:
+        raise MemoCardsError(
+            "conflict",
+            "an interrupted memo-cards publication requires recovery",
+            details={"transactions": list(interrupted_transactions)},
+        )
     inventory = _scan_inventory(root, runtime)
     target_relative = request["target"]
     target_path = _resolve_under(root, target_relative, label="request target", must_exist=False)
@@ -2059,6 +3118,21 @@ def _prepare_plan(
         current_artifact = _parse_artifact(
             current_text, target_relative, file_sha256=current_sha
         )
+        if current_artifact is not None:
+            sidecar_reports, sidecar_issues = _inspect_artifact_sidecars(
+                root, current_artifact
+            )
+            current_artifact = Artifact(
+                current_artifact.path,
+                current_artifact.text,
+                current_artifact.manifest,
+                current_artifact.body,
+                current_artifact.sha256,
+                current_artifact.body_drifted,
+                current_artifact.header_drifted,
+                sidecar_reports,
+                sidecar_issues,
+            )
         current_kind = "managed" if current_artifact else "legacy"
 
     cards, request_duplicates, blocked = _dedupe_request_cards(request["cards"])
@@ -2313,11 +3387,31 @@ def _prepare_plan(
 
     candidate_text: str | None
     candidate_sha: str | None
+    tables: tuple[TemplateTable, ...] = ()
+    workbooks: tuple[XlsxArtifact, ...] = ()
+    sidecar_manifests: list[dict[str, Any]] = []
+    artifact_set_sha256: str | None = None
     if not included_candidates and current_kind == "absent":
         candidate_text = None
         candidate_sha = None
     else:
-        body = _render_body(included_candidates, registry)
+        tables = _template_tables(included_candidates, registry)
+        workbooks = _render_workbooks(target_relative, tables)
+        candidate_cards_by_id = {
+            card["logical_id"]: card for card in included_candidates
+        }
+        sidecar_manifests = [
+            _manifest_sidecar(table, workbook, candidate_cards_by_id)
+            for table, workbook in zip(tables, workbooks, strict=True)
+        ]
+        body = _render_body(tables, workbooks, registry)
+        managed_body_sha256 = _sha256_text(body)
+        artifact_set_sha256 = _digest_value(
+            {
+                "managed_body_sha256": managed_body_sha256,
+                "sidecars": sidecar_manifests,
+            }
+        )
         manifest = {
             "schema": ARTIFACT_SCHEMA,
             "adapter": context["adapter"],
@@ -2328,21 +3422,107 @@ def _prepare_plan(
             "source_fingerprint": source_fingerprint,
             "candidate_sha256": candidate_digest,
             "cards": [_manifest_card(card) for card in included_candidates],
-            "managed_body_sha256": _sha256_text(body),
+            "sidecars": sidecar_manifests,
+            "managed_body_sha256": managed_body_sha256,
+            "artifact_set_sha256": artifact_set_sha256,
         }
         manifest["manifest_payload_sha256"] = _digest_value(manifest)
         candidate_text = _artifact_text(manifest, body)
         candidate_sha = _sha256_text(candidate_text)
 
-    if candidate_text is None or candidate_text == current_text:
+    current_owned_sidecars = {
+        sidecar["path"]: sidecar
+        for sidecar in (
+            current_artifact.manifest["sidecars"]
+            if current_artifact
+            and not current_artifact.header_drifted
+            and current_artifact.manifest["schema"] == ARTIFACT_SCHEMA
+            else []
+        )
+    }
+    candidate_file_values: dict[str, tuple[bytes, str, str | None]] = {}
+    if candidate_text is not None:
+        candidate_file_values[target_relative] = (
+            candidate_text.encode("utf-8"),
+            "markdown",
+            None,
+        )
+    for workbook in workbooks:
+        candidate_file_values[workbook.relative_path] = (
+            workbook.content,
+            "xlsx",
+            workbook.template_id,
+        )
+    all_file_paths = sorted(
+        {target_relative, *current_owned_sidecars, *candidate_file_values}
+    )
+    planned_files: list[PlannedFile] = []
+    unmanaged_sidecars: list[str] = []
+    for relative in all_file_paths:
+        path = _resolve_under(root, relative, label="managed artifact file", must_exist=False)
+        present = path.exists() or path.is_symlink()
+        if present and (not path.is_file() or _is_link_or_junction(path)):
+            raise MemoCardsError(
+                "safety",
+                "managed artifact file must be a regular non-link file",
+                details={"path": relative},
+            )
+        actual_sha256 = _sha256_file(path) if present else None
+        candidate_value = candidate_file_values.get(relative)
+        candidate_bytes = candidate_value[0] if candidate_value is not None else None
+        candidate_file_sha256 = (
+            _sha256_bytes(candidate_bytes) if candidate_bytes is not None else None
+        )
+        if candidate_bytes is None:
+            if relative == target_relative:
+                file_operation = "no-op"
+                role = "markdown"
+                template_id = None
+            else:
+                file_operation = "remove" if present else "no-op"
+                role = "xlsx"
+                template_id = current_owned_sidecars[relative]["template_id"]
+        else:
+            role = candidate_value[1]
+            template_id = candidate_value[2]
+            if not present:
+                file_operation = "create"
+            elif actual_sha256 == candidate_file_sha256:
+                file_operation = "no-op"
+            else:
+                file_operation = "update"
+        if (
+            role == "xlsx"
+            and present
+            and relative not in current_owned_sidecars
+        ):
+            unmanaged_sidecars.append(relative)
+        planned_files.append(
+            PlannedFile(
+                relative,
+                path,
+                role,
+                template_id,
+                actual_sha256,
+                candidate_file_sha256,
+                candidate_bytes,
+                file_operation,
+            )
+        )
+    if all(file.operation == "no-op" for file in planned_files):
         operation = "no-op"
-        diff = ""
     elif current_kind == "absent":
         operation = "create"
-        diff = _unified_diff("", candidate_text, target_relative)
     else:
         operation = "update"
-        diff = _unified_diff(current_text, candidate_text, target_relative)
+    if candidate_text is None or candidate_text == current_text:
+        diff = ""
+    else:
+        diff = _unified_diff(
+            "" if current_kind == "absent" else current_text,
+            candidate_text,
+            target_relative,
+        )
 
     old_by_id = current_cards
     new_by_id = {card["logical_id"]: card for card in included_candidates}
@@ -2393,12 +3573,35 @@ def _prepare_plan(
     )
 
     risks: list[str] = []
+    interrupted_transaction = (
+        interrupted_transactions[0] if interrupted_transactions else None
+    )
+    if interrupted_transaction is not None:
+        risks.append("interrupted-publication")
     if operation != "no-op" and current_kind == "legacy":
         risks.append("legacy-adoption")
+    if (
+        operation != "no-op"
+        and current_artifact
+        and current_artifact.manifest["schema"] == ARTIFACT_SCHEMA_V1
+    ):
+        risks.append("artifact-v1-migration")
     if operation != "no-op" and current_artifact and current_artifact.body_drifted:
         risks.append("manual-drift")
     if operation != "no-op" and current_artifact and current_artifact.header_drifted:
         risks.append("manual-header-drift")
+    if operation != "no-op" and current_artifact and current_artifact.sidecar_issues:
+        statuses = {issue["status"] for issue in current_artifact.sidecar_issues}
+        if "missing" in statuses:
+            risks.append("sidecar-missing")
+        if statuses - {"missing"}:
+            risks.append("sidecar-drift")
+    if operation != "no-op" and unmanaged_sidecars:
+        risks.append("unmanaged-sidecar-adoption")
+    if operation != "no-op" and any(
+        file.role == "xlsx" and file.operation == "remove" for file in planned_files
+    ):
+        risks.append("sidecar-removal")
     if operation != "no-op" and dependency_review_ids:
         risks.append("dependency-drift-review")
     if operation != "no-op" and review_resolution_ids:
@@ -2438,14 +3641,109 @@ def _prepare_plan(
     ):
         risks.append("lifecycle-deactivation-or-reactivation")
     risks = sorted(set(risks))
-    required_authorization = "none" if operation == "no-op" else ("confirmed" if risks else "request")
+    required_authorization = (
+        "confirmed"
+        if interrupted_transaction is not None
+        else "none"
+        if operation == "no-op"
+        else "confirmed"
+        if risks
+        else "request"
+    )
 
     request_digest = _digest_value(request)
     runtime_digest = _digest_value(
         {"context": context, "allowlist": runtime["allowlist"]}
     )
+    file_summaries = [
+        {
+            "path": file.relative_path,
+            "role": file.role,
+            "template_id": file.template_id,
+            "operation": file.operation,
+            "ownership": (
+                "managed"
+                if file.role == "markdown" and current_artifact is not None
+                else "managed"
+                if file.relative_path in current_owned_sidecars
+                else "unmanaged"
+                if file.current_sha256 is not None
+                else "absent"
+            ),
+            "current_sha256": file.current_sha256,
+            "candidate_sha256": file.candidate_sha256,
+            "current_byte_size": (
+                file.path.stat().st_size if file.current_sha256 is not None else None
+            ),
+            "candidate_byte_size": (
+                len(file.candidate_bytes) if file.candidate_bytes is not None else None
+            ),
+        }
+        for file in planned_files
+    ]
+    candidate_sidecars_by_path = {
+        sidecar["path"]: sidecar for sidecar in sidecar_manifests
+    }
+    artifact_diffs: list[dict[str, Any]] = [
+        {
+            "path": target_relative,
+            "kind": "unified",
+            "diff": diff,
+        }
+    ]
+    for file in planned_files:
+        if file.role != "xlsx" or file.operation == "no-op":
+            continue
+        before = current_owned_sidecars.get(file.relative_path)
+        after = candidate_sidecars_by_path.get(file.relative_path)
+        before_rows = {
+            row["logical_id"]: row["row_sha256"] for row in before["rows"]
+        } if before else {}
+        after_rows = {
+            row["logical_id"]: row["row_sha256"] for row in after["rows"]
+        } if after else {}
+        artifact_diffs.append(
+            {
+                "path": file.relative_path,
+                "kind": "xlsx",
+                "template_id": file.template_id,
+                "before": (
+                    {
+                        "sha256": file.current_sha256,
+                        "row_count": before["row_count"] if before else None,
+                    }
+                    if file.current_sha256 is not None
+                    else None
+                ),
+                "after": (
+                    {
+                        "sha256": file.candidate_sha256,
+                        "row_count": after["row_count"],
+                    }
+                    if after is not None
+                    else None
+                ),
+                "rows": {
+                    "add": sorted(set(after_rows) - set(before_rows)),
+                    "change": sorted(
+                        logical_id
+                        for logical_id in set(before_rows) & set(after_rows)
+                        if before_rows[logical_id] != after_rows[logical_id]
+                    ),
+                    "remove": sorted(set(before_rows) - set(after_rows)),
+                },
+            }
+        )
+    current_artifact_schema = (
+        current_artifact.manifest["schema"] if current_artifact else None
+    )
+    format_transition = (
+        {"from": ARTIFACT_SCHEMA_V1, "to": ARTIFACT_SCHEMA}
+        if current_artifact_schema == ARTIFACT_SCHEMA_V1 and operation != "no-op"
+        else None
+    )
     binding = {
-        "schema": "memo-cards.preview/v1",
+        "schema": PREVIEW_SCHEMA,
         "context_sha256": runtime_digest,
         "request_sha256": request_digest,
         "template_registry_sha256": registry.digest,
@@ -2455,6 +3753,16 @@ def _prepare_plan(
         "candidate_sha256": candidate_sha,
         "operation": operation,
         "risk_reasons": risks,
+        "interrupted_transactions": interrupted_transactions,
+        "files": [
+            {
+                "path": file["path"],
+                "operation": file["operation"],
+                "current_sha256": file["current_sha256"],
+                "candidate_sha256": file["candidate_sha256"],
+            }
+            for file in file_summaries
+        ],
     }
     preview_digest = _digest_value(binding)
     new_active_count = sum(
@@ -2483,6 +3791,10 @@ def _prepare_plan(
         "target_state": current_kind,
         "current_sha256": current_sha,
         "candidate_sha256": candidate_sha,
+        "artifact_set_sha256": artifact_set_sha256,
+        "current_artifact_schema": current_artifact_schema,
+        "candidate_artifact_schema": ARTIFACT_SCHEMA if candidate_text is not None else None,
+        "format_transition": format_transition,
         "template_registry_sha256": registry.digest,
         "context_sha256": runtime_digest,
         "source_fingerprint": source_fingerprint,
@@ -2502,10 +3814,23 @@ def _prepare_plan(
             "duplicate_count": len(request_duplicates) + len(cross_duplicates),
             "blocked_count": len(blocked),
         },
+        "files": file_summaries,
+        "artifact_diffs": artifact_diffs,
+        "candidate_sidecars": sidecar_manifests,
+        "interrupted_transaction": interrupted_transaction,
+        "interrupted_transactions": list(interrupted_transactions),
         "diff": diff,
         "candidate_markdown": candidate_text,
     }
-    return Plan(data, candidate_text, candidate_sha, current_sha, target_path)
+    return Plan(
+        data,
+        candidate_text,
+        candidate_sha,
+        current_sha,
+        target_path,
+        tuple(planned_files),
+        source_preconditions,
+    )
 
 
 def _atomic_write(target: Path, content: str, expected_sha256: str | None) -> None:
@@ -2627,8 +3952,339 @@ def _atomic_write(target: Path, content: str, expected_sha256: str | None) -> No
             pass
 
 
+@contextmanager
+def _repository_publication_locks(
+    root: Path, runtime: Mapping[str, Any]
+) -> Iterator[None]:
+    """Serialize inventory planning using locks inside authorized output roots."""
+
+    token = f"{os.getpid()}:{uuid.uuid4().hex}\n".encode("ascii")
+    locks: list[Path] = []
+    try:
+        for relative_root in runtime["allowlist"]["write_paths"]:
+            output_root = _resolve_under(
+                root,
+                relative_root,
+                label="memo-cards write path",
+                must_exist=False,
+            )
+            if not output_root.exists():
+                continue
+            if not output_root.is_dir() or _is_link_or_junction(output_root):
+                raise MemoCardsError(
+                    "safety",
+                    "memo-cards write path must be a real directory",
+                    details={"path": relative_root},
+                )
+            lock = output_root / PUBLICATION_LOCK_NAME
+            flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            try:
+                descriptor = os.open(lock, flags, 0o600)
+            except FileExistsError as exc:
+                raise MemoCardsError(
+                    "conflict",
+                    "another memo-cards publication may be running or requires recovery",
+                    details={"lock": lock.relative_to(root).as_posix()},
+                ) from exc
+            locks.append(lock)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(token)
+                handle.flush()
+                os.fsync(handle.fileno())
+        yield
+    finally:
+        for lock in reversed(locks):
+            # Never unlink a lock that was replaced after ours was created.
+            try:
+                if (
+                    lock.is_file()
+                    and not _is_link_or_junction(lock)
+                    and lock.read_bytes() == token
+                ):
+                    lock.unlink()
+            except OSError:
+                # A surviving lock is fail-closed and is reported by verify.
+                pass
+
+
+def _atomic_publish_set(
+    files: Sequence[PlannedFile],
+    document_target: Path,
+    source_preconditions: Sequence[SourcePrecondition] = (),
+) -> None:
+    parent = document_target.parent
+    if not parent.is_dir() or _is_link_or_junction(parent):
+        raise MemoCardsError("safety", "artifact-set parent must already be a real directory")
+    if any(file.path.parent != parent for file in files):
+        raise MemoCardsError("safety", "all managed sidecars must be siblings of the Markdown target")
+    lock = parent / f".{document_target.name}.memo-cards.lock"
+    journal = parent / f".{document_target.name}.memo-cards-transaction.json"
+    if journal.exists() or journal.is_symlink():
+        raise MemoCardsError(
+            "conflict",
+            "an interrupted memo-cards publication requires recovery",
+            details={"journal": journal.name},
+        )
+    try:
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise MemoCardsError("conflict", "another memo-cards publication may be running") from exc
+
+    transaction_id = uuid.uuid4().hex
+    temp_paths: dict[str, Path] = {}
+    holding_paths: dict[str, Path] = {}
+    installed: list[PlannedFile] = []
+    journal_created = False
+    committed = False
+
+    def present(path: Path) -> bool:
+        return path.exists() or path.is_symlink()
+
+    def allocate_holding(file: PlannedFile) -> Path:
+        for _attempt in range(20):
+            candidate = parent / (
+                f".{file.path.name}.memo-cards-hold-{transaction_id}-{uuid.uuid4().hex}"
+            )
+            if not present(candidate):
+                return candidate
+        raise MemoCardsError("integrity", "cannot allocate a recovery holding path")
+
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(str(os.getpid()))
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        for file in files:
+            is_present = present(file.path)
+            if file.current_sha256 is None:
+                if is_present:
+                    raise MemoCardsError(
+                        "conflict",
+                        "artifact-set file appeared after preview",
+                        details={"path": file.relative_path},
+                    )
+                continue
+            if (
+                not is_present
+                or not file.path.is_file()
+                or _is_link_or_junction(file.path)
+                or _sha256_file(file.path) != file.current_sha256
+            ):
+                raise MemoCardsError(
+                    "conflict",
+                    "artifact-set file changed after preview",
+                    details={"path": file.relative_path},
+                )
+
+        for file in files:
+            if file.operation == "no-op" or file.candidate_bytes is None:
+                continue
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=parent,
+                prefix=f".{file.path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                handle.write(file.candidate_bytes)
+                handle.flush()
+                os.fsync(handle.fileno())
+                temp_paths[file.relative_path] = Path(handle.name)
+
+        # The request source snapshot participates in the same compare-and-swap
+        # boundary as every output file.  Recheck after staging and again before
+        # the Markdown commit point is accepted so a source edit cannot publish
+        # a manifest that names stale source bytes.
+        _check_source_preconditions(source_preconditions)
+
+        journal_payload = {
+            "schema": "memo-cards.transaction/v1",
+            "transaction_id": transaction_id,
+            "document": document_target.name,
+            "files": [
+                {
+                    "path": file.path.name,
+                    "operation": file.operation,
+                    "current_sha256": file.current_sha256,
+                    "candidate_sha256": file.candidate_sha256,
+                }
+                for file in files
+                if file.operation != "no-op"
+            ],
+        }
+        journal_descriptor = os.open(
+            journal, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+        )
+        with os.fdopen(journal_descriptor, "wb") as handle:
+            handle.write(_canonical_bytes(journal_payload) + b"\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        journal_created = True
+
+        for file in files:
+            if file.operation == "no-op" or file.current_sha256 is None:
+                continue
+            holding = allocate_holding(file)
+            try:
+                os.rename(file.path, holding)
+            except FileNotFoundError as exc:
+                raise MemoCardsError(
+                    "conflict",
+                    "artifact-set file disappeared during publication",
+                    details={"path": file.relative_path},
+                ) from exc
+            holding_paths[file.relative_path] = holding
+            displaced_sha256 = _sha256_file(holding)
+            if displaced_sha256 != file.current_sha256:
+                raise MemoCardsError(
+                    "conflict",
+                    "artifact-set file changed while being isolated",
+                    details={
+                        "path": file.relative_path,
+                        "expected": file.current_sha256,
+                        "actual": displaced_sha256,
+                    },
+                )
+
+        install_order = sorted(
+            (
+                file
+                for file in files
+                if file.operation != "no-op" and file.candidate_bytes is not None
+            ),
+            key=lambda file: (file.role == "markdown", file.relative_path),
+        )
+        for file in install_order:
+            try:
+                os.link(temp_paths[file.relative_path], file.path)
+            except FileExistsError as exc:
+                raise MemoCardsError(
+                    "conflict",
+                    "a competing artifact-set file appeared during publication",
+                    details={"path": file.relative_path},
+                ) from exc
+            installed.append(file)
+            if _sha256_file(file.path) != file.candidate_sha256:
+                raise MemoCardsError(
+                    "integrity",
+                    "installed artifact-set file failed its digest check",
+                    details={"path": file.relative_path},
+                )
+
+        for file in files:
+            if file.candidate_sha256 is None:
+                if file.operation == "remove" and present(file.path):
+                    raise MemoCardsError(
+                        "integrity",
+                        "removed sidecar reappeared during publication",
+                        details={"path": file.relative_path},
+                    )
+                continue
+            if not present(file.path) or _sha256_file(file.path) != file.candidate_sha256:
+                raise MemoCardsError(
+                    "conflict",
+                    "artifact-set changed before final verification",
+                    details={"path": file.relative_path},
+                )
+        _check_source_preconditions(source_preconditions)
+        committed = True
+
+        cleanup_errors: list[str] = []
+        for relative, temp_path in list(temp_paths.items()):
+            try:
+                temp_path.unlink()
+                del temp_paths[relative]
+            except OSError:
+                cleanup_errors.append(temp_path.name)
+        for relative, holding in list(holding_paths.items()):
+            try:
+                holding.unlink()
+                del holding_paths[relative]
+            except OSError:
+                cleanup_errors.append(holding.name)
+        if not cleanup_errors:
+            try:
+                journal.unlink()
+                journal_created = False
+            except OSError:
+                cleanup_errors.append(journal.name)
+        if cleanup_errors:
+            raise MemoCardsError(
+                "integrity",
+                "artifact-set was committed but publication cleanup requires recovery",
+                details={"recovery": sorted(set(cleanup_errors + [journal.name]))},
+            )
+    except Exception as exc:
+        if committed:
+            raise
+        recovery: list[str] = []
+        for file in reversed(installed):
+            if not present(file.path):
+                continue
+            try:
+                if _sha256_file(file.path) == file.candidate_sha256:
+                    file.path.unlink()
+                else:
+                    recovery.append(file.relative_path)
+            except OSError:
+                recovery.append(file.relative_path)
+        for relative, holding in list(holding_paths.items()):
+            if not present(holding):
+                continue
+            file = next(item for item in files if item.relative_path == relative)
+            if present(file.path):
+                recovery.append(holding.name)
+                continue
+            try:
+                os.link(holding, file.path)
+                holding.unlink()
+                del holding_paths[relative]
+            except OSError:
+                recovery.append(holding.name)
+        if journal_created and not recovery:
+            try:
+                journal.unlink()
+                journal_created = False
+            except OSError:
+                recovery.append(journal.name)
+        if recovery:
+            if isinstance(exc, MemoCardsError):
+                details = dict(exc.details)
+                details["recovery"] = sorted(set(recovery))
+                raise MemoCardsError(exc.kind, exc.message, details=details) from exc
+            raise MemoCardsError(
+                "integrity",
+                "artifact-set publication failed and requires recovery",
+                details={"recovery": sorted(set(recovery))},
+            ) from exc
+        raise
+    finally:
+        for temp_path in temp_paths.values():
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                pass
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def prepare(repo: Path, context_path: Path, request_path: Path) -> dict[str, Any]:
     root = _repository_root(repo)
+    runtime = _load_runtime_context(
+        root, context_path, check_tracked_files=False
+    )
+    interrupted_transactions = _interrupted_transactions(root, runtime)
+    if interrupted_transactions:
+        raise MemoCardsError(
+            "conflict",
+            "an interrupted memo-cards publication requires recovery",
+            details={"transactions": list(interrupted_transactions)},
+        )
     runtime = _load_runtime_context(root, context_path)
     registry = load_template_registry()
     plan = _prepare_plan(root, runtime, _load_json(request_path, "request"), registry)
@@ -2637,10 +4293,21 @@ def prepare(repo: Path, context_path: Path, request_path: Path) -> dict[str, Any
 
 def verify(repo: Path, context_path: Path, request_path: Path | None = None) -> dict[str, Any]:
     root = _repository_root(repo)
-    runtime = _load_runtime_context(root, context_path)
+    runtime = _load_runtime_context(
+        root, context_path, check_tracked_files=False
+    )
+    publication_locks = _publication_lock_states(root, runtime)
+    interrupted_transactions = _interrupted_transactions(root, runtime)
+    inventory_unavailable = bool(publication_locks or interrupted_transactions)
+    if not inventory_unavailable:
+        runtime = _load_runtime_context(root, context_path)
     context = runtime["context"]
     registry = load_template_registry()
-    inventory = _scan_inventory(root, runtime)
+    inventory = (
+        Inventory((), (), (), "")
+        if inventory_unavailable
+        else _scan_inventory(root, runtime)
+    )
     runtime_digest = _digest_value(
         {"context": context, "allowlist": runtime["allowlist"]}
     )
@@ -2653,30 +4320,63 @@ def verify(repo: Path, context_path: Path, request_path: Path | None = None) -> 
             {
                 "path": artifact.path,
                 "sha256": artifact.sha256,
+                "schema": artifact.manifest["schema"],
+                "migration_required": artifact.manifest["schema"] == ARTIFACT_SCHEMA_V1,
                 "body_drifted": artifact.body_drifted,
                 "header_drifted": artifact.header_drifted,
+                "artifact_set_drifted": bool(
+                    artifact.body_drifted
+                    or artifact.header_drifted
+                    or artifact.sidecar_issues
+                ),
                 "card_count": len(artifact.manifest["cards"]),
+                "sidecars": list(artifact.sidecar_reports),
             }
             for artifact in inventory.artifacts
         ],
         "legacy_inventory": list(inventory.legacy),
         "dependency_drift": list(inventory.dependency_drift),
-        "inventory_fingerprint": inventory.fingerprint,
+        "sidecar_drift": [
+            {"artifact": artifact.path, **issue}
+            for artifact in inventory.artifacts
+            for issue in artifact.sidecar_issues
+        ],
+        "interrupted_transactions": list(interrupted_transactions),
+        "publication_lock": publication_locks[0] if publication_locks else None,
+        "publication_locks": list(publication_locks),
+        "inventory_fingerprint": None if inventory_unavailable else inventory.fingerprint,
+        "inventory_unavailable": inventory_unavailable,
     }
     if request_path is not None:
-        plan = _prepare_plan(root, runtime, _load_json(request_path, "request"), registry)
-        result["request_check"] = {
-            "request_sha256": plan.data["request_sha256"],
-            "target": plan.data["target"],
-            "operation": plan.data["operation"],
-            "would_write": plan.data["operation"] != "no-op",
-            "preview_digest": plan.data["preview_digest"],
-        }
-        result["preview"] = plan.data
+        if inventory_unavailable:
+            result["request_check"] = {
+                "operation": "blocked",
+                "would_write": True,
+                "blocking_reasons": [
+                    *(["publication-lock"] if publication_locks else []),
+                    *(
+                        ["interrupted-publication"]
+                        if interrupted_transactions
+                        else []
+                    ),
+                ],
+            }
+        else:
+            plan = _prepare_plan(root, runtime, _load_json(request_path, "request"), registry)
+            result["request_check"] = {
+                "request_sha256": plan.data["request_sha256"],
+                "target": plan.data["target"],
+                "operation": plan.data["operation"],
+                "would_write": plan.data["operation"] != "no-op",
+                "preview_digest": plan.data["preview_digest"],
+                "artifact_set_sha256": plan.data["artifact_set_sha256"],
+                "files": plan.data["files"],
+            }
+            result["preview"] = plan.data
     return result
 
 
-def publish(
+def _publish_under_repository_lock(
     repo: Path,
     context_path: Path,
     request_path: Path,
@@ -2684,6 +4384,16 @@ def publish(
     authorization: str,
 ) -> dict[str, Any]:
     root = _repository_root(repo)
+    runtime = _load_runtime_context(
+        root, context_path, check_tracked_files=False
+    )
+    interrupted_transactions = _interrupted_transactions(root, runtime)
+    if interrupted_transactions:
+        raise MemoCardsError(
+            "conflict",
+            "an interrupted memo-cards publication requires recovery",
+            details={"transactions": list(interrupted_transactions)},
+        )
     runtime = _load_runtime_context(root, context_path)
     registry = load_template_registry()
     plan = _prepare_plan(root, runtime, _load_json(request_path, "request"), registry)
@@ -2694,12 +4404,20 @@ def publish(
             "preview digest no longer matches; prepare and confirm again",
             details={"expected": expected_preview, "actual": plan.data["preview_digest"]},
         )
+    if plan.data["interrupted_transaction"] is not None:
+        raise MemoCardsError(
+            "conflict",
+            "an interrupted memo-cards publication requires recovery",
+            details=plan.data["interrupted_transaction"],
+        )
     if plan.data["operation"] == "no-op":
         return {
             "operation": "no-op",
             "target": plan.data["target"],
             "preview_digest": expected_preview,
             "written": False,
+            "artifact_set_sha256": plan.data["artifact_set_sha256"],
+            "files": plan.data["files"],
         }
     if plan.data["required_authorization"] == "confirmed" and authorization != "confirmed":
         raise MemoCardsError("conflict", "this preview requires explicit post-diff confirmation")
@@ -2707,7 +4425,9 @@ def publish(
         raise MemoCardsError("usage", "authorization must be request or confirmed")
     if plan.candidate_text is None or plan.candidate_sha256 is None:
         raise MemoCardsError("integrity", "publication plan has no candidate artifact")
-    _atomic_write(plan.target_path, plan.candidate_text, plan.current_sha256)
+    _atomic_publish_set(
+        plan.files, plan.target_path, plan.source_preconditions
+    )
     actual = _sha256_file(plan.target_path)
     if actual != plan.candidate_sha256:
         raise MemoCardsError("integrity", "published target failed its final digest check")
@@ -2717,11 +4437,50 @@ def publish(
         "preview_digest": expected_preview,
         "written": True,
         "sha256": actual,
+        "artifact_set_sha256": plan.data["artifact_set_sha256"],
+        "files": [
+            {
+                "path": file.relative_path,
+                "role": file.role,
+                "template_id": file.template_id,
+                "operation": file.operation,
+                "sha256": file.candidate_sha256,
+                "written": file.operation != "no-op",
+            }
+            for file in plan.files
+            if file.candidate_sha256 is not None
+        ],
     }
 
 
+def publish(
+    repo: Path,
+    context_path: Path,
+    request_path: Path,
+    preview_digest: str,
+    authorization: str,
+) -> dict[str, Any]:
+    root = _repository_root(repo)
+    coordination_runtime = _load_runtime_context(
+        root, context_path, check_tracked_files=False
+    )
+    with _repository_publication_locks(root, coordination_runtime):
+        # Planning happens after the repository-wide output lock set is held.
+        # This makes the inventory fingerprint and cross-target logical-ID check
+        # part of the same serialized boundary as artifact-set publication.
+        return _publish_under_repository_lock(
+            root,
+            context_path,
+            request_path,
+            preview_digest,
+            authorization,
+        )
+
+
 def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = JsonArgumentParser(description="Prepare, verify, and publish managed Markji staging cards.")
+    parser = JsonArgumentParser(
+        description="Prepare, verify, and publish managed Markji Markdown/XLSX bundles."
+    )
     subparsers = parser.add_subparsers(
         dest="command", required=True, parser_class=JsonArgumentParser
     )

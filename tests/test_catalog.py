@@ -9,7 +9,6 @@ from pathlib import Path
 
 from tools import materialize_skills, validate_catalog
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -152,6 +151,18 @@ class CatalogTests(unittest.TestCase):
                 by_name[name]["migration"],
                 "generalized-configurable-upgrade",
             )
+        self.assertIn(
+            "managed-markdown-per-template-xlsx",
+            by_name["memo-cards"]["review"]["topics"],
+        )
+        self.assertIn(
+            "retrieval-first-content-layout",
+            by_name["memo-cards"]["review"]["topics"],
+        )
+        self.assertIn(
+            "bundled-markji-syntax-snapshot",
+            by_name["memo-cards"]["review"]["topics"],
+        )
         self.assertEqual(
             by_name["creator-workflow"]["migration"],
             "generalized-configurable-upgrade",
