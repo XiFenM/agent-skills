@@ -72,21 +72,56 @@ agent-skills/
 
 公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置及其引用必须是 Git 已跟踪的 UTF-8 普通文件；collection 只展开 Git 已跟踪的 UTF-8 成员，未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
-新 clone 或更新子模块后，先递归初始化中央仓库及其第三方子模块：
+### 新 clone：恢复消费仓库固定的版本
+
+新 clone 或换一台机器后，先恢复消费仓库已经记录的中央版本，再生成宿主实际会发现的目录：
 
 ```powershell
-git submodule update --init --recursive
+git submodule sync --recursive -- .agent-skills
+git submodule update --init --recursive -- .agent-skills
+python .agent-skills/tools/materialize_skills.py --repo .
 ```
 
-然后生成宿主实际会发现的目录。工具只依赖 Python 标准库；可使用现有 Python，或让 uv 提供 Python：
+这里的路径限制很重要：命令只初始化 `.agent-skills` 及其内部依赖，不会连带初始化消费仓库中的其他大型子模块。这组命令只恢复父仓库固定的版本，不会主动升级到中央仓库的最新提交。
+
+### 中央发布后：一键升级消费仓库
+
+中央 Skill 发布新版本后，在消费仓库根目录先预览，再执行升级：
 
 ```powershell
-python .agent-skills/tools/materialize_skills.py --repo . --dry-run
-python .agent-skills/tools/materialize_skills.py --repo .
-python .agent-skills/tools/materialize_skills.py --repo . --check
+python .agent-skills/tools/update_consumer.py --dry-run
+python .agent-skills/tools/update_consumer.py
+```
 
-# 没有全局 Python 时
-uv run --no-project python .agent-skills/tools/materialize_skills.py --repo . --check
+`--dry-run` 只获取远端元数据并显示当前与目标提交，不检出或生成文件。正式执行时，脚本会获取默认远端的 `main`、以 detached HEAD 精确检出目标提交、只递归更新 `.agent-skills` 内部的第三方子模块，并依次预览、生成和检查本地 Skill。若检出后的步骤失败，它会尝试恢复原提交及原生成结果。它允许消费仓库保留其他未提交修改，但要求 `.agent-skills` 自身干净。
+
+需要指定已发布的分支、标签或完整提交 ID 时使用 `--ref`；降级或切换到非快进历史还必须明确允许：
+
+```powershell
+python .agent-skills/tools/update_consumer.py --ref release-v2
+python .agent-skills/tools/update_consumer.py --ref <full-commit-id>
+python .agent-skills/tools/update_consumer.py --ref <older-ref> --allow-non-fast-forward
+```
+
+脚本不会执行 `git add`、commit 或 push。成功后检查差异，并只提交新的子模块指针：
+
+```powershell
+git diff --submodule=short -- .agent-skills
+git add -- .agent-skills
+git commit --only -m "chore: update agent skills" -- .agent-skills
+git push
+```
+
+如果消费仓库当前固定的旧版本还没有这个脚本，而本工作区有并列的中央仓库 clone，可以先从中央 clone 运行一次：
+
+```powershell
+python ../agent-skills/tools/update_consumer.py
+```
+
+脚本只依赖 Python 标准库；没有全局 Python 时，可让 uv 提供 Python：
+
+```powershell
+uv run --no-project python .agent-skills/tools/update_consumer.py
 ```
 
 映射固定为：
@@ -103,9 +138,9 @@ uv run --no-project python .agent-skills/tools/materialize_skills.py --repo . --
 /.agent-skills.lock
 ```
 
-中央子模块必须处于已有提交且工作树干净的状态；工具同时记录中央提交、每个 Skill 的源码摘要、消费配置摘要和生成上下文摘要。version 2 会在每个已配置的生成副本中写入逐字节确定的 `.agent-skills-context.json`；配置变化后必须重新 materialize。工具不会拉取远端、更新子模块、提交、跟随链接，或覆盖未经 state 与目录 marker 共同证明属于它的同名目录。
+中央子模块必须处于已有提交且工作树干净的状态；materialize 工具同时记录中央提交、每个 Skill 的源码摘要、消费配置摘要和生成上下文摘要。version 2 会在每个已配置的生成副本中写入逐字节确定的 `.agent-skills-context.json`；配置变化后必须重新 materialize。底层 materialize 工具本身不会拉取远端、更新子模块、提交、跟随链接，或覆盖未经 state 与目录 marker 共同证明属于它的同名目录；上述更新脚本负责在其外层完成受限的 Git 更新。
 
-常用操作：
+底层 materialize 工具的常用操作：
 
 - `--dry-run`：显示会复制/清理的受管目录，不留下持久文件。
 - `--check`：只检查提交版本、内容漂移、孤儿目录和 state；一致时退出码为 0，漂移为 1，配置或安全错误为 2。
