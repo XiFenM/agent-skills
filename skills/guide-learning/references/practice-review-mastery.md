@@ -129,8 +129,9 @@ finding 和既定 required mastery 维度唯一推导。
 
 ## Apply ownership and tests-first
 
-默认让学习者拥有核心工件，让 Agent 拥有例行验收基础设施。只有测试设计、fixture 设计或验证工具本身
-是目标时，才把相应工件列为 learner-owned。
+默认让学习者拥有核心工件，让 Agent 拥有例行验收基础设施并主动建立测试驱动循环。只有测试设计、
+fixture 设计或验证工具本身是明确学习目标时，才把相应工件列为 learner-owned；不要把“学习者写测试”
+当作代码练习的默认附加目标。
 
 代码练习按以下顺序执行：
 
@@ -146,12 +147,17 @@ finding 和既定 required mastery 维度唯一推导。
 既有行为已经正确、无法产生有意义 expected red，或主题不适合可执行测试时，使用基线、rubric、对照、
 证明检查或其他可观察 evidence，并明确 expected red 不适用。
 
-对 measurement-only 或 benchmark 练习：
+对 measurement-only 或 benchmark 练习，默认按以下职责执行：
 
-- 把功能正确性放在独立证据中；
-- 验证预热、同步、资源配置、工作量口径、控制变量、重复性和结果 schema；
-- 不断言某个配置必然最快，不用单台设备的固定性能阈值；
-- 只有参数校验本身是学习目标时才把错误路径扩进性能验收。
+- 学习者在看到结果前给出有机制依据、可被结果推翻的预测，并在结果出现后解释证据支持、不支持什么；
+- Agent 设计并维护实验方法与 harness，决定与 claim 相称的 warm-up、同步、重复次数、运行顺序、资源
+  配置、工作量口径、控制变量、主要指标、结果 schema，以及支持／否定／证据不足的事前判据；
+- Agent 在运行前用简短语言说明设置思路、必要性和预期投入，不要求学习者反向猜出方法参数；
+- 方法保持最低充分。除非目标 claim 或预期噪声确实需要，不自动加入统计检验、置信区间、profiler、
+  大规模 sweep 或固定性能阈值；
+- 把功能正确性放在独立证据中，不断言某个配置必然最快，也不把预测与结果不一致视为实践失败；
+- 只有实验设计、harness 实现、参数校验或统计推断本身是明确学习目标时，才在契约中把相应部分列为
+  learner-owned 和 required。方法若扩大成本、依赖、硬件使用或目标范围，先修订契约并取得确认。
 
 Agent-owned 测试、rubric、fixture 和记录不是学习者核心实现。新增这些工件不授权 Agent 修改
 learner-owned 内容。
@@ -266,17 +272,16 @@ finding:
 
 ### Empirical
 
-- 在结果出现前保存可证伪预测；
-- 明确环境、版本、输入、控制变量和测量边界；
-- 方法与结果能在声明条件下复现；
-- 存在与目标相称的基线或受控比较；
+- 学习者在结果出现前给出并保存有机制依据的可证伪预测；
+- Agent-owned 方法与 harness 明确环境、版本、输入、控制变量、测量边界和事前证据判据；
+- Agent 选择的方法与结果能在声明条件下复现，并存在与目标相称的基线或受控比较；
 - 学习者说明证据支持、不支持的结论和剩余不确定性；
 - 性能实验另有独立正确性 evidence，且不会把同时变化的因素误作单一原因。
 
-跨节点综合验收已经独立提供概念 evidence 时，直接复用。Agent 准备实验 harness、学习者只负责预测、
-运行和解释时，可以满足 empirical，而 practical 为 `not-required`；只有 harness 设计或实现本身属于
-目标时才要求 practical。不要保留 reflective 作为第四维度；高价值误解和修正属于过程记录，不能替代
-上述 evidence。
+跨节点综合验收已经独立提供概念 evidence 时，直接复用。默认由 Agent 准备实验方法与 harness，学习者
+负责预测、理解关键控制边界、按约定运行或观察运行，并解释结果；这可以满足 empirical，而 practical
+为 `not-required`。只有实验设计或 harness 实现本身属于明确目标时才要求相应 learner-owned practical
+evidence。不要保留 reflective 作为第四维度；高价值误解和修正属于过程记录，不能替代上述 evidence。
 
 ## Project and close the gate
 

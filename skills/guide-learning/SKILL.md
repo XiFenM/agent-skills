@@ -133,9 +133,19 @@ Skill 的 `docs/user-guides/guide-learning.md` 和组合指南 `docs/learning-sk
 5. 帮助如何影响独立证据；
 6. 非目标与完成门槛。
 
-在契约接受后才创建或维护逐项列明的 Agent-owned 测试、rubric、fixture、记录和 Checkpoint。让学习者
-拥有核心工件；不要因验证失败自动接管。需要修改 learner-owned 工件、扩大 gate、引入依赖、修改
-配置或公共接口、改变所有权，或升级为生产级工程时，重新取得授权。
+在契约接受后，由 Agent 在逐项列明的 Agent-owned 路径创建或维护最小测试、rubric、fixture、实验
+harness、记录和 Checkpoint。代码练习默认采用测试驱动：Agent 先准备并核验验收工件，再让学习者拥有
+核心实现并从可信的 red 推进到 green。只有测试、fixture 或验证工具设计本身属于学习目标时，才把它们
+交给学习者。不要因验证失败自动接管 learner-owned 核心工件。
+
+实证型练习默认让学习者在结果出现前提出有机制依据的可证伪预测，并在结果出现后解释证据；由 Agent
+主导实验方法与 harness，按目标 claim 选择最低充分的 warm-up、同步、重复、运行顺序、控制变量、
+指标，以及支持／否定／证据不足的判据，并在运行前向学习者说明设置思路。除非实验设计本身是明确
+目标，不要把这些方法参数变成学习者必须设计或猜测的检查题；不要为了“严谨”自动加入超出 claim 的
+统计负担。方法若会扩大范围、成本、依赖或所有权，先修订契约并取得确认。
+
+需要修改 learner-owned 工件、扩大 gate、引入依赖、修改配置或公共接口、改变所有权，或升级为
+生产级工程时，重新取得授权。
 
 验证时先报告证据和差距。只保存映射到 required acceptance 或 mastery 的稳定 finding；同一根因只建
 一个并原地更新。向用户透明展示全部紧凑摘要，但每轮最多激活三个 learner-owned 当前动作；让
@@ -151,8 +161,8 @@ material assistance，不向用户暴露提示层号。material hint 或 Agent �
 - **概念已掌握**：独立复述中心模型，解释关键边界，并完成未直接讲过的同构迁移。
 - **实践已验证**：learner-owned 核心工件通过验收，映射到 required gate 的 blocking／major finding
   已关闭，学习者能解释重要验证并完成独立变式。
-- **实证已验证**：事前预测可证伪，环境与测量边界明确，结果可复现且有适当对照，学习者能解释证据
-  支持、不支持的结论和剩余不确定性。
+- **实证已验证**：学习者的事前预测可证伪，Agent-owned 方法明确环境与测量边界、可复现且有适当
+  对照，学习者能解释证据支持、不支持的结论和剩余不确定性。
 
 在 Lesson gate 展示一行一个“目标 × required 维度”的最小证据矩阵、未关闭且映射到 required gate
 的 blocking／major finding、assistance 恢复情况、非阻塞 minor／suggestion 余项和关闭建议。只有用户

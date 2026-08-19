@@ -102,6 +102,24 @@ def test_guide_learning_openai_metadata_routes_to_the_skill() -> None:
     assert "$guide-learning" in interface["default_prompt"]
 
 
+def test_guide_learning_keeps_validation_and_experiments_agent_owned_by_default() -> None:
+    main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    compact_main = re.sub(r"\s+", "", main)
+    teaching = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(encoding="utf-8")
+    practice = (GUIDE_ROOT / "references" / "practice-review-mastery.md").read_text(
+        encoding="utf-8"
+    )
+    user_guide = (ROOT / "docs" / "user-guides" / "guide-learning.md").read_text(encoding="utf-8")
+
+    assert "代码练习默认采用测试驱动" in main
+    assert "由Agent主导实验方法与harness" in compact_main
+    assert "不要要求学习者决定 warm-up" in teaching
+    assert "不要把“学习者写测试”" in practice
+    assert "Agent 设计并维护实验方法与 harness" in practice
+    assert all(term in practice for term in ("支持", "否定", "证据不足"))
+    assert "只有实验设计本身属于学习目标时" in user_guide
+
+
 def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> None:
     combined = "\n".join(
         path.read_text(encoding="utf-8")
