@@ -200,20 +200,33 @@ def test_discovers_both_providers_and_filters_root_sessions(
     }
 
 
-def test_windows_claude_mapping_and_exact_project_filter(
+def test_posix_claude_mapping_and_exact_project_filter(
     isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    project = r"F:\Learning\synthetic-study-log"
+    project = isolated_roots["project"]
     slugs = study_log.claude_project_slugs(project)
-    assert any(slug.casefold() == "f--learning-synthetic-study-log" for slug in slugs)
-    source = isolated_roots["claude"] / slugs[0] / "windows-session.jsonl"
-    _jsonl(source, _claude_rows(project, session_id="windows-session"))
+    expected_slug = "-" + project.resolve().as_posix().strip("/").replace("/", "-").replace(
+        ".", "-"
+    )
+    assert slugs == (expected_slug,)
 
-    code, result = _run(capsys, ["list", "--project", project, "--provider", "claude"])
+    source_dir = isolated_roots["claude"] / expected_slug
+    _jsonl(
+        source_dir / "matching-session.jsonl",
+        _claude_rows(project, session_id="matching-session"),
+    )
+    _jsonl(
+        source_dir / "other-project-session.jsonl",
+        _claude_rows(project.with_name("other-project"), session_id="other-project-session"),
+    )
+
+    code, result = _run(
+        capsys, ["list", "--project", str(project), "--provider", "claude"]
+    )
 
     assert code == 0
     assert [item["session_id"] for item in result["data"]["sessions"]] == [
-        "windows-session"
+        "matching-session"
     ]
 
 

@@ -230,7 +230,7 @@ def _project_name(project: str) -> str:
 
 
 def claude_project_slugs(project: str | Path) -> tuple[str, ...]:
-    """Return known Claude project-directory encodings, including Windows paths."""
+    """Return known Claude project-directory encodings for a host-native path."""
 
     canonical = _canonical_project(project)
     slash = canonical.replace("\\", "/")
