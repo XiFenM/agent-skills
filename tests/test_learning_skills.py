@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE_ROOT = ROOT / "skills" / "guide-learning"
 RETIRED_SKILL_NAMES = {"learn-by-practice", "study-companion"}
@@ -120,6 +119,41 @@ def test_guide_learning_keeps_validation_and_experiments_agent_owned_by_default(
     assert "只有实验设计本身属于学习目标时" in user_guide
 
 
+def test_guide_learning_orients_new_structured_lessons_before_local_work() -> None:
+    main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    teaching = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(
+        encoding="utf-8"
+    )
+    user_guide = (ROOT / "docs" / "user-guides" / "guide-learning.md").read_text(
+        encoding="utf-8"
+    )
+
+    main_cycle = main.split("## 运行教学循环", 1)[1].split("\n## ", 1)[0]
+    assert all(
+        term in main_cycle
+        for term in ("背景", "能力", "现有方案", "核心矛盾", "目标", "路线")
+    )
+    assert "在公式、API" in main_cycle
+    assert "之前" in main_cycle
+    assert "不重复完整导入" in main_cycle
+    assert "一次答疑、窄问题和短主题" in main_cycle
+
+    arc = teaching.split("## Establish the learning arc", 1)[1].split("\n## ", 1)[0]
+    compact_arc = re.sub(r"\s+", "", arc)
+    assert all(term in arc for term in ("背景", "能力", "现有方案", "核心矛盾", "目标", "路线"))
+    assert "简短而连贯的课程叙事" in arc
+    assert "不要强行制造" in arc
+    assert "重复完整导入" in compact_arc
+    assert teaching.index("## Establish the learning arc") < teaching.index(
+        "## Check only necessary prerequisites"
+    )
+
+    compact_user_guide = re.sub(r"\s+", "", user_guide)
+    assert "建立课程全貌" in compact_user_guide
+    assert "然后才进入公式、API、代码细节或局部" in compact_user_guide
+    assert "恢复课只简短定位当前位置" in compact_user_guide
+
+
 def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> None:
     combined = "\n".join(
         path.read_text(encoding="utf-8")
@@ -147,8 +181,16 @@ def test_learning_skills_announce_user_guides_once_per_conversation() -> None:
         assert "在当前对话第一次启用" in skill
         assert f"docs/user-guides/{guide_name}" in skill
         assert "docs/learning-skills-user-guide.md" in skill
-        assert f"https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/{guide_name}" in skill
-        assert "https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md" in skill
+        public_guide = (
+            "https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/"
+            f"{guide_name}"
+        )
+        public_combined_guide = (
+            "https://github.com/XiFenM/agent-skills/blob/main/docs/"
+            "learning-skills-user-guide.md"
+        )
+        assert public_guide in skill
+        assert public_combined_guide in skill
         assert "不要求用户确认" in skill
         assert "不在同一对话重复提示" in skill
         assert "不创建文件记录是否已经提示" in compact_skill

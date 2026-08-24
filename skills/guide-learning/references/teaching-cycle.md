@@ -6,13 +6,14 @@
 ## Contents
 
 1. [Prepare the teaching unit](#prepare-the-teaching-unit)
-2. [Check only necessary prerequisites](#check-only-necessary-prerequisites)
-3. [Map key nodes](#map-key-nodes)
-4. [Run the micro-cycle](#run-the-micro-cycle)
-5. [Choose adaptive checks](#choose-adaptive-checks)
-6. [Repair gaps](#repair-gaps)
-7. [Synthesize and assess](#synthesize-and-assess)
-8. [Branch by evidence](#branch-by-evidence)
+2. [Establish the learning arc](#establish-the-learning-arc)
+3. [Check only necessary prerequisites](#check-only-necessary-prerequisites)
+4. [Map key nodes](#map-key-nodes)
+5. [Run the micro-cycle](#run-the-micro-cycle)
+6. [Choose adaptive checks](#choose-adaptive-checks)
+7. [Repair gaps](#repair-gaps)
+8. [Synthesize and assess](#synthesize-and-assess)
+9. [Branch by evidence](#branch-by-evidence)
 
 ## Prepare the teaching unit
 
@@ -27,10 +28,36 @@
 当主题包含两个独立心智模型、两个可分别关闭的 gate、新的前置能力，或验证方式从理解／正确性转为
 独立实证研究时，提议拆分。不要用一场长会话掩盖 Lesson 边界。
 
+## Establish the learning arc
+
+首次开始结构化 Lesson，或开始具有多个依赖节点的独立 Session 时，先形成一条学习者可理解的因果
+线，再进入公式、API、代码细节、局部问题或理解检查。按主题实际情况选取并连接以下内容：
+
+- 主题产生于什么背景，解决什么真实问题；
+- 本轮结束后，学习者新增什么可观察能力；
+- 适用时，当前或常见的现有方案怎样工作；
+- 适用时，现有方案遇到什么限制、权衡、能力缺口或核心矛盾；
+- 本课目标怎样回应上述动机，关键节点按什么依赖关系展开；
+- 最终用什么最低充分证据确认这项能力。
+
+把这些内容讲成一段简短而连贯的课程叙事，让学习者知道“为什么学、将学会什么、接下来为什么按这条
+路线推进”。不要逐项重念目标、mastery 维度、记录路径和权限，也不要在开场预讲完后续公式、边界和
+实现细节。某项不真实或不适用时省略；尤其不要强行制造“旧方案失败、新方案胜出”的二元故事。课程
+导入不得静默新增目标、required 维度或练习范围。
+
+根据范围缩放导入：
+
+- 无 drift 恢复时，用一句话把当前位置和已建立模型挂回整体路线，然后直接续接唯一下一动作；不要
+  重复完整导入。
+- 一次答疑、窄问题或短主题直接回答，或只给足以定位当前问题的局部框架。
+- 用户、来源或此前对话已经建立全貌时，只补缺失的因果连接。
+- 用户明确要求跳到某个节点时遵从其节奏；只在会影响理解时简短说明该节点在路线中的位置。
+
 ## Check only necessary prerequisites
 
-先从已验证 mastery、既有工件、近期 Session evidence 和用户明确陈述中核对前置。不要固定执行课前
-考试，也不要把缺少记录等同于不会。
+建立与范围相称的课程全貌后，先从已验证 mastery、既有工件、近期 Session evidence 和用户明确陈述
+中核对前置。不要固定执行课前考试，也不要把缺少记录等同于不会。上下文建立阶段若仍有一个会实质
+改变目标或授权的必要问题，可以先解决它；不要用课前知识检查取代课程导入。
 
 仅当一项前置同时满足以下条件时提问：
 
@@ -49,7 +76,7 @@
 
 ## Map key nodes
 
-先给一张很短的全局图，再进入细节。全局图只回答：
+在已建立的课程叙事下，把路线进一步划成关键节点。内部节点图只回答：
 
 - 当前能力解决什么问题；
 - 由哪些关键节点组成；
