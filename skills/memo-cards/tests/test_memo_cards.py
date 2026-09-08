@@ -421,6 +421,7 @@ def test_template_registry_is_single_ordered_source() -> None:
         "technical-qa",
         "cloze",
         "oral",
+        "choice-multi",
     ]
     for template in registry.templates:
         assert re.findall(r"\{\{([^{}]+)\}\}", template.body) == [name for name, _kind in template.fields]
@@ -448,7 +449,7 @@ def test_identity_ignores_wording_and_source_but_tracks_scope_and_assessment(tmp
 
 def test_reserved_syntax_and_unsafe_spreadsheet_cells_are_rejected(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
-    for answer in ("unsafe\tcell", "unsafe\nline", "[T#B#injection]", "unsafe]close", "---", "```tsv"):
+    for answer in ("unsafe\tcell", "unsafe\nline", "[T#B#injection]", "---", "```tsv"):
         with pytest.raises(memo_cards.MemoCardsError, match="single spreadsheet-safe|reserved"):
             _prepare(environment, [_card("unsafe", 1, answer=answer)])
 
@@ -839,6 +840,7 @@ def test_registry_content_field_capability_matrix_is_explicit() -> None:
         ("technical-qa", "锚点"): False,
         ("cloze", "说明"): True,
         ("oral", "参考回答"): True,
+        ("choice-multi", "解析"): True,
     }
     assert actual == expected
 

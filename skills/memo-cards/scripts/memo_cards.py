@@ -97,6 +97,7 @@ FIELD_TYPES = {
     "choice-answer-3",
     "choice-answer-4",
     "cloze-answer",
+    "choice-block",
     "anchors-3-5",
 }
 CONTENT_BLOCK_TYPES = {"lead", "point", "display", "boundary"}
@@ -1024,15 +1025,24 @@ def _plain_text(value: Any, label: str, *, maximum: int = 5000) -> str:
         raise MemoCardsError(
             "integrity", f"{label} contains a control or Unicode line-separator character"
         )
-    if "]" in text or RESERVED_RE.search(text) or "---" in text or "```" in text:
+    if RESERVED_RE.search(text) or "---" in text or "```" in text:
         raise MemoCardsError("integrity", f"{label} collides with reserved Markji or staging syntax")
     return text
 
 
+def _render_text(value: Any, label: str, *, maximum: int = 5000) -> str:
+    """Escape literal brackets only at the rendering boundary, never in identity."""
+    text = _plain_text(value, label, maximum=maximum)
+    # A final backslash would escape the enclosing tag's closing bracket.
+    if text.endswith("\\"):
+        raise MemoCardsError("integrity", f"{label} cannot end with a backslash")
+    return text.replace("[", "\\[").replace("]", "\\]")
+
+
 def _public_url(value: Any, label: str) -> str:
     url = _plain_text(value, label, maximum=2000)
-    if '"' in url:
-        raise MemoCardsError("integrity", f"{label} cannot contain a quote")
+    if any(character in url for character in '\"#,[\\]') or any(character.isspace() for character in url):
+        raise MemoCardsError("integrity", f"{label} contains an unsafe Markji URL parameter; supply a correctly encoded URL")
     try:
         parsed = urlsplit(url)
         _ = parsed.port
@@ -1075,17 +1085,19 @@ def _render_content_parts(parts: Any, label: str, *, mode: str = "single-line") 
         part_types.append(part_type)
         if part_type == "text":
             _strict_keys(part, label=part_label, required={"type", "text"}, kind="integrity")
-            rendered.append(_plain_text(part["text"], f"{part_label}.text"))
+            rendered.append(_render_text(part["text"], f"{part_label}.text"))
         elif part_type == "formula":
             _strict_keys(part, label=part_label, required={"type", "katex"}, kind="integrity")
             katex = _plain_text(part["katex"], f"{part_label}.katex", maximum=2000)
-            if "]" in katex:
-                raise MemoCardsError("integrity", f"{part_label}.katex cannot contain ]")
+            if "$" in katex or any(token in katex for token in (r"\(", r"\)", r"\[", r"\]")):
+                raise MemoCardsError("integrity", f"{part_label}.katex must omit external math delimiters")
+            if "[" in katex or "]" in katex or katex.endswith("\\"):
+                raise MemoCardsError("integrity", f"{part_label}.katex must use bracket-free KaTeX such as \\lbrack and \\rbrack")
             rendered.append(f"[E##{katex}]")
         elif part_type == "link":
             _strict_keys(part, label=part_label, required={"type", "url", "label"}, kind="integrity")
             url = _public_url(part["url"], f"{part_label}.url")
-            display = _plain_text(part["label"], f"{part_label}.label")
+            display = _render_text(part["label"], f"{part_label}.label")
             rendered.append(f'[T#link/"{url}"#{display}]')
         elif part_type == "audio":
             _strict_keys(
@@ -1096,11 +1108,11 @@ def _render_content_parts(parts: Any, label: str, *, mode: str = "single-line") 
                 kind="integrity",
             )
             media_id = _markji_id(part["id"], f"{part_label}.id")
-            display = _plain_text(part["text"], f"{part_label}.text")
+            display = _render_text(part["text"], f"{part_label}.text")
             autoplay = part.get("autoplay", False)
             if not isinstance(autoplay, bool):
                 raise MemoCardsError("integrity", f"{part_label}.autoplay must be boolean")
-            parameter = ",A" if autoplay else ""
+            parameter = ",A" if autoplay else ",M"
             rendered.append(f"[Audio#ID/{media_id}{parameter}#{display}]")
         elif part_type == "image":
             _strict_keys(
@@ -1118,10 +1130,11 @@ def _render_content_parts(parts: Any, label: str, *, mode: str = "single-line") 
         elif part_type == "card-ref":
             _strict_keys(part, label=part_label, required={"type", "ids", "text"}, kind="integrity")
             ids = part["ids"]
-            if not isinstance(ids, list) or not ids or len(ids) > 20:
-                raise MemoCardsError("integrity", f"{part_label}.ids must contain 1-20 explicit IDs")
+            if not isinstance(ids, list) or not ids or len(ids) > 5:
+                raise MemoCardsError("integrity", f"{part_label}.ids must contain 1-5 explicit root_ids")
             normalized_ids = [_markji_id(item, f"{part_label}.ids[{item_index}]") for item_index, item in enumerate(ids)]
-            display = _plain_text(part["text"], f"{part_label}.text")
+            normalized_ids = list(dict.fromkeys(normalized_ids))
+            display = _render_text(part["text"], f"{part_label}.text")
             rendered.append(f"[Card#ID/{'-'.join(normalized_ids)}#{display}]")
         else:
             raise MemoCardsError("integrity", f"{part_label}.type is unsupported")
@@ -1160,7 +1173,7 @@ def _render_content_parts(parts: Any, label: str, *, mode: str = "single-line") 
 
 
 def _content_block_label(value: Any, label: str) -> str:
-    result = _plain_text(value, label, maximum=CONTENT_BLOCK_LABEL_MAXIMUM)
+    result = _render_text(value, label, maximum=CONTENT_BLOCK_LABEL_MAXIMUM)
     if result != result.strip():
         raise MemoCardsError("integrity", f"{label} cannot have surrounding whitespace")
     return result
@@ -1283,7 +1296,7 @@ def _render_content_blocks(blocks: Any, label: str) -> str:
 
 def _render_content(value: Any, label: str) -> str:
     if isinstance(value, str):
-        return _plain_text(value, label)
+        return _render_text(value, label)
     content = _object(value, label)
     if "parts" in content:
         _strict_keys(content, label=label, required={"parts"}, kind="integrity")
@@ -1298,7 +1311,7 @@ def _render_content(value: Any, label: str) -> str:
 
 def _render_embedded_content(value: Any, label: str) -> str:
     if isinstance(value, str):
-        return _plain_text(value, label)
+        return _render_text(value, label)
     content = _object(value, label)
     _strict_keys(content, label=label, required={"parts"}, kind="integrity")
     return _render_content_parts(content["parts"], f"{label}.parts", mode="plain")
@@ -1332,7 +1345,28 @@ def _render_field(
     standalone_content: bool = False,
 ) -> str:
     if field_type == "text":
-        return _plain_text(value, label)
+        return _render_text(value, label)
+    if field_type == "choice-block":
+        if not standalone_content:
+            raise MemoCardsError("integrity", f"{label} choice block must occupy a standalone template field")
+        choice = _object(value, label)
+        _strict_keys(choice, label=label, required={"options", "answers"}, optional={"fixed"}, kind="integrity")
+        options, answers = choice["options"], choice["answers"]
+        if not isinstance(options, list) or not 2 <= len(options) <= 4:
+            raise MemoCardsError("integrity", f"{label}.options must contain 2-4 options")
+        if (not isinstance(answers, list) or len(answers) < 2
+                or any(type(item) is not int or not 1 <= item <= len(options) for item in answers)
+                or answers != sorted(set(answers))):
+            raise MemoCardsError("integrity", f"{label}.answers must contain ordered unique multiple answer numbers")
+        fixed = choice.get("fixed", False)
+        if not isinstance(fixed, bool):
+            raise MemoCardsError("integrity", f"{label}.fixed must be boolean")
+        parameters = "fixed,multi" if fixed else "multi"
+        lines = [f"[Choice#{parameters}#"]
+        for index, option in enumerate(options, 1):
+            prefix = "*" if index in answers else "-"
+            lines.append(f"{prefix} {_render_text(option, f'{label}.options[{index}]')}")
+        return "\n".join([*lines, "]"])
     if field_type == "content":
         if standalone_content:
             return _render_content(value, label)
@@ -1341,13 +1375,11 @@ def _render_field(
         count = int(field_type.rsplit("-", 1)[1])
         answer = _plain_text(value, label, maximum=count)
         allowed = "ABCD"[:count]
-        if not answer or any(character not in allowed for character in answer):
-            raise MemoCardsError("integrity", f"{label} must use answer letters from {allowed}")
-        if answer != "".join(sorted(set(answer))):
-            raise MemoCardsError("integrity", f"{label} answer letters must be unique and ordered")
+        if len(answer) != 1 or answer not in allowed:
+            raise MemoCardsError("integrity", f"{label} requires one answer from {allowed}; use choice-multi for multiple answers")
         return answer
     if field_type == "cloze-answer":
-        answer = _plain_text(value, label, maximum=100)
+        answer = _render_text(value, label, maximum=100)
         words = re.findall(r"\b\w+\b", answer, flags=re.UNICODE)
         if not 1 <= len(words) <= 3:
             raise MemoCardsError("integrity", f"{label} must be a uniquely determined 1-3 word answer")
@@ -1355,7 +1387,7 @@ def _render_field(
     if field_type == "anchors-3-5":
         if not isinstance(value, list) or not 3 <= len(value) <= 5:
             raise MemoCardsError("integrity", f"{label} must contain 3-5 scoring anchors")
-        return "；".join(_plain_text(item, f"{label}[{index}]", maximum=500) for index, item in enumerate(value))
+        return "；".join(_render_text(item, f"{label}[{index}]", maximum=500) for index, item in enumerate(value))
     raise MemoCardsError("integrity", f"{label} has an unsupported field type")
 
 

@@ -14,7 +14,7 @@ learning/cards/topic-technical-qa.xlsx
 Markdown frontmatter 保存受管 manifest，正文只保留模板定义、卡片数量与 XLSX 链接，不复制卡片数据，
 也不包含 TSV。每个有 active 卡片的模板恰好对应一个 XLSX；`review` 与 `archived` 卡不导出。每个工作簿
 只有首个且唯一的 `cards` sheet，第一行严格使用 registry 字段顺序，后续每行一张卡。用户在 Markji 选择
-相应模板后分别上传这些 XLSX；本 Skill 不上传或导入。
+相应模板后分别上传这些 XLSX；用户明确要求直接上传时走[官方 API 流程](markji-api-upload.md)。
 
 ## Context 配置
 
@@ -160,7 +160,7 @@ manifest 和 preview，并强制 `confirmed` 授权。
 PDF 把公式 `E` 与图片 `Pic` 定义为整行元素。因此 lead、point 与 boundary 只允许行内 part；
 `display` 必须包含恰好一个 `formula`，或一个／多个 `image`。顶层 `{"parts": [...]}` 若包含公式或
 图片，也必须是单个 formula 或纯 images，不能与 text、link 等行内 part 混排。工具生成的整行元素不
-嵌入 `T`。媒体与卡片引用只能携带用户已经提供的 ID。不要在字符串、part 或 block label 中传入现成
+嵌入 `T`。媒体与卡片引用只能携带用户提供，或按当次授权从官方响应／回执核实的 ID。不要在字符串、part 或 block label 中传入现成
 Markji 语法；详细内容层级见[卡片内容与版式](card-content-layout.md)。
 
 结构化能力还受模板占位上下文约束。只有占位符独占模板一行的 `content` 字段可以使用 blocks、display
@@ -173,6 +173,24 @@ XLSX 使用标准库生成的最小 SpreadsheetML，所有单元格均为 inline
 开头的内容也保持文本，不生成公式节点。工具固定 sheet、列序、行序、ZIP member、时间戳和存储方式，
 并限制 XML 字符、Excel 行列与 32767 UTF-16 code units 的保守单元格上限。相同输入必须得到相同字节
 和 SHA-256。
+
+## 多选题与字符保真
+
+单选模板 `choice-2`／`choice-3`／`choice-4` 的“答案”只能是一个字母。多个正确选项使用
+`choice-multi`：字段为“题干”“选择”“解析”“场景”，“选择”使用专门的结构化字段：
+
+```json
+{
+  "options": ["第一项", "第二项", "第三项"],
+  "answers": [1, 3],
+  "fixed": true
+}
+```
+
+`options` 是 2–4 条纯文本，`answers` 是至少两个升序且不重复的选项编号，从 1 开始；`fixed` 可选，
+默认不固定顺序。工具生成多选块及 `*`／`-` 标记，不把答案编号当作复习正文。
+普通半角中括号交给工具转义；不手工转义或替换为全角字符。音频 `autoplay=false` 生成显式 `M`；
+`card-ref.ids` 只接收真实 `root_id`，最多 5 个。公式和 URL 的参数限制见[兼容面](markji-3.8-compatibility.md)。
 
 ## 工具调用与结果
 

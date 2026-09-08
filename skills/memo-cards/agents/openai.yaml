@@ -1,4 +1,4 @@
 interface:
   display_name: "Memo Cards / 记忆卡"
-  short_description: "把成熟素材拆成清晰、分层的受管墨墨卡片与 XLSX"
-  default_prompt: "Use $memo-cards to preview high-value Markji cards with concise prompts, layered answers, and managed per-template XLSX files from the verified learning material I specify."
+  short_description: "把成熟素材制作成受管墨墨卡片与 XLSX，并按明确请求安全上传"
+  default_prompt: "使用 $memo-cards 将我指定的已核验素材制作成可预览的复习卡片，保存受管 Markdown 与 XLSX，并在我明确指定上传目标后通过官方 API 上传。"

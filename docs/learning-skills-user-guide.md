@@ -7,7 +7,7 @@
 | [`guide-learning`](user-guides/guide-learning.md) | 讲解、理解检查、练习、评审和掌握验证 | 用户希望学习、理解、继续或恢复一个主题 | 一次答疑保持零写入；明确的独立学习或长期课程在已授权位置保存最小进展，有后续任务时再保留恢复位置 |
 | [`english-coach`](user-guides/english-coach.md) | 英语自然度反馈和已学内容的英语主动表达 | 用户本人使用英语，或明确要求英语练习与回顾 | 默认只在当前对话中反馈 |
 | [`study-log`](user-guides/study-log.md) | 结构化学习过程记录或可追溯可见文本归档 | 用户要求整理、保存或归档学习对话 | 先选择记录类型、会话和边界；可追溯文本归档单独确认隐私与目标 |
-| [`memo-cards`](user-guides/memo-cards.md) | 把成熟材料先拆成清晰卡片，再生成受管 Markdown 与 Markji XLSX | 用户明确要求预览、创建、刷新或去重卡片 | 先预览内容与版式，确认后保存；按模板逐个上传 XLSX |
+| [`memo-cards`](user-guides/memo-cards.md) | 制作受管 Markdown 与 Markji XLSX，并可通过官方 API 上传 | 用户明确要求制卡、刷新、去重或上传 | 先预览和保存；手动导入 XLSX，或按明确请求上传到指定章节 |
 | [`resource-planning`](user-guides/resource-planning.md) | 研究、刷新和评审资料组合 | 用户需要寻找、比较或治理资料 | 专题研究默认只在对话中；任何持久写入都经过准确预览和确认 |
 
 ## 建议的组合关系
@@ -39,7 +39,8 @@ study-log 的可追溯文本归档：独立的审计／研究分支，不进入�
    素材可以直接来自已核验的学习要点或文章、结构化学习记录，也可以来自稳定的英语表达候选，不需要
    先生成学习日志。Agent 先拆分单一回忆目标，再把复杂答案整理为结论、要点与边界；用户审阅候选、
    内容版式、Markdown diff 与 XLSX 变化，确认后保存本地产物，最后在 Markji 中为每个模板逐个上传
-   对应 XLSX。结论与边界标签可以配合卡片语言调整，同一 collection 仍保持一致。
+   对应 XLSX；也可明确要求通过官方 API 上传到指定自建牌组章节。凭据仅在本机秘密存储中配置。
+   结论与边界标签可以配合卡片语言调整，同一 collection 仍保持一致。
 
 并非每次学习都需要完成五个步骤。一次简单答疑通常只需要 `guide-learning`；一次英语回顾可以只使用 `english-coach`；只想比较资料时也可以单独使用 `resource-planning`。
 
