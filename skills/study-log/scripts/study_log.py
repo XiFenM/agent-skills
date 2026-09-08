@@ -69,7 +69,9 @@ CODEX_STRIP_PATTERNS = (
 )
 STANDALONE_SKILL_CONTEXT_RE = re.compile(r"<skill>.*?</skill>", re.DOTALL)
 IDE_CONTEXT_PREFIX = "# Context from my IDE setup:"
-IDE_REQUEST_MARKER = "## My request for Codex:"
+IDE_REQUEST_HEADING_RE = re.compile(
+    r"^(?:## My request for Codex:|# My request:|## My request:)\r?$", re.MULTILINE
+)
 COMMAND_NAME_RE = re.compile(r"<command-name>(.*?)</command-name>", re.DOTALL)
 
 
@@ -480,10 +482,12 @@ def _clean_codex_user_text(text: str, *, keep_client_context: bool) -> str:
     text = text.strip()
     if STANDALONE_SKILL_CONTEXT_RE.fullmatch(text):
         return ""
-    if IDE_REQUEST_MARKER in text:
-        text = text.split(IDE_REQUEST_MARKER, maxsplit=1)[1]
-    elif text.startswith(IDE_CONTEXT_PREFIX):
-        return ""
+    # Only unwrap a real IDE envelope; quoted headings in user prose are content.
+    if text.split("\n", maxsplit=1)[0].removesuffix("\r") == IDE_CONTEXT_PREFIX:
+        request_heading = IDE_REQUEST_HEADING_RE.search(text)
+        if request_heading is None:
+            return ""
+        text = text[request_heading.end() :]
     return _clean_common_text(text)
 
 
