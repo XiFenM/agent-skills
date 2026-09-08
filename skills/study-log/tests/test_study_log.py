@@ -333,6 +333,139 @@ def test_codex_normalization_preserves_request_and_excludes_client_injections(
     assert all("hidden" not in message.text for message in data.messages)
 
 
+@pytest.mark.parametrize(
+    "request_heading",
+    ["## My request for Codex:", "# My request:", "## My request:"],
+)
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_codex_ide_request_heading_variants_preserve_visible_body(
+    isolated_roots: dict[str, Path], request_heading: str, newline: str
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "ide-request.jsonl"
+    body = newline.join(
+        ["1. waiting 不等于 running。", "", "| 状态 | KV |", "| --- | --- |", "| waiting | 尚未分配 |"]
+    )
+    wrapper = newline.join(
+        [
+            "# Context from my IDE setup:",
+            "",
+            "## Active file: scheduler.py",
+            "",
+            "## Open tabs:",
+            "- scheduler.py",
+            "",
+            request_heading,
+            body,
+        ]
+    )
+    rows = _codex_rows(project)[:1]
+    rows.append(_codex_message("2026-08-10T10:00:01Z", "user", wrapper))
+    _jsonl(source, rows)
+
+    data = study_log._load_session(
+        source, provider="codex", project=str(project), tail_lenient=False
+    )
+
+    assert [(message.role, message.text) for message in data.messages] == [("user", body)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "请解释字符串 ## My request for Codex: 的作用，不要丢掉这段提问。",
+        "下面是我的笔记，不是 IDE 包装。\n## My request for Codex:\n保留笔记全文。",
+        "## My request:\n这是没有 IDE 包装的普通 Markdown 提问。",
+        "# Context from my IDE setup: 是示例标题，不是真正的包装。\n"
+        "## My request for Codex:\n保留全文。",
+        "下面是包装格式示例：\n```text\n# Context from my IDE setup:\n"
+        "## My request for Codex:\n示例正文\n```\n请解释这个格式。",
+    ],
+)
+def test_codex_request_heading_in_ordinary_user_text_is_not_truncated(
+    isolated_roots: dict[str, Path], text: str
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "ordinary-request.jsonl"
+    rows = _codex_rows(project)[:1]
+    rows.append(_codex_message("2026-08-10T10:00:01Z", "user", text))
+    _jsonl(source, rows)
+
+    data = study_log._load_session(
+        source, provider="codex", project=str(project), tail_lenient=False
+    )
+
+    assert [message.text for message in data.messages] == [text]
+
+
+@pytest.mark.parametrize(
+    "context_tail",
+    [
+        "## Active file: scheduler.py",
+        "## Active selection:\n提到了 ## My request for Codex:，但没有请求标题。",
+        "# My request: 这不是独立的标题行。",
+        "### My request:\n不支持的包装标题。",
+        "## My request:\n",
+    ],
+)
+def test_codex_ide_context_without_supported_request_body_stays_excluded(
+    isolated_roots: dict[str, Path], context_tail: str
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "context-only.jsonl"
+    rows = _codex_rows(project)[:1]
+    rows.append(
+        _codex_message(
+            "2026-08-10T10:00:01Z", "user", "# Context from my IDE setup:\n\n" + context_tail
+        )
+    )
+    _jsonl(source, rows)
+
+    data = study_log._load_session(
+        source, provider="codex", project=str(project), tail_lenient=False
+    )
+
+    assert data.messages == ()
+
+
+def test_recovering_ide_request_body_preserves_existing_message_ids(
+    isolated_roots: dict[str, Path]
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "normalization-ids.jsonl"
+    rows = _codex_rows(project, session_id="normalization-ids")[:1]
+    rows.extend(
+        [
+            _codex_message("2026-08-10T10:00:01Z", "user", "原有用户正文"),
+            _codex_message(
+                "2026-08-10T10:00:02Z",
+                "user",
+                "# Context from my IDE setup:\n# My request:\n恢复的用户作答",
+            ),
+            _codex_message(
+                "2026-08-10T10:00:03Z",
+                "user",
+                "# Context from my IDE setup:\n## My request for Codex:\n解释分页注意力",
+            ),
+            _codex_message(
+                "2026-08-10T10:00:04Z", "assistant", "页表映射逻辑块。", phase="final_answer"
+            ),
+        ]
+    )
+    _jsonl(source, rows)
+
+    data = study_log._load_session(
+        source, provider="codex", project=str(project), tail_lenient=False
+    )
+    ids_by_text = {message.text: message.message_id for message in data.messages}
+
+    assert "恢复的用户作答" in ids_by_text
+    # IDs captured from the original normalizer for these unchanged source rows.
+    assert ids_by_text["原有用户正文"] == "msg-9e4968c1b46ae0d8b7f7"
+    assert ids_by_text["解释分页注意力"] == "msg-06a70f886391af887e29"
+    assert ids_by_text["页表映射逻辑块。"] == "msg-823cb35094da9a9a854f"
+
+
 def test_semantic_time_and_final_only_selection() -> None:
     messages = [
         study_log._build_message(
