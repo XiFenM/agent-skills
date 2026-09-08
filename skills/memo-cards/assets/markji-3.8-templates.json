@@ -1,6 +1,6 @@
 {
   "schema": "memo-cards.markji-template-registry/v1",
-  "registry_version": "1.0.0",
+  "registry_version": "1.1.0",
   "adapter": {
     "id": "markji",
     "minimum_client_version": "3.8.00"
@@ -8,7 +8,7 @@
   "templates": [
     {
       "id": "correction",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "correction",
       "display_name": "真实错误纠错卡",
       "fields": [
@@ -22,7 +22,7 @@
     },
     {
       "id": "active-production",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "production",
       "display_name": "主动产出卡",
       "fields": [
@@ -35,7 +35,7 @@
     },
     {
       "id": "choice-2",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "discrimination",
       "display_name": "二选项辨析卡",
       "fields": [
@@ -50,7 +50,7 @@
     },
     {
       "id": "choice-3",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "discrimination",
       "display_name": "三选项辨析卡",
       "fields": [
@@ -66,7 +66,7 @@
     },
     {
       "id": "choice-4",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "discrimination",
       "display_name": "四选项辨析卡",
       "fields": [
@@ -83,7 +83,7 @@
     },
     {
       "id": "qa",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "qa",
       "display_name": "概念问答卡",
       "fields": [
@@ -96,7 +96,7 @@
     },
     {
       "id": "technical-qa",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "technical-qa",
       "display_name": "技术问答卡",
       "fields": [
@@ -109,7 +109,7 @@
     },
     {
       "id": "cloze",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "cloze",
       "display_name": "可选挖空卡",
       "fields": [
@@ -118,11 +118,11 @@
         {"name": "说明", "type": "content"},
         {"name": "来源", "type": "text"}
       ],
-      "body": "[P#H1#{{提示}}]\n[F##{{答案}}]\n---\n{{说明}}\n📍 [T#!939393#{{来源}}]"
+      "body": "[P#H1#{{提示}}]\n[F#1#{{答案}}]\n---\n{{说明}}\n📍 [T#!939393#{{来源}}]"
     },
     {
       "id": "oral",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "card_kind": "oral",
       "display_name": "综合口述卡",
       "fields": [
@@ -132,6 +132,19 @@
         {"name": "来源", "type": "text"}
       ],
       "body": "[P#H1#{{问题}}]\n---\n{{参考回答}}\n💡 [T#B,!36b59d#{{评分锚点}}]\n📍 [T#!939393#{{来源}}]"
+    },
+    {
+      "id": "choice-multi",
+      "version": "1.1.0",
+      "card_kind": "discrimination",
+      "display_name": "多选辨析卡",
+      "fields": [
+        {"name": "题干", "type": "text"},
+        {"name": "选择", "type": "choice-block"},
+        {"name": "解析", "type": "content"},
+        {"name": "场景", "type": "text"}
+      ],
+      "body": "[P#H1#{{题干}}]\n{{选择}}\n---\n{{解析}}\n📍 [T#!939393#{{场景}}]"
     }
   ]
 }
