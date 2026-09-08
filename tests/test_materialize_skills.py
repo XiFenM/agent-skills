@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -43,6 +43,34 @@ class MaterializeTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    @contextmanager
+    def forbid_material_reads(self, *paths: Path):
+        """Watch actual file opens, including binary reads that would decode fine."""
+        materials = {os.path.abspath(path) for path in paths}
+        attempts: list[str] = []
+
+        def guarded(opener):
+            def open_file(path, *args, **kwargs):
+                if not isinstance(path, int):
+                    absolute = os.path.abspath(os.fsdecode(path))
+                    if absolute in materials:
+                        attempts.append(absolute)
+                        raise AssertionError(f"materializer opened material: {absolute}")
+                return opener(path, *args, **kwargs)
+
+            return open_file
+
+        with ExitStack() as stack:
+            for target, opener in (
+                ("pathlib.Path.open", Path.open),
+                ("builtins.open", open),
+                ("io.open", io.open),
+                ("os.open", os.open),
+            ):
+                stack.enter_context(mock.patch(target, new=guarded(opener)))
+            yield attempts
+        self.assertEqual(attempts, [])
 
     def create_central(self, root: Path, body: str) -> None:
         skill = root / "skills" / "demo-skill"
@@ -701,16 +729,43 @@ def validate_materialized_context(repository_config, skill_config):
         ):
             materialize_skills.build_plan(self.repo, self.central, self.config)
 
-    def test_v2_rejects_undeclared_binary_collection_members(self) -> None:
+    def test_v2_materializes_mixed_collection_without_opening_materials(self) -> None:
         self.enable_context_fixture()
-        binary = self.repo / "records" / "cards.xlsx"
-        binary.write_bytes(b"\xff\xfe")
-        git(self.repo, "add", "records/cards.xlsx")
+        for filename, body in (
+            ("cards.xlsx", b"PK\x03\x04\xff\xfe"),
+            ("diagram.png", b"\x89PNG\r\n\x1a\n\xff\x00"),
+            ("diagram.drawio", b"<mxfile/>"),
+            ("invalid.md", b"\xff\xfe"),
+        ):
+            (self.repo / "records" / filename).write_bytes(body)
+        git(self.repo, "add", "records")
+        materials = [
+            *sorted((self.repo / "records").iterdir()),
+            *sorted((self.repo / "facts").iterdir()),
+        ]
 
-        with self.assertRaisesRegex(materialize_skills.SyncError, "valid UTF-8"):
-            materialize_skills.build_plan(self.repo, self.central, self.config)
+        with self.forbid_material_reads(*materials):
+            materialize_skills.synchronize(self.repo, self.central, self.config)
+            self.assertEqual(
+                materialize_skills.check(self.repo, self.central, self.config), []
+            )
+        context = json.loads(
+            (self.target() / materialize_skills.CONTEXT_FILE).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            context["allowlist"]["tracked_files"],
+            [
+                "facts/goal.md",
+                "facts/input.md",
+                "records/cards.xlsx",
+                "records/diagram.drawio",
+                "records/diagram.png",
+                "records/invalid.md",
+                "records/one.md",
+            ],
+        )
 
-    def test_v2_allows_only_declared_binary_collection_extensions(self) -> None:
+    def test_v2_binary_extension_declaration_is_compatible_not_a_read_permit(self) -> None:
         self.enable_context_fixture()
         validator = self.central / "skills" / "demo-skill" / "scripts" / "context.py"
         source = validator.read_text(encoding="utf-8")
@@ -723,22 +778,187 @@ def validate_materialized_context(repository_config, skill_config):
         self.commit_central("declare fixture binary collection extension")
         binary = self.repo / "records" / "cards.xlsx"
         binary.write_bytes(b"\xff\xfe")
-        git(self.repo, "add", "records/cards.xlsx")
+        undeclared = self.repo / "records" / "diagram.png"
+        undeclared.write_bytes(b"\x89PNG\r\n\x1a\n\xff\x00")
+        git(self.repo, "add", "records/cards.xlsx", "records/diagram.png")
 
-        materialize_skills.synchronize(self.repo, self.central, self.config)
+        with self.forbid_material_reads(binary, undeclared):
+            materialize_skills.synchronize(self.repo, self.central, self.config)
         context = json.loads(
             (self.target() / materialize_skills.CONTEXT_FILE).read_text(encoding="utf-8")
         )
         self.assertIn("records/cards.xlsx", context["allowlist"]["tracked_files"])
+        self.assertIn("records/diagram.png", context["allowlist"]["tracked_files"])
 
-    def test_v2_still_rejects_non_utf8_explicit_tracked_files(self) -> None:
+    def test_v2_non_utf8_explicit_tracked_files_are_not_opened(self) -> None:
         self.enable_context_fixture()
-        explicit = self.repo / "facts" / "input.md"
-        explicit.write_bytes(b"\xff\xfe")
-        git(self.repo, "add", "facts/input.md")
+        skill_path = self.repo / ".agent-skills-config" / "demo-skill.json"
+        skill = json.loads(skill_path.read_text(encoding="utf-8"))
+        for filename in ("input.md", "diagram.png"):
+            with self.subTest(filename=filename):
+                explicit = self.repo / "facts" / filename
+                explicit.write_bytes(b"\xff\xfe")
+                git(self.repo, "add", f"facts/{filename}")
+                skill["input_path"] = f"facts/{filename}"
+                write_json(skill_path, skill)
+                with self.forbid_material_reads(explicit):
+                    _desired, consumer = materialize_skills.build_plan(
+                        self.repo, self.central, self.config
+                    )
+                self.assertIn(
+                    f"facts/{filename}",
+                    consumer.contexts["demo-skill"]["allowlist"]["tracked_files"],
+                )
 
-        with self.assertRaisesRegex(materialize_skills.SyncError, "valid UTF-8"):
-            materialize_skills.build_plan(self.repo, self.central, self.config)
+    def test_v2_existing_write_file_is_not_opened_or_modified(self) -> None:
+        self.enable_context_fixture()
+        target = self.repo / "generated" / "output.md"
+        target.parent.mkdir()
+        original = b"\xff\xfe existing material, not materializer output"
+        target.write_bytes(original)
+        git(self.repo, "add", "generated/output.md")
+
+        with self.forbid_material_reads(target):
+            materialize_skills.synchronize(self.repo, self.central, self.config)
+            self.assertEqual(
+                materialize_skills.check(self.repo, self.central, self.config), []
+            )
+        self.assertEqual(target.read_bytes(), original)
+
+    def test_v2_material_content_changes_do_not_drift_generated_context(self) -> None:
+        self.enable_context_fixture()
+        materialize_skills.synchronize(self.repo, self.central, self.config)
+        materials = [self.repo / "facts/input.md", self.repo / "records/one.md"]
+        for material in materials:
+            material.write_bytes(b"\xff\xfe modified content")
+
+        with self.forbid_material_reads(*materials):
+            self.assertEqual(
+                materialize_skills.check(self.repo, self.central, self.config), []
+            )
+
+    def test_v2_still_reads_and_rejects_corrupt_configuration_content(self) -> None:
+        self.enable_context_fixture()
+        for relative in (
+            ".agent-skills.json",
+            ".agent-skills-config/repository.json",
+            ".agent-skills-config/demo-skill.json",
+        ):
+            path = self.repo / relative
+            original = path.read_bytes()
+            for body, message in (
+                (b"\xff\xfe", "JSON file is not valid UTF-8"),
+                (b"{broken", "invalid JSON"),
+            ):
+                with self.subTest(path=relative, body=body):
+                    path.write_bytes(body)
+                    with self.assertRaisesRegex(materialize_skills.SyncError, message):
+                        materialize_skills.build_plan(self.repo, self.central, self.config)
+            path.write_bytes(original)
+
+    def test_v2_still_validates_legacy_binary_extension_declaration_schema(self) -> None:
+        self.enable_context_fixture()
+        validator = self.central / "skills" / "demo-skill" / "scripts" / "context.py"
+        source = validator.read_text(encoding="utf-8")
+        needle = '        "write_paths": [skill_config["output_path"]],\n'
+        for declaration, message in (
+            ([], "must be an object"),
+            ({"records": ".png"}, "must be an object"),
+            ({"undeclared": [".png"]}, "undeclared tracked collections"),
+            ({"records": [".PNG"]}, "lowercase dot extensions"),
+            ({"records": [123]}, "lowercase dot extensions"),
+            ({"records": [".png", ".png"]}, "contain duplicates"),
+        ):
+            with self.subTest(declaration=declaration):
+                validator.write_text(
+                    source.replace(
+                        needle,
+                        needle + f'        "binary_collection_extensions": {declaration!r},\n',
+                    ),
+                    encoding="utf-8",
+                )
+                self.commit_central("malformed fixture extension declaration")
+                with self.assertRaisesRegex(materialize_skills.SyncError, message):
+                    materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_missing_or_nonregular_tracked_material_is_still_rejected(self) -> None:
+        self.enable_context_fixture()
+        for relative, message in (
+            ("facts/input.md", "real regular file"),
+            ("records/one.md", "non-regular tracked entry"),
+        ):
+            path = self.repo / relative
+            original = path.read_bytes()
+            path.unlink()
+            for kind in ("missing", "directory"):
+                with self.subTest(path=relative, kind=kind):
+                    if kind == "directory":
+                        path.mkdir()
+                    with self.forbid_material_reads(path):
+                        with self.assertRaisesRegex(materialize_skills.SyncError, message):
+                            materialize_skills.build_plan(self.repo, self.central, self.config)
+            path.rmdir()
+            path.write_bytes(original)
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlink API unavailable")
+    def test_v2_symlinked_material_or_write_target_is_still_rejected(self) -> None:
+        self.enable_context_fixture()
+        target = self.repo / "generated/output.md"
+        target.parent.mkdir()
+        target.write_bytes(b"\xff\xfe")
+        git(self.repo, "add", "generated/output.md")
+        outside = Path(self.temporary.name) / "outside.bin"
+        outside.write_bytes(b"\xff\xfe private outside material")
+        for relative in ("facts/input.md", "records/one.md", "generated/output.md"):
+            with self.subTest(path=relative):
+                path = self.repo / relative
+                original = path.read_bytes()
+                path.unlink()
+                try:
+                    path.symlink_to(outside)
+                except OSError as exc:
+                    path.write_bytes(original)
+                    self.skipTest(f"symlink creation unavailable: {exc}")
+                with self.forbid_material_reads(path, outside):
+                    with self.assertRaisesRegex(materialize_skills.SyncError, "symlink"):
+                        materialize_skills.build_plan(self.repo, self.central, self.config)
+                path.unlink()
+                path.write_bytes(original)
+
+    def test_v2_material_references_and_writes_cannot_cross_gitlinks(self) -> None:
+        self.enable_context_fixture()
+        head = materialize_skills._run_git(self.central, "rev-parse", "HEAD").strip()
+        git(self.repo, "update-index", "--add", "--cacheinfo", f"160000,{head},external")
+        skill_path = self.repo / ".agent-skills-config/demo-skill.json"
+        original = json.loads(skill_path.read_text(encoding="utf-8"))
+        for field, value in (
+            ("input_path", "external/input.md"),
+            ("collection", "external"),
+            ("output_path", "external/output.md"),
+        ):
+            with self.subTest(field=field):
+                skill = dict(original)
+                skill[field] = value
+                write_json(skill_path, skill)
+                with self.assertRaisesRegex(materialize_skills.SyncError, "crosses a Git submodule"):
+                    materialize_skills.build_plan(self.repo, self.central, self.config)
+
+    def test_v2_collection_and_write_intent_to_add_still_rejected(self) -> None:
+        self.enable_context_fixture()
+        member = self.repo / "records/pending.png"
+        member.write_bytes(b"\xff\xfe")
+        git(self.repo, "add", "--intent-to-add", "records/pending.png")
+        with self.forbid_material_reads(member):
+            with self.assertRaisesRegex(materialize_skills.SyncError, "intent-to-add"):
+                materialize_skills.build_plan(self.repo, self.central, self.config)
+        git(self.repo, "add", "records/pending.png")
+        target = self.repo / "generated/output.md"
+        target.parent.mkdir()
+        target.write_bytes(b"\xff\xfe")
+        git(self.repo, "add", "--intent-to-add", "generated/output.md")
+        with self.forbid_material_reads(member, target):
+            with self.assertRaisesRegex(materialize_skills.SyncError, "intent-to-add"):
+                materialize_skills.build_plan(self.repo, self.central, self.config)
 
     def test_v2_rejects_an_existing_untracked_write_target(self) -> None:
         self.enable_context_fixture()

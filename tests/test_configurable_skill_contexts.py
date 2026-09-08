@@ -454,3 +454,41 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
     for forbidden in ("archive_root", "private_root", "session_dirs", "boundary"):
         assert forbidden not in serialized_study
     assert materialize_skills.check(consumer, central, config_path) == []
+
+
+def test_guide_learning_mixed_materials_are_located_without_content_reads(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    central = consumer / ".agent-skills"
+    _copy_clean_central(central)
+    config_path, _, _ = _prepare_consumer(consumer)
+    materials = {
+        "facts/evidence/journey.png": b"\x89PNG\r\n\x1a\nnot a valid image",
+        "facts/evidence/journey.drawio": b"<mxfile>not valid XML",
+        "facts/evidence/broken.md": b"\xff not UTF-8",
+    }
+    for relative, content in materials.items():
+        (consumer / relative).write_bytes(content)
+    _git(consumer, "add", *materials)
+    protected = {consumer / relative for relative in materials}
+    protected.add(consumer / "facts/goal.md")
+    original_open = Path.open
+
+    def metadata_only(path: Path, *args: Any, **kwargs: Any) -> Any:
+        assert path not in protected, f"materializer opened learning material: {path}"
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", metadata_only)
+    materialize_skills.synchronize(consumer, central, config_path)
+    assert materialize_skills.check(consumer, central, config_path) == []
+    context_path = (
+        consumer / ".agents/skills/guide-learning" / materialize_skills.CONTEXT_FILE
+    )
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    assert set(materials) <= set(context["allowlist"]["tracked_files"])
+    assert "facts/evidence/untracked.md" not in context["allowlist"]["tracked_files"]
+    serialized = json.dumps(context)
+    assert "not a valid image" not in serialized
+    assert "not valid XML" not in serialized

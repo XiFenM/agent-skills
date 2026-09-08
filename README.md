@@ -70,7 +70,15 @@ agent-skills/
 }
 ```
 
-公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。version 2 配置、显式文件引用和 collection 文本成员必须是 Git 已跟踪的 UTF-8 普通文件；只有 Skill validator 对具体 collection 显式声明的二进制扩展名可以跳过 UTF-8 校验，当前用于 `memo-cards` 受管输出 collection 中的 `.xlsx` sidecar。未跟踪文件不会进入运行时白名单。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+
+materializer 只负责更新时的 Skill 本体、配置结构、路径安全与必要引用有效性校验。配置仍须是 Git 已
+跟踪的 UTF-8 JSON；显式资料引用、collection 成员及已有写目标只检查 Git 跟踪、路径与普通文件等
+元数据，不打开或解码资料正文。未跟踪成员不进入生成白名单。`binary_collection_extensions` 仅作为
+旧 validator 返回值的兼容字段继续检查结构，不再决定资料能否通过更新。生成 context 不承诺资料内容
+有效，资料类型和格式由实际使用它的 Skill 按需校验；`guide-learning` 使用
+[专属资料读取工具](skills/guide-learning/references/material-reading.md)，`memo-cards` 继续在运行时校验
+所选 UTF-8 来源及受管 XLSX。新增图片无需修改更新脚本或申请二进制例外。
 
 ### 新 clone：恢复消费仓库固定的版本
 
