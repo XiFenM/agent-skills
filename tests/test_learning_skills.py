@@ -17,6 +17,7 @@ LEARNING_USER_GUIDES = {
 REFERENCE_FILES = {
     "article-artifacts.md",
     "examples.md",
+    "material-reading.md",
     "practice-review-mastery.md",
     "repository-adaptation.md",
     "source-authority.md",
@@ -27,7 +28,9 @@ EXPECTED_GUIDE_FILES = {
     "SKILL.md",
     "agents/openai.yaml",
     "scripts/context_config.py",
+    "scripts/material_reader.py",
     "tests/test_guide_learning_context.py",
+    "tests/test_material_reader.py",
     *(f"references/{name}" for name in REFERENCE_FILES),
 }
 
@@ -165,7 +168,14 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
     slash_command = re.compile(
         r"(?<![A-Za-z0-9_)])/(?!/)[A-Za-z0-9_\-\u3400-\u9fff]+"
     )
-    without_urls = re.sub(r"https?://[^\s)>]+", "", combined)
+    # Slash commands are a user-facing instruction concern. Python shebangs and
+    # filesystem handling are not commands being required of the learner.
+    instructions = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in _text_files(GUIDE_ROOT)
+        if path.suffix in {".md", ".yaml"}
+    )
+    without_urls = re.sub(r"https?://[^\s)>]+", "", instructions)
     assert slash_command.search(without_urls) is None
 
 

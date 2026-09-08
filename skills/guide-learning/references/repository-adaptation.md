@@ -43,6 +43,10 @@ context schema 完整匹配时使用它；不要自行修补或部分解释未�
 - `allowlist.write_paths` 是 materializer 核验过的机械上限，不是写入授权。仍须按本参考、
   `state-records.md` 和练习契约投影实际路径、职责与所有权。
 
+materializer 对资料只检查引用的路径与 Git 跟踪等元数据，不读取正文，也不承诺 UTF-8、图片完整性或
+学习内容正确。实际使用时按 [material-reading.md](material-reading.md) 对选中的资料做类型读取与校验；
+不要为生成或修复 context 而让用户移动图片、删除附件或把二进制文件改成文本。
+
 先核对映射路径或 section 的实际内容是否承担声明角色。若映射与仓库指令、既有唯一 owner 或未提交用户
 工作冲突，保持只读并让用户选择；不要按配置另建第二份记录。context 缺失时继续下面的正常发现顺序；
 context 损坏或身份不符时停止使用其全部 locator，并要求重新 materialize。

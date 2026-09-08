@@ -55,6 +55,11 @@ Skill 的 `docs/user-guides/guide-learning.md` 和组合指南 `docs/learning-sk
 规范继续裁决这些事实。context 缺失时按仓库约定正常发现；context 损坏、身份不符或与实际事实源冲突
 时不要部分采信，保持只读并要求重新 materialize 或让用户选择唯一映射。
 
+materializer 只检查 Skill、配置和引用路径，不读取学习资料正文；context 存在不表示资料已通过类型或
+内容校验。实际需要读取本地混合资料或核验其格式时，先读
+[material-reading.md](references/material-reading.md)，使用 `scripts/material_reader.py` 检查本次明确
+选中的文件。不要在更新 Skill、恢复课程或普通答疑时默认扫描整个 collection。
+
 按范围投影最小开场信息：
 
 - 一次答疑不展示固定卡片；仅在来源、版本、假设或回答边界会改变答案时补一句说明。
@@ -220,6 +225,8 @@ material assistance，不向用户暴露提示层号。material hint 或 Agent �
   Session event 或 Checkpoint 时读取。
 - [repository-adaptation.md](references/repository-adaptation.md)：在发现消费仓库约定、映射逻辑状态、选择
   授权路径、解释受管 context 或采用 schema-only fallback 时读取。
+- [material-reading.md](references/material-reading.md)：实际读取本地混合资料或需要核验文件类型时读取；
+  用专用工具检查精确选中的文件，不把格式校验或图片元数据当作教学内容核验。
 - [article-artifacts.md](references/article-artifacts.md)：在提议、起草、写入或适配学习文章时读取；用于区分
   文章与过程日志、应用通用骨架、解释文章 profile 并选择安全目标。
 - [examples.md](references/examples.md)：只在一次答疑、独立 Session、跳过练习、drift、临时专项、来源

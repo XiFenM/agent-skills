@@ -773,6 +773,7 @@ def _tracked_file(
     gitlinks: set[str],
     intent_to_add: set[str],
 ) -> str:
+    """Validate a declared reference without opening the referenced material."""
     path, relative = _declared_path(repo, raw_path, label, gitlinks=gitlinks)
     if relative not in tracked:
         raise SyncError(f"{label} must be a Git tracked regular file: {relative}")
@@ -780,28 +781,7 @@ def _tracked_file(
         raise SyncError(f"{label} must not be intent-to-add: {relative}")
     if not _path_present(path) or _is_link_or_junction(path) or not path.is_file():
         raise SyncError(f"{label} must be a real regular file: {relative}")
-    _validate_utf8_file(path, label)
     return relative
-
-
-def _validate_utf8_file(path: Path, label: str) -> None:
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            while handle.read(1024 * 1024):
-                pass
-    except UnicodeError as exc:
-        raise SyncError(f"{label} must be valid UTF-8: {path}") from exc
-    except OSError as exc:
-        raise SyncError(f"cannot read {label} as UTF-8: {path}: {exc}") from exc
-
-
-def _validate_readable_file(path: Path, label: str) -> None:
-    try:
-        with path.open("rb") as handle:
-            while handle.read(1024 * 1024):
-                pass
-    except OSError as exc:
-        raise SyncError(f"cannot read {label}: {path}: {exc}") from exc
 
 
 def _tracked_collection(
@@ -812,8 +792,8 @@ def _tracked_collection(
     tracked: set[str],
     gitlinks: set[str],
     intent_to_add: set[str],
-    binary_extensions: set[str],
 ) -> tuple[str, list[str]]:
+    """Inventory tracked paths; file-type validation belongs to the owning Skill."""
     path, relative = _declared_path(repo, raw_path, label, gitlinks=gitlinks)
     if not _path_present(path) or _is_link_or_junction(path) or not path.is_dir():
         raise SyncError(
@@ -838,10 +818,6 @@ def _tracked_collection(
         )
         if normalized != member or not member_path.is_file():
             raise SyncError(f"{label} contains a non-regular tracked entry: {member}")
-        if PurePosixPath(member).suffix.casefold() in binary_extensions:
-            _validate_readable_file(member_path, f"{label} member")
-        else:
-            _validate_utf8_file(member_path, f"{label} member")
     return relative, members
 
 
@@ -868,7 +844,6 @@ def _write_path(
                 )
             if relative in intent_to_add:
                 raise SyncError(f"{label} must not be intent-to-add: {relative}")
-            _validate_utf8_file(path, label)
     return relative
 
 
@@ -1074,7 +1049,8 @@ def _materialized_context(
             "undeclared tracked collections: "
             + ", ".join(undeclared_binary_collections)
         )
-    binary_collection_extensions: dict[str, set[str]] = {}
+    # Retain schema compatibility with existing validators.  These extensions
+    # never authorize content reads or determine which references can be materialized.
     for collection, raw_extensions in raw_binary_extensions.items():
         if not all(
             isinstance(extension, str)
@@ -1090,7 +1066,6 @@ def _materialized_context(
                 f"context validator for {name!r} binary extensions for "
                 f"{collection!r} contain duplicates"
             )
-        binary_collection_extensions[collection] = set(raw_extensions)
     read_handoffs: list[tuple[str, str]] = []
     raw_handoffs = result.get("read_handoffs", [])
     if not isinstance(raw_handoffs, list):
@@ -1157,7 +1132,6 @@ def _materialized_context(
             tracked=tracked,
             gitlinks=gitlinks,
             intent_to_add=intent_to_add,
-            binary_extensions=binary_collection_extensions.get(raw_path, set()),
         )
         normalized_collections.append(collection)
         explicit_tracked.update(members)

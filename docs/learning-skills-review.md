@@ -1533,9 +1533,9 @@ PlanA 的首轮历史产物适配边界同时确认：
 - prepare／publish／verify 和 preview digest 覆盖完整 Markdown＋XLSX 文件集。发布先执行全量 CAS，再隔离
   旧文件、先安装 XLSX、最后安装 Markdown；失败时回滚并保留无法安全恢复的 recovery／journal，不能把
   多文件更新描述为文件系统原生事务。
-- materializer 默认继续要求 collection member 为 UTF-8；只有 validator 对具体 collection 显式声明的
-  `.xlsx` 扩展名可以按二进制读取。`memo-cards` 的 request source 仍二次要求 UTF-8，受管 XLSX 则由其
-  严格校验 OOXML。
+- 该初版曾由 materializer 检查 collection member 的 UTF-8，并为 `.xlsx` 声明二进制例外。现行更新
+  边界已按 [README](../README.md#消费方式) 调整为仅校验配置、路径和必要引用，不再读取资料正文；
+  `memo-cards` 仍在实际使用时检查 request source 的 UTF-8，并独立严格校验受管 XLSX 的 OOXML。
 - publish 在全部授权 output root 的锁集内重新规划，并把已发布但尚未 materialize 的受管 Markdown 纳入
   inventory，防止不同目标并发或顺序绕过跨文件去重；来源快照在 artifact-set 提交前后都执行 CAS。
   `verify` 先以恢复模式加载 context 并独立扫描输出根中的 journal，即使 tracked Markdown 提交点缺失也
