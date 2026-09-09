@@ -311,3 +311,56 @@ def test_single_choice_api_conversion_preserves_body():
     template = memo.load_template_registry().by_id["choice-3"]
     content = api.render_card(template, {"题干": "哪一项？", "答案": "B", "选项1": "甲", "选项2": "乙", "选项3": "丙", "解析": "乙符合条件。", "场景": "来源"})
     assert "[Choice#fixed#\n- 甲\n* 乙\n- 丙\n]\n---\n乙符合条件。" in content
+
+
+def test_production_response_envelope_and_opaque_ids(monkeypatch):
+    client = api.Client("test-token")
+    monkeypatch.setattr(client._opener, "open", lambda *_a, **_k: io.BytesIO(json.dumps(
+        {"success": True, "data": {"decks": [{"id": "mkjd_aB.c_9-Z"}], "total": 1}, "errors": []}
+    ).encode()))
+    assert client.request("GET", "/decks")["decks"][0]["id"] == "mkjd_aB.c_9-Z"
+    assert api.identifier("mkjd_aB.c_9-Z") == "mkjd_aB.c_9-Z"
+    for bad in ("..", ".", "a/b", "a?key=x", "a#b", "https://example.com"):
+        with pytest.raises(api.UploadError):
+            api.identifier(bad)
+    client._last_request = None
+    monkeypatch.setattr(client._opener, "open", lambda *_a, **_k: io.BytesIO(b'{"success":true,"data":{"deck":{}},"errors":[]}'))
+    assert client.request("GET", "/decks/mkjd_aB.c_9-Z") == {"deck": {}}
+
+
+@pytest.mark.parametrize("payload", [
+    {"success": False, "data": None, "errors": ["test-secret-never-output"]},
+    {"success": "true", "data": {}},
+    {"success": True, "data": None},
+    {"success": True, "data": {}},
+    {"success": True, "data": {"decks": [], "total": 0}, "errors": ["test-secret-never-output"]},
+])
+def test_business_failure_is_not_reported_as_empty_decks(payload, monkeypatch):
+    client = api.Client("test-token")
+    monkeypatch.setattr(client._opener, "open", lambda *_a, **_k: io.BytesIO(json.dumps(payload).encode()))
+    with pytest.raises(api.UploadError) as error:
+        client.request("GET", "/decks")
+    assert "test-secret" not in str(error.value)
+
+
+def test_selected_cards_are_bound_to_preview_and_only_they_are_uploaded(ready):
+    repo, context, request, *_ = ready
+    value = json.loads(request.read_text())
+    value["cards"].append(_card("two", 2))
+    request.write_text(json.dumps(value))
+    preview = memo.prepare(repo, context, request)
+    memo.publish(repo, context, request, preview["preview_digest"], "confirmed")
+    cards = api.local_bundle(repo, context, request)["cards"]
+    first, second = [card["logical_id"] for card in cards]
+    plan = api.prepare_upload(*ready, logical_ids=[first])
+    assert plan["local"]["selected_logical_ids"] == [first]
+    assert len(plan["actions"]) == 1
+    with pytest.raises(api.UploadError, match="已变化"):
+        api.upload(*ready, plan["preview_digest"], "request", logical_ids=[second])
+    assert not ready[-1].cards
+    result = api.upload(*ready, plan["preview_digest"], "request", logical_ids=[first])
+    assert result["created"] == 1 and len(ready[-1].cards) == 1
+    assert next(iter(ready[-1].cards.values()))["content"] == cards[0]["content"]
+    for invalid in ([], [first, first], ["mc-" + "0" * 24], ["not-an-id"]):
+        with pytest.raises(api.UploadError):
+            api.prepare_upload(*ready, logical_ids=invalid)

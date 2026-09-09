@@ -22,6 +22,9 @@
 | 单卡读回 | `GET /decks/{deck}/cards/{card}` → `card` |
 
 创建 JSON 是 `{"deck":"…","chapter":"…","card":{"content":"…","grammar_version":…}}`。
+2026-09-09 实际只读调用确认：生产响应外层是 `success`、`data`、`errors`，上述返回对象位于 `data`；
+只有业务成功且无错误时才消费。OpenAPI ID 是不透明字符串，已观察到大小写、数字、下划线、短横线和
+点号，不能按短卡片引用 ID 校验，也不能更改大小写或自行拆分。
 路径和 JSON 中的目标必须一致；省略 `order` 表示追加到章节末尾。`content` 是完整 Markji 文本，包含
 真实换行、题面、答案线和答案。不能发送字段字典、Markdown manifest 或 XLSX 文件来代替它。
 JSON 序列化负责转义换行和反斜杠；解码后必须恢复原始文本，不手工双重转义。
@@ -81,6 +84,12 @@ python3 scripts/markji_api.py prepare --repo <repo> --context <context> --reques
 展示牌组／章节名称与 ID、`is_private`、完整卡片文本、create／skip 项和 `preview_digest`。
 上传到非私有牌组意味着内容将按该牌组现有可见性展示，应让用户在预览中明确看见这一事实。
 用户已经明确授权准确目标和内容时无需重复确认；仍缺少目标或上传授权时，只补足缺失信息。
+
+一个文件集可按卡片主题分配到不同章节。为每个目标在 `prepare` 和 `upload` 中重复添加相同的
+`--logical-id <mc-...>` 参数；也可在 Python 调用中传 `logical_ids=[...]`。集合必须非空、无重复，
+且每个 ID 都是该文件集当前可导出的 active 卡片。工具继续验证完整文件集，只为选中的卡片生成动作，
+并将所选 ID 绑定到预览；不能通过筛选掩盖本地产物漂移。省略参数表示整个可导出文件集，因此存在
+暂缓卡或多个目标章节时必须显式选择。不同批次仍保留该目标的既有回执记录。
 
 ```text
 python3 scripts/markji_api.py upload --repo <repo> --context <context> --request <request.json> --deck <deck_id> --chapter <chapter_id> --grammar-version <verified_integer> --preview-digest <digest> --authorization request|confirmed
