@@ -39,6 +39,10 @@ MAX_RESPONSE = 16 * 1024 * 1024
 class UploadError(Exception):
     """Only fixed, credential-free messages may cross the CLI boundary."""
 
+    def __init__(self, message, *, http_status=None):
+        super().__init__(message)
+        self.http_status = http_status
+
 
 class SafeParser(argparse.ArgumentParser):
     def error(self, message):
@@ -186,8 +190,17 @@ class Client:
         if self._last_request is not None:
             time.sleep(max(0, 1.6 - (time.monotonic() - self._last_request)))
         self._last_request = time.monotonic()
+        wire_body = body
+        if method == "POST" and re.fullmatch(create_path, path) and isinstance(body, dict):
+            # Production binds these IDs from the URL. Repeating encoded IDs
+            # in JSON returns common_invalid_param, although the schema export
+            # includes them in the operation's request message.
+            parts = path.split("/")
+            if body.get("deck") != parts[2] or body.get("chapter") != parts[4]:
+                raise UploadError("创建请求的路径与正文目标不一致。")
+            wire_body = {key: value for key, value in body.items() if key not in {"deck", "chapter"}}
         request = urllib.request.Request(url, method=method,
-            data=None if body is None else memo._canonical_bytes(body),
+            data=None if wire_body is None else json.dumps(wire_body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
             headers={"Authorization": "Bearer " + self._token,
                      "Accept": "application/json", "Content-Type": "application/json"})
         try:
@@ -198,12 +211,34 @@ class Client:
             data = json.loads(raw)
         except urllib.error.HTTPError as exc:
             status = exc.code
+            detail = ""
+            try:
+                error_body = json.loads(exc.read(8192))
+                errors = error_body.get("errors", []) if isinstance(error_body, dict) else []
+                if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                    parts = []
+                    for key in ("code", "msg", "info"):
+                        value = errors[0].get(key)
+                        if isinstance(value, (str, int)):
+                            safe = str(value).replace(self._token, "[redacted]")
+                            safe = re.sub(r"(?i)Bearer\s+\S+", "Bearer [redacted]", safe)
+                            if re.search(r"(?i)token|api.?key|authorization|bearer|密钥|凭据", safe):
+                                safe = "[credential-related error redacted]"
+                            safe = " ".join(safe.split())[:300]
+                            if safe:
+                                parts.append(f"{key}={safe}")
+                    detail = "；".join(parts)
+            except (ValueError, OSError):
+                pass
             exc.close()
             if status in (401, 403):
                 raise UploadError("认证失败或没有目标权限；检查 token 与自建牌组权限。") from None
             if status == 429:
                 raise UploadError("官方限流，已停止；不自动重试创建请求。") from None
-            raise UploadError(f"官方接口返回 HTTP {status}，已停止；不输出响应正文或自动重试。") from None
+            message = f"官方接口返回 HTTP {status}，已停止；不自动重试。"
+            if detail:
+                message += " 结构化错误（已脱敏）：" + detail
+            raise UploadError(message, http_status=status) from None
         except (OSError, urllib.error.URLError, http.client.HTTPException, ValueError):
             raise UploadError("请求未获得可验证的响应；创建请求的结果可能不确定，请先核对回执与远端。") from None
         if not isinstance(data, dict):
@@ -329,12 +364,14 @@ def load_receipt(path):
         raise UploadError("上传回执结构异常，请先检查。")
     for key, item in value["cards"].items():
         if (not memo.LOGICAL_ID_RE.fullmatch(key) or not isinstance(item, dict)
-                or item.get("status") not in {"pending", "created", "verified"}
+                or item.get("status") not in {"pending", "created", "verified", "rejected"}
                 or not isinstance(item.get("content_sha256"), str)
                 or not memo.DIGEST_RE.fullmatch(item["content_sha256"])):
             raise UploadError("上传回执条目异常，请先检查。")
         if item.get("card_id") is not None:
             identifier(item["card_id"])
+        if item.get("status") == "rejected" and (item.get("card_id") is not None or item.get("http_status") != 400):
+            raise UploadError("已拒绝回执必须记录 HTTP 400 且没有成功创建的 ID。")
     return value
 
 
@@ -354,8 +391,11 @@ def prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version,
                    and item["content"] == card["content"] and item["grammar_version"] == grammar_version]
         if len(matches) > 1:
             raise UploadError("目标章节中有多张相同内容卡片，请先核对重复项。")
-        if prior and not matches:
+        if prior and not matches and prior.get("status") != "rejected":
             raise UploadError("已有上传记录但远端未找到唯一匹配；可能发生中断、移动或人工修改，停止重发。")
+        if (prior and not matches and prior.get("status") == "rejected"
+                and any(item.get("status") == "NORMAL" and digest(item["content"]) == prior["content_sha256"] for item in remote)):
+            raise UploadError("先前被拒绝的内容在远端存在不同语法版本，停止重复创建。")
         if prior and prior.get("card_id") and prior["card_id"] != matches[0]["id"]:
             raise UploadError("已记录的远端卡片身份发生变化，停止自动处理。")
         actions.append({**card, "operation": "skip" if matches else "create",
@@ -414,9 +454,16 @@ def upload(repo, context, request, deck_id, chapter_id, grammar_version, client,
                 # Durable write BEFORE POST; never retry an unknown create result.
                 receipt["cards"][logical_id] = entry
                 atomic_private_json(path, receipt)
-                data = client.request("POST", f"/decks/{deck_id}/chapters/{chapter_id}/cards",
-                    {"deck": deck_id, "chapter": chapter_id,
-                     "card": {"content": action["content"], "grammar_version": grammar_version}})
+                try:
+                    data = client.request("POST", f"/decks/{deck_id}/chapters/{chapter_id}/cards",
+                        {"deck": deck_id, "chapter": chapter_id,
+                         "card": {"content": action["content"], "grammar_version": grammar_version},
+                         "order": len(plan['chapter']['card_ids']) + sum(item['operation'] == 'create' for item in results)})
+                except UploadError as error:
+                    if error.http_status == 400:
+                        entry.update(status="rejected", http_status=400)
+                        atomic_private_json(path, receipt)
+                    raise
                 created = data.get("card")
                 if not isinstance(created, dict):
                     raise UploadError("创建响应缺少卡片；已保留 pending 回执，请先核对远端。")
