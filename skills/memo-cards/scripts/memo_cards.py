@@ -512,12 +512,12 @@ def _validate_skill_config(value: Any) -> dict[str, Any]:
         }
         if "producer" in record:
             producer = _id(record["producer"], f"input_collections[{index}].producer")
-            if kind != "article" or not all(
+            if kind not in {"article", "source-bundle"} or not all(
                 _exact_markdown_input(pattern) for pattern in patterns
             ):
                 raise MemoCardsError(
                     "config",
-                    "input producer is allowed only for exact Markdown article inputs",
+                    "input producer is allowed only for exact Markdown article or source-bundle inputs",
                 )
             if producer == "memo-cards":
                 raise MemoCardsError("config", "input producer cannot be memo-cards itself")

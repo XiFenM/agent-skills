@@ -277,12 +277,13 @@ def test_exact_markdown_input_is_a_file_not_a_collection() -> None:
     assert result["read_handoffs"] == []
 
 
-def test_exact_article_input_can_name_one_cross_skill_producer() -> None:
+@pytest.mark.parametrize("input_kind", ["article", "source-bundle"])
+def test_exact_article_input_can_name_one_cross_skill_producer(input_kind: str) -> None:
     config = _skill_config()
     config["input_collections"].append(
         {
             "id": "fixed-article",
-            "kind": "article",
+            "kind": input_kind,
             "patterns": ["articles/fixed.md"],
             "producer": "guide-learning",
         }

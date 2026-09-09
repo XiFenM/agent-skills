@@ -34,9 +34,11 @@ collection 可以包含 XLSX 等二进制受管 sidecar；materializer 不把 co
 消费方仍须严格验证其格式。来源必须同时命中输入 pattern 和 concrete `tracked_files`，inventory 只在
 concrete 文件中筛选 Markdown 主产物，绝不重新 glob 文件系统。
 
-若一个精确文章输入由另一个已配置 Skill 生成，可在 input record 中声明唯一 `producer`。它只允许
-`kind: article` 且所有 pattern 都是精确 `.md` 文件；materializer 还会核对 producer 已配置、不是当前
+若一个精确文章或来源包由另一个已配置 Skill 维护，可在 input record 中声明唯一 `producer`。它只允许
+`kind: article` 或 `source-bundle` 且所有 pattern 都是精确 `.md` 文件；materializer 还会核对 producer 已配置、不是当前
 Skill，且该文件位于 producer 的 write ceiling 内。该声明不授予起草、覆盖、发布、提交或推送权限。
+来源包可以指向已有学习证据及其中的固定源码锚点；只采用本次选定的已核验材料，不能把待办、mastery
+状态或未核验假设直接制卡。交接只增加消费侧的精确读取关系，不改变文件的唯一写入者。
 
 ## Request
 
