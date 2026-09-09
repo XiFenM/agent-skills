@@ -21,15 +21,19 @@
 | 创建 | `POST /decks/{deck}/chapters/{chapter}/cards` → `card`、`chapter` |
 | 单卡读回 | `GET /decks/{deck}/cards/{card}` → `card` |
 
-创建 JSON 是 `{"deck":"…","chapter":"…","card":{"content":"…","grammar_version":…}}`。
+创建请求在路径中指定 deck 和 chapter，线上 JSON 是
+`{"card":{"content":"…","grammar_version":…},"order":…}`。
 2026-09-09 实际只读调用确认：生产响应外层是 `success`、`data`、`errors`，上述返回对象位于 `data`；
 只有业务成功且无错误时才消费。OpenAPI ID 是不透明字符串，已观察到大小写、数字、下划线、短横线和
 点号，不能按短卡片引用 ID 校验，也不能更改大小写或自行拆分。
-路径和 JSON 中的目标必须一致；省略 `order` 表示追加到章节末尾。`content` 是完整 Markji 文本，包含
+2026-09-09 实测：规范把 deck/chapter 列入请求消息，但在 JSON 正文重复发送这两个不透明 ID 会返回
+`common_invalid_param`。客户端在内存中核对路径与目标一致，然后从线上 JSON 排除它们；按已核验的章节
+长度显式设置追加位置 `order`，空章节为 0。`content` 是完整 Markji 文本，包含
 真实换行、题面、答案线和答案。不能发送字段字典、Markdown manifest 或 XLSX 文件来代替它。
 JSON 序列化负责转义换行和反斜杠；解码后必须恢复原始文本，不手工双重转义。
 
-`deck.id`、`chapter.id`、`card.id` 是 API 操作 ID；内容引用使用真实 `card.root_id`。
+`deck.id`、`chapter.id`、`card.id` 是 API 操作 ID；API 返回的 `card.root_id` 也可能是 `mkjr_…` 形式的
+不透明 OpenAPI ID。回执记录它用于定位；不要把它直接当作编辑器内容语法所用的短 root ID，后者需要另行核实。
 `grammar_version` 为整数，规范未给出可通用采用的默认值；先在 Markji 创建一张可正常渲染的示例卡，
 再通过 `inspect --chapter` 查看版本。空章节可参考同账号其他已验证章节；不能把 `3.8.00` 换算成语法版本。
 
@@ -96,7 +100,8 @@ python3 scripts/markji_api.py upload --repo <repo> --context <context> --request
 ```
 
 上传器重新验证本地产物、来源、远端快照和回执后才开始创建。它不接受自定义 API 地址，保持 TLS 校验，
-禁用自动重定向和环境代理，不输出请求头、原始错误正文或 token 的任何片段。需要代理时先明确新的受信
+禁用自动重定向和环境代理，不输出请求头、完整错误正文或 token 的任何片段。HTTP 错误只提取限长且
+脱敏的 code/msg/info，含凭据提示的字段整体隐藏。需要代理时先明确新的受信
 传输方案，不能临时关闭证书校验或把凭据发送到兼容网关。
 
 ## 去重、恢复与结果
@@ -109,7 +114,9 @@ python3 scripts/markji_api.py upload --repo <repo> --context <context> --request
 不保存 token 或卡片全文。授权上传包含生成必要恢复回执；不得把回执当作可随意删除的临时文件。
 
 每次 POST 前持久记录 `pending`，得到 ID 后记录 `created`，独立 GET 核对后记录 `verified`。
-遇到超时、错误或进程中断时保留状态，不自动重试 POST。同一原请求恢复时重新预览：唯一远端内容匹配
+遇到超时、错误或进程中断时保留状态，不自动重试 POST。明确收到 HTTP 400 时保存 `rejected` 与状态码；
+该次调用仍停止，核对错误及远端后，需要新预览才能重新提交。超时／5xx 等未知结果继续保留 `pending`，
+不能通过改状态或删除回执绕过不确定结果。同一原请求恢复时重新预览：唯一远端内容匹配
 可以恢复为 skip；无法找到唯一匹配就停止，由用户核对账号、章节和中断结果。不要为通过检查而删除回执。
 中断遗留的 `upload.lock` 只有在确认无上传进程后才由本人移除。
 

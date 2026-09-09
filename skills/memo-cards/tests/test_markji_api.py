@@ -32,8 +32,9 @@ class Remote:
         self.calls.append((method, path, copy.deepcopy(body)))
         if method == "POST":
             assert path == "/decks/Deck1/chapters/Chapter1/cards"
-            assert set(body) == {"deck", "chapter", "card"}
+            assert set(body) == {"deck", "chapter", "card", "order"}
             assert body["deck"] == "Deck1" and body["chapter"] == "Chapter1"
+            assert body["order"] == len(self.cards)
             if self.fail == "before-create":
                 raise api.UploadError("测试超时")
             key = "Card" + str(len(self.cards) + 1)
@@ -364,3 +365,57 @@ def test_selected_cards_are_bound_to_preview_and_only_they_are_uploaded(ready):
     for invalid in ([], [first, first], ["mc-" + "0" * 24], ["not-an-id"]):
         with pytest.raises(api.UploadError):
             api.prepare_upload(*ready, logical_ids=invalid)
+
+
+def test_http400_exposes_bounded_structured_diagnostics_without_credentials(monkeypatch):
+    client = api.Client("test-secret-never-output")
+    def reject(request, timeout):
+        body = {"success": False, "errors": [{"code": "BAD_FIELD", "msg": "invalid grammar_version",
+                                              "info": "Authorization Bearer test-secret-never-output"}]}
+        raise urllib.error.HTTPError(request.full_url, 400, "bad", {}, io.BytesIO(json.dumps(body).encode()))
+    monkeypatch.setattr(client._opener, "open", reject)
+    with pytest.raises(api.UploadError) as caught:
+        client.request("POST", "/decks/D/chapters/C/cards", {
+            "deck": "D", "chapter": "C", "card": {"content": "Q\n---\nA", "grammar_version": 3}, "order": 0})
+    assert caught.value.http_status == 400
+    assert "BAD_FIELD" in str(caught.value) and "grammar_version" in str(caught.value)
+    assert "test-secret" not in str(caught.value)
+
+
+def test_explicit_rejection_stops_current_attempt_and_requires_new_preview(ready, monkeypatch):
+    plan = api.prepare_upload(*ready)
+    original = ready[-1].request
+    posts = []
+    def reject(method, path, body=None, query=None):
+        if method == "POST":
+            posts.append(path)
+            raise api.UploadError("HTTP 400: invalid field", http_status=400)
+        return original(method, path, body, query)
+    monkeypatch.setattr(ready[-1], "request", reject)
+    with pytest.raises(api.UploadError):
+        api.upload(*ready, plan["preview_digest"], "request")
+    assert len(posts) == 1
+    receipt = json.loads(Path(plan["receipt_path"]).read_text())
+    assert next(iter(receipt["cards"].values()))["status"] == "rejected"
+    monkeypatch.setattr(ready[-1], "request", original)
+    with pytest.raises(api.UploadError, match="已变化"):
+        api.upload(*ready, plan["preview_digest"], "request")
+    fresh = api.prepare_upload(*ready)
+    assert api.upload(*ready, fresh["preview_digest"], "request")["created"] == 1
+
+
+def test_create_wire_body_omits_path_bound_ids(monkeypatch):
+    client = api.Client("test-token")
+    sent = []
+    def response(request, timeout):
+        sent.append(request)
+        return io.BytesIO(b'{"success":true,"data":{"card":{"id":"mkjc_a.B"}},"errors":[]}')
+    monkeypatch.setattr(client._opener, "open", response)
+    body = {"deck": "mkjd_a.B", "chapter": "mkjch_c.D", "card": {"content": "Q\n---\nA", "grammar_version": 3}, "order": 0}
+    client.request("POST", "/decks/mkjd_a.B/chapters/mkjch_c.D/cards", body)
+    assert json.loads(sent[0].data) == {"card": body["card"], "order": 0}
+    assert body["deck"] == "mkjd_a.B"  # serialization does not mutate caller data
+    client._last_request = None
+    with pytest.raises(api.UploadError, match="目标不一致"):
+        client.request("POST", "/decks/mkjd_OTHER/chapters/mkjch_c.D/cards", body)
+    assert len(sent) == 1
