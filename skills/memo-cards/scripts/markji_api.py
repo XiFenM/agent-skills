@@ -52,7 +52,7 @@ def digest(value):
 
 
 def identifier(value):
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value):
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", value):
         raise UploadError("需要官方接口返回的有效 OpenAPI ID。")
     return value
 
@@ -174,8 +174,9 @@ class Client:
         self._last_request = None
 
     def request(self, method, path, body=None, query=None):
-        get_path = r"/decks(?:/[A-Za-z0-9_-]+(?:/chapters(?:/[A-Za-z0-9_-]+)?|/cards/[A-Za-z0-9_-]+)?)?"
-        create_path = r"/decks/[A-Za-z0-9_-]+/chapters/[A-Za-z0-9_-]+/cards"
+        opaque_id = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
+        get_path = rf"/decks(?:/{opaque_id}(?:/chapters(?:/{opaque_id})?|/cards/{opaque_id})?)?"
+        create_path = rf"/decks/{opaque_id}/chapters/{opaque_id}/cards"
         if not ((method == "GET" and re.fullmatch(get_path, path)) or
                 (method == "POST" and re.fullmatch(create_path, path))):
             raise UploadError("操作不在当前已核验的官方接口范围内。")
@@ -207,6 +208,16 @@ class Client:
             raise UploadError("请求未获得可验证的响应；创建请求的结果可能不确定，请先核对回执与远端。") from None
         if not isinstance(data, dict):
             raise UploadError("官方响应结构不符合已核验合同。")
+        # The published operation schemas describe the payload; production
+        # responses wrap it in {success, data, errors}.
+        if "success" in data:
+            if (data["success"] is not True or not isinstance(data.get("data"), dict)
+                    or data.get("errors") not in (None, [])):
+                raise UploadError("官方接口未返回成功业务结果；已停止，不输出原始错误正文。")
+            data = data["data"]
+        if path == "/decks" and (not isinstance(data.get("decks"), list)
+                                 or type(data.get("total")) is not int):
+            raise UploadError("官方牌组列表响应不完整，不能视为空牌库。")
         return data
 
 
@@ -227,7 +238,7 @@ def render_card(template, fields):
     return content
 
 
-def local_bundle(repo, context, request):
+def local_bundle(repo, context, request, *, logical_ids=None):
     checked = memo.verify(repo, context, request)
     check = checked["request_check"]
     if check["operation"] != "no-op" or check["would_write"]:
@@ -251,16 +262,29 @@ def local_bundle(repo, context, request):
             content = render_card(template, dict(zip(headers, row, strict=True)))
             cards.append({"logical_id": meta["logical_id"], "content": content,
                           "content_sha256": digest(content)})
+    selection = None
+    if logical_ids is not None:
+        if (not isinstance(logical_ids, (list, tuple)) or not logical_ids
+                or any(not isinstance(item, str) or not memo.LOGICAL_ID_RE.fullmatch(item) for item in logical_ids)
+                or len(set(logical_ids)) != len(logical_ids)):
+            raise UploadError("指定卡片必须是非空、无重复的本地逻辑 ID 列表。")
+        selection = sorted(logical_ids)
+        if not set(selection) <= {card["logical_id"] for card in cards}:
+            raise UploadError("指定卡片不属于当前文件集的可导出 active 卡片。")
+        cards = [card for card in cards if card["logical_id"] in set(selection)]
     if not cards or len(cards) > MAX_BATCH:
         raise UploadError("每次上传需包含 1–200 张已核验的 active 卡片；请按明确素材范围分批。")
     if len({card["content_sha256"] for card in cards}) != len(cards):
         raise UploadError("不同逻辑卡片生成了相同内容，请先复核去重。")
-    return {"repository_id": checked["repository_id"], "target": check["target"],
+    result = {"repository_id": checked["repository_id"], "target": check["target"],
             "request_sha256": check["request_sha256"],
             "artifact_set_sha256": check["artifact_set_sha256"],
             "context_sha256": checked["context_sha256"],
             "source_fingerprint": preview["source_fingerprint"],
             "template_registry_sha256": checked["template_registry_sha256"], "cards": cards}
+    if selection is not None:
+        result["selected_logical_ids"] = selection
+    return result
 
 
 def destination(client, deck_id, chapter_id):
@@ -314,10 +338,10 @@ def load_receipt(path):
     return value
 
 
-def prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version, client):
+def prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version, client, *, logical_ids=None):
     if type(grammar_version) is not int or grammar_version < 0:
         raise UploadError("grammar_version 必须来自当前可正常渲染的卡片，不是客户端版本。")
-    bundle = local_bundle(repo, context, request)
+    bundle = local_bundle(repo, context, request, logical_ids=logical_ids)
     deck, chapter, remote = destination(client, deck_id, chapter_id)
     path = receipt_path(repo, bundle["target"], deck_id, chapter_id)
     receipt = load_receipt(path)
@@ -367,15 +391,15 @@ def upload_lock(path):
         lock.unlink()
 
 
-def upload(repo, context, request, deck_id, chapter_id, grammar_version, client, preview_digest, authorization):
+def upload(repo, context, request, deck_id, chapter_id, grammar_version, client, preview_digest, authorization, *, logical_ids=None):
     if authorization not in {"request", "confirmed"}:
         raise UploadError("上传需要用户明确授权目标和本批内容。")
     # Compute the lock path without network access; don't allow two writers to
     # both validate an unchanged remote snapshot before obtaining the lock.
-    bundle = local_bundle(repo, context, request)
+    bundle = local_bundle(repo, context, request, logical_ids=logical_ids)
     path = receipt_path(repo, bundle["target"], deck_id, chapter_id)
     with upload_lock(path):
-        plan = prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version, client)
+        plan = prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version, client, logical_ids=logical_ids)
         if plan["preview_digest"] != preview_digest:
             raise UploadError("来源、本地产物、目标章节或回执已变化，请重新展示上传预览。")
         receipt = load_receipt(path)
@@ -385,7 +409,7 @@ def upload(repo, context, request, deck_id, chapter_id, grammar_version, client,
             entry = {"content_sha256": action["content_sha256"], "grammar_version": grammar_version,
                      "status": "pending", "card_id": action["card_id"], "root_id": action["root_id"]}
             if action["operation"] == "create":
-                if local_bundle(repo, context, request) != bundle:
+                if local_bundle(repo, context, request, logical_ids=logical_ids) != bundle:
                     raise UploadError("上传期间本地产物或来源发生变化，已停止后续创建。")
                 # Durable write BEFORE POST; never retry an unknown create result.
                 receipt["cards"][logical_id] = entry
@@ -435,6 +459,7 @@ def main(argv=None):
         child.add_argument("--deck", required=True)
         child.add_argument("--chapter", required=True)
         child.add_argument("--grammar-version", type=int, required=True)
+        child.add_argument("--logical-id", action="append", help="只上传指定逻辑卡片；可重复提供，省略时使用整个已验证文件集")
         if name == "upload":
             child.add_argument("--preview-digest", required=True)
             child.add_argument("--authorization", choices=("request", "confirmed"), required=True)
@@ -468,8 +493,8 @@ def main(argv=None):
             else:
                 arguments = (args.repo, args.context, args.request, identifier(args.deck),
                              identifier(args.chapter), args.grammar_version, client)
-                result = (prepare_upload(*arguments) if args.command == "prepare" else
-                          upload(*arguments, args.preview_digest, args.authorization))
+                result = (prepare_upload(*arguments, logical_ids=args.logical_id) if args.command == "prepare" else
+                          upload(*arguments, args.preview_digest, args.authorization, logical_ids=args.logical_id))
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=True))
         return 0
     except (UploadError, memo.MemoCardsError) as exc:
