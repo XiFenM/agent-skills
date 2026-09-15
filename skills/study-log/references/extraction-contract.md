@@ -52,8 +52,8 @@ study_log.py extract --project <project> (--session <id> | --source <jsonl>) \
 ```
 
 - 只生成供 `structured` 蒸馏使用的临时 Markdown，不直接生成结构化成品。
-- 未给 `--output` 时在操作系统临时目录创建文件；返回 `cleanup_required: true`，调用者用完后删除。
-- 显式输出必须是绝对路径且位于项目与其他 Git 工作树之外。
+- 未给 `--output` 时在项目内 `.study-log/scratch/` 创建临时文件；返回 `cleanup_required: true`，调用者用完后删除。
+- 显式输出必须位于同一项目内，不能通过符号链接进入外部路径、嵌套仓库或 Git 管理目录；不写入结构化／raw 的正式目标，也不自动加入 Git。
 - 最多忽略一个在 UTF-8 多字节或 JSON 语法中被截断的最终非空 JSONL 行，并返回 `truncated_tail_ignored`；中间坏行严格失败。可成功解析但不是 object 的 JSON 值不是截断记录，在任何位置都以 `malformed` 停止。
 - `--include-tools` 只生成简短工具摘要，仍不包含工具结果或 reasoning。
 
@@ -62,10 +62,11 @@ study_log.py extract --project <project> (--session <id> | --source <jsonl>) \
 ```text
 study_log.py archive --project <project> (--session <id> | --source <jsonl>) \
   --source-sha256 <reviewed-hash> --start-id <id> --end-id <id> \
+  --structured-record <repository-relative-structured.md> \
   --title <title> --status partial|final --privacy-confirmed \
-  [--archive-root <absolute-root> | --output <absolute-target>] \
-  [--credential-action block|redact|allow] [--redact-personal] \
-  [--proprietary-confirmed] [--allow-repo-output]
+  [--output <canonical-paired-raw-target>] \
+  [--credential-action block|redact] [--redact-personal] \
+  [--proprietary-confirmed]
 ```
 
 更新 partial 时增加：
@@ -74,24 +75,48 @@ study_log.py archive --project <project> (--session <id> | --source <jsonl>) \
 --archive-id <stable-id> --target-sha256 <reviewed-target-hash>
 ```
 
-不指定 `--output` 的更新会在选定 private root 中按 `archive_id` 定位原文件。Raw 始终严格解析 JSONL；任何坏行都失败且原目标不变。
+`--structured-record` 必须是项目内已存在的结构化 Markdown；目标为其父目录同级的 `<父目录名>-raw/<同名.md>`。显式 `--output` 必须等于该规范目标。更新继续绑定同一个结构化文件、archive ID 和目标 SHA。Raw 始终严格解析 JSONL；任何坏行都失败且原目标不变。
 
 ### `config archive-root`
 
 ```text
 study_log.py config archive-root get
-study_log.py config archive-root set <absolute-private-directory>
 ```
 
-配置保存在操作系统用户级配置目录，不写入消费仓库。root 解析顺序：单次 `--output`／`--archive-root`、`STUDY_LOG_ARCHIVE_ROOT`、用户级配置；都缺失时以 `safety` 停止。
+`get` 仅供定位历史私有归档；`set` 已退役。新导出不采用 `--archive-root`、`STUDY_LOG_ARCHIVE_ROOT` 或用户级私有目录配置作为输出回退。
 
-自动布局为：
+### 配对验证
 
 ```text
-<private-root>/<project-name>-<project-path-hash>/<year>/<date>-<title>-<archive-id>.md
+study_log.py verify-pairs --project <project> \
+  --structured-record <relative-record.md> [--structured-record <another-record.md>]
 ```
 
-状态只写入元数据，不写入文件名。
+验证项目内路径、同名配对、元数据绑定、消息边界／数量与正文校验值。只验证显式列出的文件，不遍历其他学习目录，也不改写历史结构化内容。
+
+### 旧归档迁移
+
+```text
+study_log.py migrate-preview --project <project> --request <request.json>
+study_log.py migrate --project <project> --request <request.json> \
+  --preview-digest <reviewed-digest> --privacy-confirmed --proprietary-confirmed
+```
+
+请求形状：
+
+```json
+{
+  "schema": "study-log.migration/v1",
+  "sources": [{"id":"old","path":"/absolute/reviewed-archive.md","sha256":"<reviewed-sha>"}],
+  "records": [{
+    "structured_record":"module/log/YYYY-MM-DD-topic.md",
+    "title":"主题",
+    "segments":[{"source_id":"old","start_id":"msg-start","end_id":"msg-end"}]
+  }]
+}
+```
+
+只接受用户明确选择的既有归档，核对全文及可见正文完整性；跨段拼接要求项目、规范化和脱敏身份兼容，并保留各段来源。所有源消息必须恰好分配一次，目标必须不存在；不手写 raw 正文或伪造源会话 SHA。迁移写入后仍保留源文件；验证成功且用户明确要求移动后，才删除已核实的旧路径。
 
 ## 选择边界
 
@@ -108,14 +133,14 @@ study_log.py config archive-root set <absolute-private-directory>
 - `extract` 与 `archive` 必须携带 `preview` 返回的 source SHA-256。脚本在读取后及写入前再次检查。
 - 更新 raw 必须携带已展示 diff 时审阅的 target SHA-256；目标变化、消失或出现均安全拒绝。
 - 写入使用目标同目录临时文件、落盘同步和原子替换；失败时清理临时文件。
-- archive root 与目标都解析真实路径并检查 containment；符号链接或 Windows junction 不得把目标引出 root。
-- raw 默认拒绝项目或任何 Git 工作树内路径。明确允许仓库内输出时，脚本仍要求目标未跟踪且已经被 Git ignore；不会代改 `.gitignore`。
+- 所有导出解析真实路径并检查项目 containment；符号链接或 Windows junction 不得把目标引出项目，或导向嵌套仓库、Git 管理目录和其他记录。
+- raw 导出必须在当前仓库内，且与指定结构化记录同名配对。允许正常 Git 跟踪，不要求已被 ignore；仍不会自动 stage、commit、push 或修改 `.gitignore`。
 
 ## 隐私决策
 
 `preview` 只返回类别和计数，不返回命中的秘密值。检测采用可审计的高置信规则集，目的是拦住常见且明确的风险，不是穷尽式敏感信息扫描；没有命中不代表内容不含凭据、个人信息或专有内容，raw 写入前仍需人工完成隐私与所有权检查。
 
-- `credential`：私钥、常见平台令牌和明确赋值的 password／secret／token／API key。默认 `block`；经用户明确选择后可 `redact` 或 `allow` 原样私存。
+- `credential`：私钥、常见平台令牌和明确赋值的 password／secret／token／API key。默认 `block`；经用户明确选择后可 `redact`，仓库内不接受原样写入凭据。迁移遇到已保存的真实凭据时停止，不静默改写历史正文；需另行选择脱敏重导或缩小范围。本地保存不是公开授权。
 - `proprietary`：专有标记、内部 host／API 和代码块等需要判断所有权的内容。写入要求 `--proprietary-confirmed`；所有权或适用政策不清楚时不要传入该确认。
 - `personal`：电子邮箱、电话号码等。向用户警告；可以用 `--redact-personal` 应用可复现脱敏。
 

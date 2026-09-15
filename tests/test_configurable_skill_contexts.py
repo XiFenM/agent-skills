@@ -448,9 +448,10 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
     assert study_wrapper["allowlist"] == {
         "tracked_files": [],
         "tracked_collections": [],
-        "write_paths": ["english/logs"],
+        "write_paths": ["english/logs", "english/logs-raw"],
     }
     serialized_study = json.dumps(study_wrapper, ensure_ascii=False)
+    assert study_wrapper["context"]["structured_targets"][0]["paired_raw_path"] == "english/logs-raw"
     for forbidden in ("archive_root", "private_root", "session_dirs", "boundary"):
         assert forbidden not in serialized_study
     assert materialize_skills.check(consumer, central, config_path) == []

@@ -12,16 +12,14 @@ import hashlib
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Iterable, Sequence, cast
+from urllib.parse import unquote
 
 
 SCHEMA_VERSION = 1
@@ -1405,6 +1403,9 @@ def _frontmatter_lines(metadata: dict[str, Any]) -> list[str]:
         "normalization",
         "redaction",
         "privacy_risks",
+        "structured_record",
+        "message_phases",
+        "migration",
     )
     lines = ["---"]
     for key in ordered_keys:
@@ -1426,6 +1427,10 @@ def _render_archive(
         "> 此文件是规则化提取的“可追溯可见文本对话”，不是完整客户端 Session，也不代表已经匿名化。",
         "> system、developer、reasoning、工具事件、客户端注入和附件正文默认不包含在内。",
     ]
+    if metadata.get("structured_record"):
+        record = Path(metadata["structured_record"])
+        backlink = f"../{record.parent.name}/{record.name}"
+        lines.extend(["", f"结构化学习记录：[查看记录](<{backlink}>)"])
     for index, message in enumerate(messages, start=1):
         lines.extend(
             [
@@ -1453,6 +1458,8 @@ def _parse_archive_metadata(content: str) -> dict[str, Any]:
         if ":" not in line:
             raise StudyLogError("malformed", "archive frontmatter contains an invalid line")
         key, raw_value = line.split(":", maxsplit=1)
+        if key in metadata:
+            raise StudyLogError("malformed", "archive frontmatter contains a duplicate key")
         try:
             metadata[key] = json.loads(raw_value.strip())
         except json.JSONDecodeError as exc:
@@ -1492,69 +1499,43 @@ def _ensure_contained(target: Path, root: Path) -> tuple[Path, Path]:
     return target_resolved, root_resolved
 
 
-def _nearest_existing_parent(path: Path) -> Path:
-    candidate = path
-    while not candidate.exists() and candidate != candidate.parent:
-        candidate = candidate.parent
-    return candidate
+def _project_output(target: Path, project: Path) -> Path:
+    """Require an owned project path without symlink or nested-repository escapes."""
+    root = Path(_canonical_project(project))
+    if not root.is_dir() or root == root.parent:
+        raise StudyLogError("safety", "project must be an existing non-root directory")
+    lexical = Path(os.path.abspath(target if target.is_absolute() else root / target))
+    try:
+        relative = lexical.relative_to(root)
+    except ValueError as exc:
+        raise StudyLogError("safety", "output must stay inside the selected project") from exc
+    if not relative.parts or ".git" in {part.casefold() for part in relative.parts}:
+        raise StudyLogError("safety", "output cannot be the project root or Git metadata")
+    cursor = root
+    for part in relative.parts:
+        cursor = cursor / part
+        if cursor.is_symlink() or (
+            hasattr(cursor, "is_junction") and cursor.is_junction()
+        ):
+            raise StudyLogError("safety", "output path cannot cross a symbolic link or junction")
+        if cursor.is_dir() and (cursor / ".git").exists():
+            raise StudyLogError("safety", "output cannot enter a nested Git worktree")
+    resolved, _root = _ensure_contained(lexical, root)
+    return resolved
 
 
-def _git_marker_root(path: Path) -> Path | None:
-    candidate = _nearest_existing_parent(path).resolve(strict=False)
-    for directory in (candidate, *candidate.parents):
-        if (directory / ".git").exists():
-            return directory
-    return None
-
-
-def _git_output_guard(target: Path, project: Path, *, allow_repo_output: bool) -> None:
-    target_resolved = target.resolve(strict=False)
-    project_resolved = project.resolve(strict=False)
-    within_project = _is_within(target_resolved, project_resolved)
-    existing_parent = _nearest_existing_parent(target_resolved.parent)
-    git = shutil.which("git")
-    repo_root: Path | None = _git_marker_root(existing_parent)
-    if git:
-        result = subprocess.run(
-            [git, "-C", str(existing_parent), "rev-parse", "--show-toplevel"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            repo_root = Path(result.stdout.strip()).resolve(strict=False)
-    if not within_project and repo_root is None:
-        return
-    if not allow_repo_output:
-        raise StudyLogError(
-            "safety",
-            "raw archives are refused inside a project or Git worktree by default",
-            details={"target": str(target_resolved)},
-        )
-    if git is None or repo_root is None or not _is_within(target_resolved, repo_root):
-        raise StudyLogError(
-            "safety", "cannot verify Git tracking and ignore state for an in-project target"
-        )
-    relative = os.path.relpath(target_resolved, repo_root)
-    tracked = subprocess.run(
-        [git, "-C", str(repo_root), "ls-files", "--error-unmatch", "--", relative],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if tracked.returncode == 0:
-        raise StudyLogError("safety", "raw archive target is tracked by Git")
-    ignored = subprocess.run(
-        [git, "-C", str(repo_root), "check-ignore", "--quiet", "--", relative],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if ignored.returncode != 0:
-        raise StudyLogError(
-            "safety",
-            "in-repository raw archive target is not ignored by Git; study-log will not edit .gitignore",
-        )
+def _paired_paths(project: str | Path, structured_record: str) -> tuple[Path, Path, str]:
+    root = Path(_canonical_project(project))
+    record = _project_output(Path(structured_record), root)
+    if record.suffix.casefold() != ".md" or not record.is_file():
+        raise StudyLogError("safety", "structured record must be an existing project Markdown file")
+    if any(part == "raw" or part.endswith("-raw") or part in {".study-log", ".agent-skills", ".agents", ".claude"} for part in (part.casefold() for part in record.relative_to(root).parts[:-1])):
+        raise StudyLogError("safety", "a raw dialogue cannot be used as its own structured record")
+    if record.parent == root:
+        raise StudyLogError("safety", "structured record must be inside a project log directory")
+    raw_dir = record.parent.with_name(record.parent.name + "-raw")
+    target = _project_output(raw_dir / record.name, root)
+    return record, target, record.relative_to(root).as_posix()
 
 
 def _atomic_write(path: Path, content: str, *, expected_sha256: str | None) -> None:
@@ -1624,88 +1605,11 @@ def _load_config() -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
-def _configured_archive_root() -> tuple[Path | None, str | None]:
-    env_root = os.environ.get("STUDY_LOG_ARCHIVE_ROOT")
-    if env_root:
-        path = Path(env_root).expanduser()
-        if not path.is_absolute():
-            raise StudyLogError("safety", "STUDY_LOG_ARCHIVE_ROOT must be absolute")
-        return path.resolve(strict=False), "environment"
-    config = _load_config()
-    configured = config.get("archive_root")
-    if isinstance(configured, str) and configured:
-        path = Path(configured).expanduser()
-        if not path.is_absolute():
-            raise StudyLogError("malformed", "configured archive root must be absolute")
-        return path.resolve(strict=False), "user_config"
-    return None, None
-
-
-def _set_archive_root(root: Path) -> Path:
-    root = root.expanduser()
-    if not root.is_absolute():
-        raise StudyLogError("usage", "archive root must be an absolute path")
-    resolved = root.resolve(strict=False)
-    resolved.mkdir(parents=True, exist_ok=True)
-    if not resolved.is_dir():
-        raise StudyLogError("safety", "archive root is not a directory")
-    config_file = _config_file()
-    content = json.dumps(
-        {"schema_version": SCHEMA_VERSION, "archive_root": str(resolved)},
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    ) + "\n"
-    expected = _sha256_file(config_file) if config_file.exists() else None
-    _atomic_write(config_file, content, expected_sha256=expected)
-    return resolved
-
-
-def _archive_root(explicit: str | None) -> tuple[Path, str]:
-    if explicit:
-        root = Path(explicit).expanduser()
-        if not root.is_absolute():
-            raise StudyLogError("usage", "--archive-root must be absolute")
-        return root.resolve(strict=False), "explicit"
-    configured, source = _configured_archive_root()
-    if configured is None or source is None:
-        raise StudyLogError(
-            "safety",
-            "no private archive root is configured; ask the user to choose one",
-            details={"resolution_order": ["explicit", "environment", "user_config"]},
-        )
-    return configured, source
-
-
-def _slug(value: str) -> str:
-    value = re.sub(r"\s+", "-", value.strip())
-    value = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE).strip("-._")
-    return (value or "visible-dialogue")[:48]
-
-
-def _archive_layout_target(
-    root: Path,
-    *,
-    project: str,
-    title: str,
-    archive_id: str,
-    first_timestamp: str,
-) -> Path:
-    try:
-        year = _parse_timestamp(first_timestamp, "first message timestamp").strftime("%Y")
-        day = _parse_timestamp(first_timestamp, "first message timestamp").strftime("%Y-%m-%d")
-    except StudyLogError:
-        now = datetime.now(UTC)
-        year = now.strftime("%Y")
-        day = now.strftime("%Y-%m-%d")
-    project_dir = f"{_project_name(project)}-{_project_fingerprint(project)}"
-    return root / project_dir / year / f"{day}-{_slug(title)}-{archive_id}.md"
-
-
 def _iter_archive_metadata(root: Path) -> Iterable[tuple[Path, dict[str, Any]]]:
     if not root.is_dir():
         return
     for path in root.rglob("*.md"):
+        _project_output(path, root)
         try:
             content = path.read_text(encoding="utf-8")
         except UnicodeError:
@@ -1721,31 +1625,6 @@ def _iter_archive_metadata(root: Path) -> Iterable[tuple[Path, dict[str, Any]]]:
         except StudyLogError:
             continue
         yield path, metadata
-
-
-def _find_archive(root: Path, archive_id: str) -> tuple[Path, dict[str, Any] | None]:
-    if not re.fullmatch(r"sl-[0-9a-f]{32}", archive_id):
-        raise StudyLogError("usage", "archive_id has an invalid format")
-    filename_matches = list(root.rglob(f"*-{archive_id}.md")) if root.is_dir() else []
-    if len(filename_matches) > 1:
-        raise StudyLogError("ambiguous", "archive_id exists at multiple targets")
-    if len(filename_matches) == 1:
-        path = filename_matches[0]
-        try:
-            metadata = _parse_archive_metadata(path.read_text(encoding="utf-8"))
-        except (OSError, StudyLogError):
-            metadata = None
-        return path, metadata
-    matches = [
-        (path, metadata)
-        for path, metadata in _iter_archive_metadata(root)
-        if metadata.get("archive_id") == archive_id
-    ]
-    if not matches:
-        raise StudyLogError("not_found", "archive_id was not found under the selected root")
-    if len(matches) > 1:
-        raise StudyLogError("ambiguous", "archive_id exists at multiple targets")
-    return matches[0]
 
 
 def _ensure_no_parallel_partial(root: Path, identity: dict[str, Any]) -> None:
@@ -1966,28 +1845,14 @@ def _command_extract(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
     selection = _selection_from_args(data, args)
     content = _render_scratch(data, selection)
     if args.output:
-        output = Path(args.output).expanduser()
-        if not output.is_absolute():
-            raise StudyLogError("usage", "structured scratch --output must be absolute")
-        output = output.resolve(strict=False)
-        if _is_within(output, Path(args.project)):
-            raise StudyLogError("safety", "structured scratch must stay outside the project")
-        _git_output_guard(output, Path(args.project), allow_repo_output=False)
-        _atomic_write(output, content, expected_sha256=None)
+        output = _project_output(Path(args.output), Path(args.project))
     else:
-        handle, name = tempfile.mkstemp(prefix="study-log-", suffix=".md")
-        os.close(handle)
-        output = Path(name)
-        # mkstemp created the placeholder; remove it so the same atomic no-overwrite
-        # path is used for both explicit and implicit scratch targets.
-        output.unlink()
-        if _is_within(output, Path(args.project)):
-            raise StudyLogError(
-                "safety",
-                "the operating-system temporary directory is inside the project; provide an external --output",
-            )
-        _git_output_guard(output, Path(args.project), allow_repo_output=False)
-        _atomic_write(output, content, expected_sha256=None)
+        output = _project_output(
+            Path(".study-log/scratch") / f"study-log-{uuid.uuid4().hex}.md", Path(args.project)
+        )
+    if output.suffix.casefold() != ".md":
+        raise StudyLogError("usage", "structured scratch output must use the .md extension")
+    _atomic_write(output, content, expected_sha256=None)
     if _sha256_file(data.ref.path) != data.source_sha256:
         output.unlink(missing_ok=True)
         raise StudyLogError("integrity", "source changed while structured extract was written")
@@ -2016,32 +1881,14 @@ def _resolve_archive_target(
     archive_id: str,
     first_timestamp: str,
 ) -> tuple[Path, Path, str]:
-    explicit_root: Path | None = None
-    root_source = "explicit_target"
+    _record, target, _relative = _paired_paths(project, args.structured_record)
     if args.archive_root:
-        explicit_root, root_source = _archive_root(args.archive_root)
+        raise StudyLogError("usage", "--archive-root is retired; output is paired with --structured-record")
     if args.output:
-        target = Path(args.output).expanduser()
-        if not target.is_absolute():
-            raise StudyLogError("usage", "raw archive --output must be absolute")
-        if target.suffix.casefold() != ".md":
-            raise StudyLogError("usage", "raw archive --output must use the .md extension")
-        if explicit_root is None:
-            root = target.parent.resolve(strict=False)
-        else:
-            root = explicit_root
-        target, root = _ensure_contained(target, root)
-        return target, root, root_source
-    root, root_source = _archive_root(args.archive_root)
-    target = _archive_layout_target(
-        root,
-        project=project,
-        title=title,
-        archive_id=archive_id,
-        first_timestamp=first_timestamp,
-    )
-    target, root = _ensure_contained(target, root)
-    return target, root, root_source
+        explicit = _project_output(Path(args.output), Path(project))
+        if explicit != target:
+            raise StudyLogError("safety", "--output must equal the canonical paired raw path")
+    return target, target.parent, "structured_record"
 
 
 def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -2062,7 +1909,7 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
     if "credential" in report.categories and args.credential_action == "block":
         raise StudyLogError(
             "safety",
-            "high-confidence credentials detected; narrow, structure, redact, or explicitly allow private raw storage",
+            "high-confidence credentials detected; narrow the range or redact before repository storage",
             details={"privacy": list(report.categories)},
         )
     if "proprietary" in report.categories and not args.proprietary_confirmed:
@@ -2089,28 +1936,15 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
     root_source: str
     existing: dict[str, Any] | None = None
     expected_target_sha: str | None = None
-    if updating and not args.output:
-        root, root_source = _archive_root(args.archive_root)
-        target, existing = _find_archive(root, archive_id)
-        target, root = _ensure_contained(target, root)
-    else:
-        target, root, root_source = _resolve_archive_target(
-            args,
-            project=project,
-            title=args.title,
-            archive_id=archive_id,
-            first_timestamp=selection.messages[0].timestamp,
-        )
-        if updating:
-            if not target.is_file():
-                raise StudyLogError("not_found", "archive update target does not exist")
-            existing = _parse_archive_metadata(target.read_text(encoding="utf-8"))
-
-    _git_output_guard(
-        target,
-        Path(project),
-        allow_repo_output=args.allow_repo_output,
+    target, root, root_source = _resolve_archive_target(
+        args, project=project, title=args.title, archive_id=archive_id,
+        first_timestamp=selection.messages[0].timestamp,
     )
+    record, _target, record_relative = _paired_paths(project, args.structured_record)
+    record_sha = _sha256_file(record)
+    if updating:
+        if not target.is_file():
+            raise StudyLogError("not_found", "archive update target does not exist")
     if data.ref.path.resolve(strict=False) == target.resolve(strict=False):
         raise StudyLogError("safety", "session source and archive target must differ")
 
@@ -2125,6 +1959,7 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
                 "target SHA-256 changed after review",
                 details={"expected": expected_target_sha, "actual": actual_target_sha},
             )
+        existing, _existing_messages = _read_verified_archive(target)
         if existing is None:
             raise StudyLogError("malformed", "archive metadata could not be loaded")
         required_equal = {
@@ -2135,6 +1970,7 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
             "source_session_id": data.ref.session_id,
             "start_message_id": selection.start_message_id,
             "normalization": normalization,
+            "structured_record": record_relative,
         }
         for key, expected_value in required_equal.items():
             if existing.get(key) != expected_value:
@@ -2202,6 +2038,8 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
         "normalization": normalization,
         "redaction": redaction,
         "privacy_risks": {"categories": list(report.categories), "counts": report.counts},
+        "structured_record": record_relative,
+        "message_phases": [message.phase for message in rendered_messages],
     }
     if not metadata["title"]:
         raise StudyLogError("usage", "archive title cannot be empty")
@@ -2210,6 +2048,9 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
     # Recheck the source immediately before the atomic target mutation.
     if _sha256_file(data.ref.path) != data.source_sha256:
         raise StudyLogError("integrity", "source changed while archive candidate was prepared")
+    _paired_paths(project, args.structured_record)
+    if _sha256_file(record) != record_sha:
+        raise StudyLogError("integrity", "structured record changed while archive was prepared")
     _atomic_write(target, content, expected_sha256=expected_target_sha)
     target_sha = _sha256_file(target)
     result = {
@@ -2229,8 +2070,309 @@ def _command_archive(args: argparse.Namespace) -> tuple[dict[str, Any], list[dic
         "message_count": len(rendered_messages),
         "privacy": {"categories": list(report.categories), "counts": report.counts},
         "redaction": redaction,
+        "structured_record": record_relative,
     }
     return result, []
+
+
+ARCHIVE_MESSAGE_RE = re.compile(
+    r"^\*\*(\d{3,}) · (用户|助手 / 过程更新|助手 / 正式回答|助手)\*\* · `([^`]+)` · `(msg-[0-9a-f]+)`\n\n",
+    re.MULTILINE,
+)
+
+
+def _read_verified_archive(path: Path) -> tuple[dict[str, Any], tuple[DialogueMessage, ...]]:
+    """Decode only this export format and require the complete visible-content hash."""
+    # Do not use Path.read_text: universal-newline translation would silently
+    # change CRLF inside visible message text and invalidate historical hashes.
+    content = path.read_bytes().decode("utf-8")
+    metadata = _parse_archive_metadata(content)
+    if metadata.get("schema_version") != SCHEMA_VERSION:
+        raise StudyLogError("malformed", "archive schema_version is unsupported")
+    for key in ("archive_id", "provider", "project_fingerprint", "source_session_id", "title"):
+        if not isinstance(metadata.get(key), str) or not metadata[key]:
+            raise StudyLogError("malformed", f"archive {key} must be a nonempty string")
+    if not re.fullmatch(r"sl-[0-9a-f]{32}", metadata["archive_id"]):
+        raise StudyLogError("malformed", "archive archive_id is invalid")
+    if not isinstance(metadata.get("status"), str) or metadata["status"] not in {"partial", "final"}:
+        raise StudyLogError("malformed", "archive status is invalid")
+    if type(metadata.get("message_count")) is not int or metadata["message_count"] < 1:
+        raise StudyLogError("malformed", "archive message_count must be a positive integer")
+    normalization = metadata.get("normalization")
+    redaction = metadata.get("redaction")
+    if not isinstance(normalization, dict) or not isinstance(normalization.get("version"), str):
+        raise StudyLogError("malformed", "archive normalization is invalid")
+    if not isinstance(redaction, dict) or not isinstance(redaction.get("version"), str):
+        raise StudyLogError("malformed", "archive redaction is invalid")
+    categories = redaction.get("categories")
+    if not isinstance(categories, list) or any(not isinstance(category, str) for category in categories):
+        raise StudyLogError("malformed", "archive redaction categories are invalid")
+    if not isinstance(redaction.get("applications"), list):
+        raise StudyLogError("malformed", "archive redaction applications are invalid")
+    if metadata.get("migration") is not None and not isinstance(metadata["migration"], dict):
+        raise StudyLogError("malformed", "archive migration provenance is invalid")
+    matches = list(ARCHIVE_MESSAGE_RE.finditer(content))
+    phases = metadata.get("message_phases")
+    if phases is not None and (
+        not isinstance(phases, list) or len(phases) != len(matches)
+        or any(value is not None and not isinstance(value, str) for value in phases)
+    ):
+        raise StudyLogError("malformed", "archive message_phases is invalid")
+    messages: list[DialogueMessage] = []
+    role_phases = {
+        "用户": ("user", None), "助手": ("assistant", None),
+        "助手 / 过程更新": ("assistant", "commentary"),
+        "助手 / 正式回答": ("assistant", "final_answer"),
+    }
+    for index, match in enumerate(matches):
+        if int(match.group(1)) != index + 1:
+            raise StudyLogError("integrity", "archive message numbering is not contiguous")
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
+        text = content[match.end():end]
+        suffix = "\n\n---\n\n" if index + 1 < len(matches) else "\n"
+        if not text.endswith(suffix):
+            raise StudyLogError("malformed", "archive message separators are invalid")
+        role, phase = role_phases[match.group(2)]
+        message = DialogueMessage(
+            message_id=match.group(4),
+            timestamp="" if match.group(3) == "unknown" else match.group(3),
+            role=role, phase=phases[index] if phases is not None else phase,
+            text=text[:-len(suffix)], source_line=0,
+        )
+        if _role_label(message) != match.group(2):
+            raise StudyLogError("integrity", "archive role label disagrees with phase metadata")
+        messages.append(message)
+    if not messages or len({message.message_id for message in messages}) != len(messages):
+        raise StudyLogError("integrity", "archive messages are empty or have duplicate IDs")
+    expected = {
+        "message_count": len(messages),
+        "start_message_id": messages[0].message_id,
+        "end_message_id": messages[-1].message_id,
+        "visible_content_sha256": _dialogue_sha256(messages),
+        "first_message_at": messages[0].timestamp or None,
+        "last_message_at": messages[-1].timestamp or None,
+    }
+    for key, value in expected.items():
+        if metadata.get(key) != value:
+            raise StudyLogError("integrity", f"archive {key} does not match its visible body")
+    return metadata, tuple(messages)
+
+
+def _markdown_destinations(content: str) -> list[str]:
+    return [
+        unquote((angle or plain).split("#", 1)[0])
+        for angle, plain in re.findall(r"\]\((?:<([^>]+)>|([^\s)]+))\)", content)
+    ]
+
+
+def _verify_pair(project: str | Path, structured: str) -> dict[str, Any]:
+    record, target, relative = _paired_paths(project, structured)
+    if not target.is_file():
+        raise StudyLogError("not_found", "paired raw archive does not exist", details={"target": str(target)})
+    metadata, messages = _read_verified_archive(target)
+    if metadata.get("structured_record") != relative:
+        raise StudyLogError("integrity", "raw archive structured_record binding is incorrect")
+    if metadata.get("project_fingerprint") != _project_fingerprint(str(project)):
+        raise StudyLogError("integrity", "raw archive belongs to another project")
+    raw_content = target.read_bytes().decode("utf-8")
+    first_message = ARCHIVE_MESSAGE_RE.search(raw_content)
+    raw_links = _markdown_destinations(raw_content[:first_message.start()] if first_message else "")
+    if f"../{record.parent.name}/{record.name}" not in raw_links:
+        raise StudyLogError("integrity", "raw archive is missing its relative structured-record backlink")
+    structured_links = _markdown_destinations(record.read_text(encoding="utf-8"))
+    expected_link = f"../{record.parent.name}-raw/{record.name}"
+    # Existing structured records may be immutable card sources. Their missing
+    # backlink is reported, not patched or treated as a migration failure.
+    relevant_links = [link.removeprefix("./") for link in structured_links if link.removeprefix("./").startswith(f"../{record.parent.name}-raw/")]
+    if relevant_links and any(link != expected_link for link in relevant_links):
+        raise StudyLogError("integrity", "structured record links a different raw counterpart")
+    return {
+        "structured_record": relative, "target": str(target),
+        "archive_id": metadata.get("archive_id"), "status": metadata.get("status"),
+        "message_count": len(messages), "start_message_id": messages[0].message_id,
+        "end_message_id": messages[-1].message_id,
+        "visible_content_sha256": metadata["visible_content_sha256"],
+        "target_sha256": _sha256_file(target),
+        "structured_backlink_present": expected_link in relevant_links,
+    }
+
+
+def _command_verify_pairs(args: argparse.Namespace) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    pairs = [_verify_pair(args.project, record) for record in args.structured_record]
+    if len({pair["target"] for pair in pairs}) != len(pairs):
+        raise StudyLogError("usage", "structured records must be distinct")
+    return {"pairs": pairs, "pair_count": len(pairs), "would_write": False}, []
+
+
+def _migration_plan(args: argparse.Namespace) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    request_path = Path(args.request).resolve(strict=True)
+    try:
+        request_bytes = request_path.read_bytes()
+        request = json.loads(request_bytes.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise StudyLogError("malformed", "migration request is not valid JSON") from exc
+    if not isinstance(request, dict) or request.get("schema") != "study-log.migration/v1":
+        raise StudyLogError("malformed", "migration request schema must be study-log.migration/v1")
+    for key in ("sources", "records"):
+        if not isinstance(request.get(key), list) or not request[key]:
+            raise StudyLogError("malformed", f"migration {key} must be a nonempty list")
+    project = _canonical_project(args.project)
+    sources: dict[str, dict[str, Any]] = {}
+    all_message_ids: set[str] = set()
+    for source in request["sources"]:
+        if not isinstance(source, dict) or not all(isinstance(source.get(key), str) and source[key] for key in ("id", "path", "sha256")):
+            raise StudyLogError("malformed", "migration source requires id, path and sha256 strings")
+        if source["id"] in sources:
+            raise StudyLogError("usage", "migration source IDs must be unique")
+        path = Path(source["path"])
+        if not path.is_absolute() or path.is_symlink() or not path.is_file():
+            raise StudyLogError("safety", "migration source must be an explicit existing non-symlink file")
+        if _sha256_file(path) != source["sha256"]:
+            raise StudyLogError("integrity", "migration source SHA-256 changed after review")
+        metadata, messages = _read_verified_archive(path)
+        if _sha256_file(path) != source["sha256"]:
+            raise StudyLogError("integrity", "migration source changed while it was parsed")
+        if metadata.get("status") != "final":
+            raise StudyLogError("safety", "migration accepts finalized source archives only")
+        if metadata.get("project_fingerprint") != _project_fingerprint(project):
+            raise StudyLogError("safety", "migration source belongs to another project")
+        ids = {message.message_id for message in messages}
+        if all_message_ids.intersection(ids):
+            raise StudyLogError("conflict", "migration sources contain overlapping message IDs")
+        all_message_ids.update(ids)
+        sources[source["id"]] = {**source, "metadata": metadata, "messages": messages}
+    assigned: set[tuple[str, str]] = set()
+    plans: list[dict[str, Any]] = []
+    targets: set[Path] = set()
+    for record in request["records"]:
+        if not isinstance(record, dict) or not all(isinstance(record.get(key), str) and record[key].strip() for key in ("structured_record", "title")):
+            raise StudyLogError("malformed", "migration record requires structured_record and title strings")
+        if not isinstance(record.get("segments"), list) or not record["segments"]:
+            raise StudyLogError("malformed", "migration record segments must be a nonempty list")
+        structured, target, relative = _paired_paths(project, record["structured_record"])
+        if target in targets or target.exists():
+            raise StudyLogError("conflict", "migration targets must be distinct and must not exist", details={"target": str(target)})
+        targets.add(target)
+        selected: list[DialogueMessage] = []
+        provenance: list[dict[str, Any]] = []
+        compatibility: tuple[Any, ...] | None = None
+        for segment in record["segments"]:
+            if not isinstance(segment, dict) or not all(isinstance(segment.get(key), str) and segment[key] for key in ("source_id", "start_id", "end_id")):
+                raise StudyLogError("malformed", "migration segment requires source_id, start_id and end_id")
+            if segment["source_id"] not in sources:
+                raise StudyLogError("usage", "migration segment references an unknown source")
+            source = sources[segment["source_id"]]
+            identity = (source["metadata"]["normalization"], _redaction_identity(source["metadata"]["redaction"]))
+            if compatibility is not None and identity != compatibility:
+                raise StudyLogError("conflict", "segments paired with one structured record must use the same normalization and redaction policy")
+            compatibility = identity
+            selection = select_messages(source["messages"], start_id=segment["start_id"], end_id=segment["end_id"])
+            for message in selection.messages:
+                key = (segment["source_id"], message.message_id)
+                if key in assigned:
+                    raise StudyLogError("conflict", "migration assigns a source message more than once")
+                assigned.add(key)
+                selected.append(message)
+            provenance.append({
+                "source_id": segment["source_id"], "source_archive_id": source["metadata"]["archive_id"],
+                "source_file": source["path"], "source_sha256": source["sha256"],
+                "source_metadata": source["metadata"],
+                "start_message_id": selection.start_message_id,
+                "end_message_id": selection.end_message_id,
+                "message_count": len(selection.messages),
+                "visible_content_sha256": _dialogue_sha256(selection.messages),
+            })
+        timestamps = [_timestamp_for_message(message) for message in selected if message.timestamp]
+        if timestamps != sorted(timestamps):
+            raise StudyLogError("conflict", "migration segments must preserve chronological message order")
+        report = _privacy_report(selected)
+        plans.append({
+            "structured_record": relative, "structured_sha256": _sha256_file(structured),
+            "target": str(target), "title": " ".join(record["title"].splitlines()).strip(),
+            "message_count": len(selected), "start_message_id": selected[0].message_id,
+            "end_message_id": selected[-1].message_id,
+            "visible_content_sha256": _dialogue_sha256(selected),
+            "privacy": {"categories": list(report.categories), "counts": report.counts},
+            "segments": provenance, "messages": selected,
+        })
+    expected = {(source_id, message.message_id) for source_id, source in sources.items() for message in source["messages"]}
+    if assigned != expected:
+        raise StudyLogError("conflict", "migration must assign every source message exactly once", details={"unassigned_count": len(expected - assigned)})
+    public_plans = [{key: value for key, value in plan.items() if key != "messages"} for plan in plans]
+    preview = {
+        "schema": "study-log.migration-preview/v1", "project": project,
+        "request_sha256": _sha256_bytes(request_bytes), "records": public_plans,
+        "source_count": len(sources), "record_count": len(plans),
+        "message_count": len(assigned), "sources_retained": True,
+    }
+    digest = _sha256_bytes(json.dumps(preview, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    preview["preview_digest"] = digest
+    return preview, plans, list(sources.values())
+
+
+def _command_migration(args: argparse.Namespace) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    preview, plans, sources = _migration_plan(args)
+    if args.command == "migrate-preview":
+        return {**preview, "would_write": False}, []
+    if args.preview_digest != preview["preview_digest"]:
+        raise StudyLogError("conflict", "migration preview digest changed; review a fresh preview")
+    if not args.privacy_confirmed:
+        raise StudyLogError("safety", "migration into repository storage requires privacy confirmation")
+    if any("credential" in plan["privacy"]["categories"] for plan in plans):
+        raise StudyLogError("safety", "migration source still contains high-confidence credentials; use a separately reviewed redacted export")
+    if any("proprietary" in plan["privacy"]["categories"] for plan in plans) and not args.proprietary_confirmed:
+        raise StudyLogError("safety", "repository migration of possible proprietary content requires ownership/policy confirmation")
+    candidates: list[tuple[Path, str]] = []
+    now = datetime.now(UTC).isoformat()
+    project = _canonical_project(args.project)
+    for plan in plans:
+        messages = plan["messages"]
+        first_source = plan["segments"][0]["source_metadata"]
+        session_ids = list(dict.fromkeys(segment["source_metadata"]["source_session_id"] for segment in plan["segments"]))
+        providers = list(dict.fromkeys(segment["source_metadata"]["provider"] for segment in plan["segments"]))
+        metadata = {
+            "archive_type": "study-log-visible-dialogue", "schema_version": SCHEMA_VERSION,
+            "archive_id": f"sl-{uuid.uuid4().hex}", "status": "final", "title": plan["title"],
+            "provider": providers[0] if len(providers) == 1 else "mixed",
+            "project_name": _project_name(project), "project_fingerprint": _project_fingerprint(project),
+            "source_session_id": session_ids[0] if len(session_ids) == 1 else "multiple",
+            "source_file": "study-log migration request", "source_sha256": preview["request_sha256"],
+            "start_message_id": plan["start_message_id"], "end_message_id": plan["end_message_id"],
+            "message_count": plan["message_count"], "visible_content_sha256": plan["visible_content_sha256"],
+            "target_precondition_sha256": None,
+            "first_message_at": messages[0].timestamp or None, "last_message_at": messages[-1].timestamp or None,
+            "created_at_utc": now, "updated_at_utc": now,
+            "normalization": first_source["normalization"],
+            "redaction": {"version": first_source["redaction"]["version"], "categories": first_source["redaction"]["categories"], "applications": [], "preserved_from_sources": True},
+            "privacy_risks": plan["privacy"], "structured_record": plan["structured_record"],
+            "message_phases": [message.phase for message in messages],
+            "migration": {"schema": "study-log.migration/v1", "preview_digest": preview["preview_digest"], "request_sha256": preview["request_sha256"], "segments": plan["segments"]},
+        }
+        candidates.append((Path(plan["target"]), _render_archive(messages, metadata)))
+    # All inputs and all targets are checked before the first write. On failure,
+    # rollback removes only files created by this operation whose hashes still match.
+    if _sha256_file(Path(args.request)) != preview["request_sha256"]:
+        raise StudyLogError("integrity", "migration request changed before publication")
+    for source in sources:
+        if _sha256_file(Path(source["path"])) != source["sha256"]:
+            raise StudyLogError("integrity", "migration source changed before publication")
+    for plan in plans:
+        record, target, _relative = _paired_paths(project, plan["structured_record"])
+        if target.exists() or _sha256_file(record) != plan["structured_sha256"]:
+            raise StudyLogError("conflict", "migration target or structured source changed before publication")
+    created: list[tuple[Path, str]] = []
+    try:
+        for target, content in candidates:
+            _project_output(target, Path(project))
+            _atomic_write(target, content, expected_sha256=None)
+            created.append((target, _sha256_bytes(content.encode("utf-8"))))
+        pairs = [_verify_pair(project, plan["structured_record"]) for plan in plans]
+    except (StudyLogError, OSError, UnicodeError):
+        for target, expected_sha in reversed(created):
+            if target.is_file() and not target.is_symlink() and _sha256_file(target) == expected_sha:
+                target.unlink()
+        raise
+    return {"operation": "migrate", "preview_digest": preview["preview_digest"], "pairs": pairs, "message_count": preview["message_count"], "sources_retained": True}, []
 
 
 def _command_config(args: argparse.Namespace) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -2240,14 +2382,11 @@ def _command_config(args: argparse.Namespace) -> tuple[dict[str, Any], list[dict
             "configured": isinstance(configured, str) and bool(configured),
             "archive_root": configured if isinstance(configured, str) else None,
             "config_file": str(_config_file()),
+            "historical_only": True,
+            "affects_new_exports": False,
         }, []
     if args.config_action == "set":
-        resolved = _set_archive_root(Path(args.path))
-        return {
-            "configured": True,
-            "archive_root": str(resolved),
-            "config_file": str(_config_file()),
-        }, []
+        raise StudyLogError("usage", "archive-root configuration is read-only historical compatibility")
     raise StudyLogError("usage", "unsupported config action")
 
 
@@ -2307,16 +2446,30 @@ def build_parser() -> argparse.ArgumentParser:
     archive_parser.add_argument("--title", required=True)
     archive_parser.add_argument("--status", choices=("partial", "final"), required=True)
     archive_parser.add_argument("--output")
+    archive_parser.add_argument("--structured-record", required=True)
     archive_parser.add_argument("--archive-root")
     archive_parser.add_argument("--archive-id")
     archive_parser.add_argument("--target-sha256")
     archive_parser.add_argument("--privacy-confirmed", action="store_true")
     archive_parser.add_argument(
-        "--credential-action", choices=("block", "redact", "allow"), default="block"
+        "--credential-action", choices=("block", "redact"), default="block"
     )
     archive_parser.add_argument("--redact-personal", action="store_true")
     archive_parser.add_argument("--proprietary-confirmed", action="store_true")
     archive_parser.add_argument("--allow-repo-output", action="store_true")
+
+    verify_parser = subparsers.add_parser("verify-pairs")
+    verify_parser.add_argument("--project", required=True)
+    verify_parser.add_argument("--structured-record", action="append", required=True)
+
+    for command in ("migrate-preview", "migrate"):
+        migration_parser = subparsers.add_parser(command)
+        migration_parser.add_argument("--project", required=True)
+        migration_parser.add_argument("--request", required=True)
+        if command == "migrate":
+            migration_parser.add_argument("--preview-digest", required=True)
+            migration_parser.add_argument("--privacy-confirmed", action="store_true")
+            migration_parser.add_argument("--proprietary-confirmed", action="store_true")
 
     config_parser = subparsers.add_parser("config")
     config_subparsers = config_parser.add_subparsers(
@@ -2377,6 +2530,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             data, warnings = _command_extract(args)
         elif command == "archive":
             data, warnings = _command_archive(args)
+        elif command == "verify-pairs":
+            data, warnings = _command_verify_pairs(args)
+        elif command in {"migrate-preview", "migrate"}:
+            data, warnings = _command_migration(args)
         elif command == "config":
             data, warnings = _command_config(args)
         else:

@@ -69,7 +69,9 @@ def test_validator_returns_canonical_context_and_write_only_allowlist() -> None:
     }
     assert result["tracked_files"] == []
     assert result["tracked_collections"] == []
-    assert result["write_paths"] == ["algorithms/log", "systems/log"]
+    assert result["write_paths"] == [
+        "algorithms/log", "algorithms/log-raw", "systems/log", "systems/log-raw"
+    ]
     assert result["context"] == {
         "schema": "agent-skills.study-log-context/v1",
         "repository": {
@@ -82,6 +84,7 @@ def test_validator_returns_canonical_context_and_write_only_allowlist() -> None:
                 "id": "algorithms-log",
                 "record_type": "structured-study-log",
                 "path": "algorithms/log",
+                "paired_raw_path": "algorithms/log-raw",
                 "format": "markdown",
                 "include_patterns": ["*.md"],
                 "filename_policy": "yyyy-mm-dd-topic",
@@ -90,6 +93,7 @@ def test_validator_returns_canonical_context_and_write_only_allowlist() -> None:
                 "id": "systems-log",
                 "record_type": "structured-study-log",
                 "path": "systems/log",
+                "paired_raw_path": "systems/log-raw",
                 "format": "markdown",
                 "include_patterns": ["*.md"],
                 "filename_policy": "yyyy-mm-dd-topic",
@@ -97,6 +101,18 @@ def test_validator_returns_canonical_context_and_write_only_allowlist() -> None:
         ],
     }
     json.dumps(result, ensure_ascii=False, allow_nan=False)
+
+
+def test_raw_targets_are_derived_without_granting_read_or_publish_authority() -> None:
+    result = context_config.validate_materialized_context(_repository(), _skill())
+    for target in result["context"]["structured_targets"]:
+        assert target["paired_raw_path"] == f"{target['path']}-raw"
+        assert target["include_patterns"] == ["*.md"]
+    assert result["tracked_files"] == []
+    assert result["tracked_collections"] == []
+    assert result["write_paths"] == [
+        "algorithms/log", "algorithms/log-raw", "systems/log", "systems/log-raw"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -158,6 +174,8 @@ def test_target_path_must_be_a_portable_repository_relative_directory(path: str)
         ("Module/Log", "module/log"),
         ("module", "module/log"),
         ("module/log", "module/log/archive"),
+        ("module/log", "module/log-raw"),
+        ("module/log", "module/log-raw/archive"),
     ],
 )
 def test_target_paths_must_be_case_insensitively_disjoint(paths: tuple[str, str]) -> None:

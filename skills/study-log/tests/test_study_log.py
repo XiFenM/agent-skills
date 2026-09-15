@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -131,9 +132,14 @@ def _archive_arguments(
     preview: dict[str, object],
     root: Path | None,
     status: str = "partial",
+    record_name: str | None = None,
 ) -> list[str]:
     messages = preview["messages"]
     assert isinstance(messages, list)
+    record = Path(project) / "log" / (record_name or f"{source.stem}.md")
+    record.parent.mkdir(parents=True, exist_ok=True)
+    if not record.exists():
+        record.write_text(f"# 结构化记录\n\n[可追溯对话](../log-raw/{record.name})\n", encoding="utf-8")
     arguments = [
         "archive",
         "--project",
@@ -151,9 +157,9 @@ def _archive_arguments(
         "--status",
         status,
         "--privacy-confirmed",
+        "--structured-record",
+        str(record),
     ]
-    if root is not None:
-        arguments.extend(["--archive-root", str(root)])
     return arguments
 
 
@@ -594,7 +600,7 @@ def test_structured_extract_tolerates_only_one_broken_tail_and_checks_source_has
     source = isolated_roots["codex"] / "rollout-active.jsonl"
     _jsonl(source, _codex_rows(project), broken_tail=True)
     preview = _preview(capsys, project, source)
-    output = tmp_path / "scratch" / "structured.md"
+    output = project / "scratch" / "structured.md"
     arguments = [
         "extract",
         "--project",
@@ -614,7 +620,7 @@ def test_structured_extract_tolerates_only_one_broken_tail_and_checks_source_has
     assert result["data"]["cleanup_required"] is True
     assert any(item["code"] == "truncated_tail_ignored" for item in result["warnings"])
 
-    stale_output = tmp_path / "scratch" / "stale.md"
+    stale_output = project / "scratch" / "stale.md"
     stale_args = arguments[:-1] + [str(stale_output)]
     stale_args[stale_args.index("--source-sha256") + 1] = "0" * 64
     code, result = _run(capsys, stale_args)
@@ -647,7 +653,7 @@ def test_structured_tolerates_truncated_multibyte_tail_but_raw_is_strict(
         }
     ]
     preview = preview_result["data"]
-    scratch = tmp_path / "multibyte-scratch.md"
+    scratch = project / "multibyte-scratch.md"
     code, extract_result = _run(
         capsys,
         [
@@ -921,7 +927,7 @@ def test_pure_claude_compact_summary_is_not_an_eligible_root_session(
     assert result["warnings"][0]["reason"] == "not_found"
 
 
-def test_archive_requires_private_root_and_privacy_confirmation(
+def test_archive_requires_structured_record_and_privacy_confirmation(
     isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     project = isolated_roots["project"]
@@ -932,11 +938,10 @@ def test_archive_requires_private_root_and_privacy_confirmation(
         project=project, source=source, preview=preview, root=None
     )
 
-    code, result = _run(capsys, arguments)
-    assert code == study_log.EXIT_SAFETY
-    assert "archive root" in result["error"]["message"]
-
-    arguments.extend(["--archive-root", str(isolated_roots["private"])])
+    without_record = arguments[:-2]
+    code, result = _run(capsys, without_record)
+    assert code == study_log.EXIT_USAGE
+    assert "structured-record" in result["error"]["message"]
     arguments.remove("--privacy-confirmed")
     code, result = _run(capsys, arguments)
     assert code == study_log.EXIT_SAFETY
@@ -1211,13 +1216,13 @@ def test_equivalent_final_cannot_be_created_twice_but_different_end_can(
     )
     code, _created = _run(capsys, first_args)
     assert code == 0
-    before = list(isolated_roots["private"].rglob("*.md"))
+    before = list((project / "log-raw").glob("*.md"))
 
     code, result = _run(capsys, first_args)
 
     assert code == study_log.EXIT_CONFLICT
     assert result["error"]["message"] == "an equivalent finalized archive already exists"
-    assert list(isolated_roots["private"].rglob("*.md")) == before
+    assert list((project / "log-raw").glob("*.md")) == before
 
     later_end_args = _archive_arguments(
         project=project,
@@ -1225,15 +1230,19 @@ def test_equivalent_final_cannot_be_created_twice_but_different_end_can(
         preview=preview,
         root=isolated_roots["private"],
         status="final",
+        record_name="different-boundary.md",
     )
     code, _later = _run(capsys, later_end_args)
     assert code == 0
-    assert len(list(isolated_roots["private"].rglob("*.md"))) == 2
+    assert len(list((project / "log-raw").glob("*.md"))) == 2
 
-    different_redaction_args = [*first_args, "--redact-personal"]
+    different_redaction_args = _archive_arguments(
+        project=project, source=source, preview={**preview, "messages": first_messages},
+        root=None, status="final", record_name="different-redaction.md",
+    ) + ["--redact-personal"]
     code, _different_redaction = _run(capsys, different_redaction_args)
     assert code == 0
-    assert len(list(isolated_roots["private"].rglob("*.md"))) == 3
+    assert len(list((project / "log-raw").glob("*.md"))) == 3
 
 
 def test_partial_cannot_finalize_into_an_existing_equivalent_final(
@@ -1258,6 +1267,7 @@ def test_partial_cannot_finalize_into_an_existing_equivalent_final(
         source=source,
         preview=preview,
         root=isolated_roots["private"],
+        record_name="partial.md",
     )
     code, partial = _run(capsys, partial_args)
     assert code == 0
@@ -1322,7 +1332,7 @@ def test_non_utf8_archive_during_root_scan_returns_stable_json_error(
     source = isolated_roots["codex"] / "non-utf-root.jsonl"
     _jsonl(source, _codex_rows(project))
     preview = _preview(capsys, project, source)
-    root = isolated_roots["private"]
+    root = project / "log-raw"
     root.mkdir()
     bad_archive = root / "not-utf8.md"
     bad_archive.write_bytes(b"\xff\xfe\xfa")
@@ -1359,10 +1369,10 @@ def test_filesystem_failure_returns_stable_json_error(
         root=isolated_roots["private"],
     )
 
-    def fail_archive_root(_explicit: str | None) -> tuple[Path, str]:
+    def fail_archive_root(*_args: object, **_kwargs: object) -> tuple[Path, str]:
         raise OSError("synthetic filesystem failure")
 
-    monkeypatch.setattr(study_log, "_archive_root", fail_archive_root)
+    monkeypatch.setattr(study_log, "_resolve_archive_target", fail_archive_root)
     code, result = _run(capsys, arguments)
 
     assert code == study_log.EXIT_INTEGRITY
@@ -1438,39 +1448,32 @@ def test_existing_windows_junction_target_is_rejected(
     assert "junction" in caught.value.spec.message
 
 
-def test_git_guard_requires_ignored_untracked_target(
+def test_repository_raw_requires_neither_ignore_nor_git_add(
     isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    if not study_log.shutil.which("git"):
+    if not shutil.which("git"):
         pytest.skip("git is unavailable")
     project = isolated_roots["project"]
     subprocess.run(["git", "init", "--quiet", str(project)], check=True)
     source = isolated_roots["codex"] / "repo-output.jsonl"
     _jsonl(source, _codex_rows(project))
     preview = _preview(capsys, project, source)
-    output = project / ".private" / "dialogue.md"
+    output = project / "log-raw" / "repo-output.md"
     args = _archive_arguments(project=project, source=source, preview=preview, root=None)
     args.extend(["--output", str(output)])
 
-    code, _result = _run(capsys, args)
-    assert code == study_log.EXIT_SAFETY
-    assert not output.exists()
-
-    args.append("--allow-repo-output")
-    code, _result = _run(capsys, args)
-    assert code == study_log.EXIT_SAFETY
-    assert not output.exists()
-
-    (project / ".gitignore").write_text(".private/\n", encoding="utf-8")
     code, result = _run(capsys, args)
     assert code == 0
     assert Path(result["data"]["target"]) == output.resolve()
+    assert not (project / ".gitignore").exists()
+    tracked = subprocess.run(["git", "-C", str(project), "ls-files"], check=True, capture_output=True, text=True)
+    assert tracked.stdout == ""
 
 
 def test_structured_scratch_is_refused_in_another_git_worktree(
     isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    if not study_log.shutil.which("git"):
+    if not shutil.which("git"):
         pytest.skip("git is unavailable")
     project = isolated_roots["project"]
     source = isolated_roots["codex"] / "scratch-git.jsonl"
@@ -1500,7 +1503,7 @@ def test_structured_scratch_is_refused_in_another_git_worktree(
     assert not output.exists()
 
 
-def test_user_config_has_no_default_and_accepts_only_absolute_root(
+def test_user_config_is_read_only_historical_compatibility(
     isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     code, result = _run(capsys, ["config", "archive-root", "get"])
@@ -1516,15 +1519,20 @@ def test_user_config_has_no_default_and_accepts_only_absolute_root(
     code, result = _run(
         capsys, ["config", "archive-root", "set", str(root)]
     )
-    assert code == 0
-    assert result["data"]["archive_root"] == str(root)
+    assert code == study_log.EXIT_USAGE
+    assert not study_log._config_file().exists()
+
+    study_log._config_file().parent.mkdir(parents=True, exist_ok=True)
+    study_log._config_file().write_text(json.dumps({"archive_root": str(root)}), encoding="utf-8")
 
     code, result = _run(capsys, ["config", "archive-root", "get"])
     assert code == 0
     assert result["data"]["archive_root"] == str(root)
+    assert result["data"]["historical_only"] is True
+    assert result["data"]["affects_new_exports"] is False
 
 
-def test_archive_root_resolution_prefers_environment_then_explicit(
+def test_legacy_root_settings_cannot_redirect_new_exports(
     isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = isolated_roots["project"]
@@ -1534,17 +1542,17 @@ def test_archive_root_resolution_prefers_environment_then_explicit(
     configured = isolated_roots["private"] / "configured"
     environment = isolated_roots["private"] / "environment"
     explicit = isolated_roots["private"] / "explicit"
-    code, _result = _run(
-        capsys, ["config", "archive-root", "set", str(configured.resolve())]
-    )
-    assert code == 0
+    study_log._config_file().parent.mkdir(parents=True, exist_ok=True)
+    study_log._config_file().write_text(json.dumps({"archive_root": str(configured)}), encoding="utf-8")
     monkeypatch.setenv("STUDY_LOG_ARCHIVE_ROOT", str(environment.resolve()))
 
     args = _archive_arguments(project=project, source=source, preview=preview, root=None)
     code, result = _run(capsys, args)
     assert code == 0
-    assert result["data"]["archive_root"] == str(environment.resolve())
-    assert result["data"]["archive_root_source"] == "environment"
+    assert result["data"]["archive_root"] == str(project / "log-raw")
+    assert result["data"]["archive_root_source"] == "structured_record"
+    assert not environment.exists()
+    assert not configured.exists()
 
     second_source = isolated_roots["codex"] / "root-explicit.jsonl"
     _jsonl(second_source, _codex_rows(project, session_id="codex-session-002"))
@@ -1552,10 +1560,10 @@ def test_archive_root_resolution_prefers_environment_then_explicit(
     args = _archive_arguments(
         project=project, source=second_source, preview=second_preview, root=explicit.resolve()
     )
+    args.extend(["--archive-root", str(explicit)])
     code, result = _run(capsys, args)
-    assert code == 0
-    assert result["data"]["archive_root"] == str(explicit.resolve())
-    assert result["data"]["archive_root_source"] == "explicit"
+    assert code == study_log.EXIT_USAGE
+    assert not explicit.exists()
 
 def test_json_error_contract_and_exit_codes_are_stable(
     capsys: pytest.CaptureFixture[str], isolated_roots: dict[str, Path]
@@ -1609,3 +1617,342 @@ def test_atomic_update_cleans_temporary_file_after_replace_failure(
 
     assert target.read_text(encoding="utf-8") == "old\n"
     assert list(tmp_path.glob(".archive.md.*.tmp")) == []
+
+
+def test_default_extract_is_project_local_scratch(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "scratch.jsonl"
+    _jsonl(source, _codex_rows(project))
+    preview = _preview(capsys, project, source)
+    code, result = _run(capsys, ["extract", "--project", str(project), "--source", str(source), "--source-sha256", preview["source_sha256"]])
+    assert code == 0
+    output = Path(result["data"]["output"])
+    assert output.parent == project / ".study-log" / "scratch"
+    assert result["data"]["cleanup_required"] is True
+    assert not (project / ".gitignore").exists()
+
+
+@pytest.mark.parametrize("record", [".git/record.md", ".GIT/record.md", ".agent-skills/log/record.md", ".AGENTS/log/record.md", "log-RAW/record.md", "record.md"])
+def test_paired_record_rejects_management_raw_and_root_paths(
+    isolated_roots: dict[str, Path], record: str
+) -> None:
+    project = isolated_roots["project"]
+    target = project / record
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# existing\n", encoding="utf-8")
+    with pytest.raises(study_log.StudyLogError):
+        study_log._paired_paths(project, record)
+
+
+def test_paired_paths_reject_nested_git_and_symlinked_raw_directory(
+    isolated_roots: dict[str, Path], tmp_path: Path
+) -> None:
+    project = isolated_roots["project"]
+    record = project / "log" / "lesson.md"
+    record.parent.mkdir()
+    record.write_text("# lesson\n", encoding="utf-8")
+    nested = project / "log-raw"
+    nested.mkdir()
+    (nested / ".git").mkdir()
+    with pytest.raises(study_log.StudyLogError, match="nested Git"):
+        study_log._paired_paths(project, str(record))
+    (nested / ".git").rmdir()
+    nested.rmdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        nested.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(study_log.StudyLogError, match="symbolic link"):
+        study_log._paired_paths(project, str(record))
+
+
+def test_verify_pairs_preserves_legacy_structured_record_without_backlink(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "paired.jsonl"
+    _jsonl(source, _codex_rows(project))
+    preview = _preview(capsys, project, source)
+    args = _archive_arguments(project=project, source=source, preview=preview, root=None, status="final")
+    record = Path(args[-1])
+    record.write_text("# frozen card source\n", encoding="utf-8")
+    original = record.read_bytes()
+    code, created = _run(capsys, args)
+    assert code == 0
+    code, result = _run(capsys, ["verify-pairs", "--project", str(project), "--structured-record", str(record)])
+    assert code == 0
+    assert result["data"]["would_write"] is False
+    assert result["data"]["pairs"][0]["structured_backlink_present"] is False
+    assert record.read_bytes() == original
+    target = Path(created["data"]["target"])
+    content = target.read_text(encoding="utf-8")
+    target.write_text(content.replace("请求先进入等待队列。", "被修改的回答。"), encoding="utf-8")
+    code, result = _run(capsys, ["verify-pairs", "--project", str(project), "--structured-record", str(record)])
+    assert code == study_log.EXIT_INTEGRITY
+    assert "visible_content_sha256" in result["error"]["message"]
+
+
+def _migration_fixture(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> tuple[Path, dict[str, object], list[Path]]:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "migration.jsonl"
+    _jsonl(source, _codex_rows(project))
+    preview = _preview(capsys, project, source)
+    data = study_log._load_session(source, provider="codex", project=str(project), tail_lenient=False)
+    messages = data.messages
+    paths: list[Path] = []
+    entries: list[dict[str, object]] = []
+    for index, subset in enumerate((messages[:3], messages[3:])):
+        path = isolated_roots["private"] / f"legacy-{index}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        metadata = {
+            "archive_type": "study-log-visible-dialogue", "schema_version": 1,
+            "archive_id": f"sl-{index + 1:032x}", "status": "final", "title": "旧归档",
+            "provider": "codex", "project_name": project.name,
+            "project_fingerprint": study_log._project_fingerprint(str(project)),
+            "source_session_id": data.ref.session_id, "source_file": source.name,
+            "source_sha256": preview["source_sha256"], "message_count": len(subset),
+            "start_message_id": subset[0].message_id, "end_message_id": subset[-1].message_id,
+            "visible_content_sha256": study_log._dialogue_sha256(subset),
+            "first_message_at": subset[0].timestamp, "last_message_at": subset[-1].timestamp,
+            "created_at_utc": "2026-08-10T12:00:00Z", "updated_at_utc": "2026-08-10T12:00:00Z",
+            "normalization": study_log._normalization_metadata(),
+            "redaction": {"version": study_log.REDACTION_VERSION, "categories": [], "applications": []},
+            "privacy_risks": {"categories": [], "counts": {}},
+        }
+        path.write_text(study_log._render_archive(subset, metadata), encoding="utf-8")
+        paths.append(path)
+        entries.append({"id": f"s{index}", "path": str(path), "sha256": study_log._sha256_file(path)})
+    records = []
+    selections = [
+        [("s0", messages[0].message_id, messages[1].message_id)],
+        [("s0", messages[2].message_id, messages[2].message_id), ("s1", messages[3].message_id, messages[4].message_id)],
+    ]
+    for index, selection in enumerate(selections):
+        record = project / "log" / f"lesson-{index}.md"
+        record.parent.mkdir(exist_ok=True)
+        record.write_text(f"# 已有学习记录 {index}\n", encoding="utf-8")
+        records.append({"structured_record": str(record.relative_to(project)), "title": f"学习 {index}", "segments": [{"source_id": sid, "start_id": start, "end_id": end} for sid, start, end in selection]})
+    request = {"schema": "study-log.migration/v1", "sources": entries, "records": records}
+    request_path = project / "migration-request.json"
+    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+    return request_path, request, paths
+
+
+def test_migration_splits_merges_and_preserves_every_original_message(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    request_path, request, sources = _migration_fixture(isolated_roots, capsys)
+    old_bytes = [path.read_bytes() for path in sources]
+    structured_bytes = [(project / item["structured_record"]).read_bytes() for item in request["records"]]
+    base = ["--project", str(project), "--request", str(request_path)]
+    code, preview = _run(capsys, ["migrate-preview", *base])
+    assert code == 0
+    assert preview["data"]["message_count"] == 5
+    assert [record["message_count"] for record in preview["data"]["records"]] == [2, 3]
+    assert not (project / "log-raw").exists()
+    code, result = _run(capsys, ["migrate", *base, "--preview-digest", preview["data"]["preview_digest"], "--privacy-confirmed"])
+    assert code == 0
+    assert result["data"]["sources_retained"] is True
+    assert [path.read_bytes() for path in sources] == old_bytes
+    assert [(project / item["structured_record"]).read_bytes() for item in request["records"]] == structured_bytes
+    original = [message for path in sources for message in study_log._read_verified_archive(path)[1]]
+    migrated = []
+    for pair in result["data"]["pairs"]:
+        metadata, messages = study_log._read_verified_archive(Path(pair["target"]))
+        migrated.extend(messages)
+        assert metadata["migration"]["preview_digest"] == preview["data"]["preview_digest"]
+        for segment in metadata["migration"]["segments"]:
+            assert segment["source_metadata"]["archive_id"] == segment["source_archive_id"]
+    assert study_log._dialogue_sha256(original) == study_log._dialogue_sha256(migrated)
+    code, result = _run(capsys, ["migrate", *base, "--preview-digest", preview["data"]["preview_digest"], "--privacy-confirmed"])
+    assert code == study_log.EXIT_CONFLICT
+
+
+@pytest.mark.parametrize("failure", ["missing", "duplicate", "source-hash", "unknown-source", "wrong-project", "normalization", "duplicate-target", "bad-body", "duplicate-source"])
+def test_migration_preflight_rejects_invalid_inputs_without_writes(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str], failure: str
+) -> None:
+    project = isolated_roots["project"]
+    request_path, request, sources = _migration_fixture(isolated_roots, capsys)
+    if failure == "missing":
+        request["records"].pop()
+    elif failure == "duplicate":
+        request["records"][1]["segments"][0] = request["records"][0]["segments"][0]
+    elif failure == "source-hash":
+        request["sources"][0]["sha256"] = "0" * 64
+    elif failure == "unknown-source":
+        request["records"][0]["segments"][0]["source_id"] = "missing"
+    elif failure == "duplicate-target":
+        request["records"][1]["structured_record"] = request["records"][0]["structured_record"]
+    elif failure == "duplicate-source":
+        request["sources"].append({**request["sources"][0], "id": "duplicate"})
+    else:
+        path = sources[0]
+        metadata, messages = study_log._read_verified_archive(path)
+        if failure == "wrong-project":
+            metadata["project_fingerprint"] = "other"
+        elif failure == "normalization":
+            metadata["normalization"]["tools"] = "included"
+        text = study_log._render_archive(messages, metadata)
+        if failure == "bad-body":
+            text = text.replace("请求先进入等待队列。", "改写。")
+        path.write_text(text, encoding="utf-8")
+        request["sources"][0]["sha256"] = study_log._sha256_file(path)
+    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+    code, result = _run(capsys, ["migrate-preview", "--project", str(project), "--request", str(request_path)])
+    assert code != 0
+    assert result["ok"] is False
+    assert not (project / "log-raw").exists()
+
+
+def test_migration_checks_digest_and_confirmation_and_rolls_back_publish_failure(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = isolated_roots["project"]
+    request_path, _request, _sources = _migration_fixture(isolated_roots, capsys)
+    base = ["--project", str(project), "--request", str(request_path)]
+    code, preview = _run(capsys, ["migrate-preview", *base])
+    assert code == 0
+    digest = preview["data"]["preview_digest"]
+    code, _result = _run(capsys, ["migrate", *base, "--preview-digest", "0" * 64, "--privacy-confirmed"])
+    assert code == study_log.EXIT_CONFLICT
+    code, _result = _run(capsys, ["migrate", *base, "--preview-digest", digest])
+    assert code == study_log.EXIT_SAFETY
+    original_write = study_log._atomic_write
+    count = 0
+    def fail_second(path: Path, content: str, *, expected_sha256: str | None) -> None:
+        nonlocal count
+        count += 1
+        if count == 2:
+            raise OSError("second target failure")
+        original_write(path, content, expected_sha256=expected_sha256)
+    monkeypatch.setattr(study_log, "_atomic_write", fail_second)
+    code, result = _run(capsys, ["migrate", *base, "--preview-digest", digest, "--privacy-confirmed"])
+    assert code == study_log.EXIT_INTEGRITY
+    assert not list((project / "log-raw").glob("*.md"))
+
+
+def test_migration_structured_change_invalidates_reviewed_digest(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    request_path, _request, _sources = _migration_fixture(isolated_roots, capsys)
+    base = ["--project", str(project), "--request", str(request_path)]
+    code, preview = _run(capsys, ["migrate-preview", *base])
+    assert code == 0
+    (project / "log" / "lesson-0.md").write_text("# changed\n", encoding="utf-8")
+    code, _result = _run(capsys, ["migrate", *base, "--preview-digest", preview["data"]["preview_digest"], "--privacy-confirmed"])
+    assert code == study_log.EXIT_CONFLICT
+    assert not (project / "log-raw").exists()
+
+
+@pytest.mark.parametrize("field,value", [("normalization", None), ("redaction", []), ("redaction", {"version": "v1", "categories": None}), ("migration", []), ("archive_id", "bad"), ("status", []), ("message_count", True), ("message_phases", ["final_answer"])])
+def test_migration_malformed_metadata_has_stable_error(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str], field: str, value: object
+) -> None:
+    project = isolated_roots["project"]
+    request_path, request, sources = _migration_fixture(isolated_roots, capsys)
+    metadata, messages = study_log._read_verified_archive(sources[0])
+    metadata[field] = value
+    sources[0].write_text(study_log._render_archive(messages, metadata), encoding="utf-8")
+    request["sources"][0]["sha256"] = study_log._sha256_file(sources[0])
+    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+    code, result = _run(capsys, ["migrate-preview", "--project", str(project), "--request", str(request_path)])
+    assert code == study_log.EXIT_MALFORMED
+    assert result["ok"] is False
+    assert not (project / "log-raw").exists()
+
+
+@pytest.mark.parametrize("sensitive", ["proprietary", "credential"])
+def test_migration_repository_privacy_gates(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str], sensitive: str
+) -> None:
+    project = isolated_roots["project"]
+    request_path, request, sources = _migration_fixture(isolated_roots, capsys)
+    metadata, messages = study_log._read_verified_archive(sources[0])
+    first = messages[0]
+    replacement = "内部 API：```python\ncall_internal()\n```" if sensitive == "proprietary" else "token=abcdefghijklmnop1234"
+    changed = (study_log.DialogueMessage(first.message_id, first.timestamp, first.role, first.phase, replacement, first.source_line), *messages[1:])
+    metadata["visible_content_sha256"] = study_log._dialogue_sha256(changed)
+    sources[0].write_text(study_log._render_archive(changed, metadata), encoding="utf-8")
+    request["sources"][0]["sha256"] = study_log._sha256_file(sources[0])
+    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+    base = ["--project", str(project), "--request", str(request_path)]
+    code, preview = _run(capsys, ["migrate-preview", *base])
+    assert code == 0
+    args = ["migrate", *base, "--preview-digest", preview["data"]["preview_digest"], "--privacy-confirmed"]
+    code, result = _run(capsys, args)
+    assert code == study_log.EXIT_SAFETY
+    assert not (project / "log-raw").exists()
+    code, _result = _run(capsys, [*args, "--proprietary-confirmed"])
+    assert code == (0 if sensitive == "proprietary" else study_log.EXIT_SAFETY)
+
+
+def test_partial_update_checks_existing_body_before_overwrite(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    source = isolated_roots["codex"] / "damaged-partial.jsonl"
+    _jsonl(source, _codex_rows(project))
+    preview = _preview(capsys, project, source)
+    create_args = _archive_arguments(project=project, source=source, preview={**preview, "messages": preview["messages"][:3]}, root=None)
+    code, created = _run(capsys, create_args)
+    assert code == 0
+    target = Path(created["data"]["target"])
+    content = target.read_text(encoding="utf-8").replace("请求先进入等待队列。", "损坏正文。")
+    target.write_text(content, encoding="utf-8")
+    update_args = _archive_arguments(project=project, source=source, preview=preview, root=None)
+    update_args.extend(["--archive-id", created["data"]["archive_id"], "--target-sha256", study_log._sha256_file(target)])
+    code, result = _run(capsys, update_args)
+    assert code == study_log.EXIT_INTEGRITY
+    assert "visible_content_sha256" in result["error"]["message"]
+    assert target.read_text(encoding="utf-8") == content
+
+
+def test_raw_crlf_message_text_survives_verification_and_migration(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    request_path, request, sources = _migration_fixture(isolated_roots, capsys)
+    metadata, messages = study_log._read_verified_archive(sources[0])
+    first = messages[0]
+    exact_text = "第一行\r\n第二行\r\n第三行"
+    changed = (study_log.DialogueMessage(first.message_id, first.timestamp, first.role, first.phase, exact_text, first.source_line), *messages[1:])
+    metadata["visible_content_sha256"] = study_log._dialogue_sha256(changed)
+    sources[0].write_bytes(study_log._render_archive(changed, metadata).encode("utf-8"))
+    request["sources"][0]["sha256"] = study_log._sha256_file(sources[0])
+    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+    assert study_log._read_verified_archive(sources[0])[1][0].text == exact_text
+    base = ["--project", str(project), "--request", str(request_path)]
+    code, preview = _run(capsys, ["migrate-preview", *base])
+    assert code == 0
+    code, result = _run(capsys, ["migrate", *base, "--preview-digest", preview["data"]["preview_digest"], "--privacy-confirmed"])
+    assert code == 0
+    target = Path(result["data"]["pairs"][0]["target"])
+    assert exact_text.encode("utf-8") in target.read_bytes()
+    assert study_log._read_verified_archive(target)[1][0].text == exact_text
+
+
+def test_different_pair_records_may_preserve_distinct_redaction_policies(
+    isolated_roots: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = isolated_roots["project"]
+    request_path, request, sources = _migration_fixture(isolated_roots, capsys)
+    for index, source in enumerate(sources):
+        metadata, messages = study_log._read_verified_archive(source)
+        if index:
+            metadata["redaction"]["categories"] = ["credential", "personal"]
+            source.write_bytes(study_log._render_archive(messages, metadata).encode("utf-8"))
+            request["sources"][index]["sha256"] = study_log._sha256_file(source)
+        request["records"][index]["segments"] = [{"source_id": f"s{index}", "start_id": messages[0].message_id, "end_id": messages[-1].message_id}]
+    request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+    code, preview = _run(capsys, ["migrate-preview", "--project", str(project), "--request", str(request_path)])
+    assert code == 0
+    assert preview["data"]["message_count"] == 5
