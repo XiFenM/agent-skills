@@ -1,6 +1,6 @@
 # Study-log record formats
 
-按输出模式读取本参考。`structured` 由 Agent 蒸馏并写入学习仓库；`raw` 只能由 `study_log.py archive` 生成。
+按输出模式读取本参考。`structured` 由 Agent 蒸馏并写入学习仓库；`raw` 只能由 `study_log.py archive` 或受控 `migrate` 生成。两者按主题一一对应，例如 `模块/log/日期-主题.md` 与 `模块/log-raw/日期-主题.md`，不按源会话物理文件数量配对。
 
 ## Structured 记录
 
@@ -17,6 +17,7 @@
 
 > 来源：<provider>:<session-id-short> · <start-id> → <end-id>
 > 关联：<Lesson、文章或资料的相对链接；没有则写“无”>
+> 可追溯对话：[同名原文](../log-raw/YYYY-MM-DD-topic.md)
 
 ## 学习过程
 
@@ -38,21 +39,26 @@
 - `[遗留]` 只登记和指向去处，不在记录中临时展开教学。
 - 来源必须写明 provider、会话短 ID 和稳定消息边界；只有从当前对话直接整理时才标为“当前可见上下文（无本地原始日志）”。
 - 同一逻辑记录存在时先展示 diff，经确认后才更新。不要按日期或主题静默整份覆盖。
+- 新记录先固定主题和消息范围，再与同名 raw 配对；跨源段的来源分别列明。未获原文保存授权时只报告缺失项，不伪造配对完成。已有历史记录若是下游哈希来源，迁移可不改变其正文，由规范路径与 raw 绑定定位；既有索引只按明确范围维护。
 
 ## Raw archive
 
 Raw 文件的 frontmatter 至少包含：
 
 - `archive_id`、`partial | final` 状态和 schema 版本；
+- `structured_record`：对应结构化记录的项目相对路径；
 - provider、project fingerprint、source session ID；
 - 起始和当前结束消息 ID、消息数；
 - source SHA-256、规范化可见内容 SHA-256、目标前置 SHA-256；
 - normalization 和 redaction 的策略版本及可复现参数；
 - 隐私风险类别、首次生成和最后更新时间。
+- 迁移生成的归档还记录各原归档的 ID、SHA、原元数据与选定分段；不能把多个来源伪装成一个原始 JSONL。
 
 正文逐条保留规范化后的可见消息，并显示稳定消息 ID、时间、角色和 phase。不要手工编辑正文或 frontmatter。需要改变起点、规范化身份或脱敏类别时创建新的 `archive_id`；只推进 partial 的结束边界时原位更新。
 
 Raw 只是可见对话序列的证据，不负责正确结论、课程状态或 mastery。
+
+导出后用 `verify-pairs` 检查同名路径、唯一绑定、内容校验值、实际消息数与边界。新 raw 包含指向结构化文件的相对回链；历史结构化文件缺少反向链接不改变规范的一一对应关系。
 
 ## 与 memo-cards 的衔接
 

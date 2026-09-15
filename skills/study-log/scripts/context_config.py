@@ -155,10 +155,15 @@ def _structured_targets(value: Any) -> list[dict[str, Any]]:
             raise ContextConfigError(f"{label} contains duplicate id {target_id!r}")
         seen_ids.add(target_id)
         path = _relative_directory(target["path"], f"{target_label}.path")
+        raw_path = f"{path}-raw"
         for existing in targets:
-            if _paths_overlap(path, existing["path"]):
+            if any(
+                _paths_overlap(left, right)
+                for left in (path, raw_path)
+                for right in (existing["path"], existing["paired_raw_path"])
+            ):
                 raise ContextConfigError(
-                    f"structured target paths must be separate: {path!r} and "
+                    f"structured and paired raw target paths must be separate: {path!r} and "
                     f"{existing['path']!r}"
                 )
         targets.append(
@@ -166,6 +171,7 @@ def _structured_targets(value: Any) -> list[dict[str, Any]]:
                 "id": target_id,
                 "record_type": "structured-study-log",
                 "path": path,
+                "paired_raw_path": raw_path,
                 "format": "markdown",
                 "include_patterns": ["*.md"],
                 "filename_policy": "yyyy-mm-dd-topic",
@@ -204,5 +210,7 @@ def validate_materialized_context(
         # the current operation; the materializer must not scan target collections.
         "tracked_files": [],
         "tracked_collections": [],
-        "write_paths": sorted({target["path"] for target in targets}),
+        "write_paths": sorted(
+            {path for target in targets for path in (target["path"], target["paired_raw_path"])}
+        ),
     }

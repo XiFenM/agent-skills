@@ -229,7 +229,7 @@
         "topics": [
           "unified-provider-discovery",
           "safe-boundary-extraction",
-          "explicit-private-archive-root",
+          "repository-local-one-to-one-log-pairs",
           "source-and-target-race-guards",
           "generic-managed-structured-targets"
         ]

@@ -70,7 +70,7 @@ agent-skills/
 }
 ```
 
-公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置只列结构化记录目标，原始对话的私有 archive root、会话来源和边界永不进入公共配置或受管上下文。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置列结构化目录，验证器派生同级 `-raw` 配对目录；两类产物均在仓库内，会话来源、消息边界与授权不进入公共配置。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
 materializer 只负责更新时的 Skill 本体、配置结构、路径安全与必要引用有效性校验。配置仍须是 Git 已
 跟踪的 UTF-8 JSON；显式资料引用、collection 成员及已有写目标只检查 Git 跟踪、路径与普通文件等

@@ -22,9 +22,9 @@ schema。
 `id` 与 portable 仓库相对目录 `path`；绝对路径、盘符、反斜线、逃逸、glob、Windows 不安全组件以及
 相同或嵌套 target root 均拒绝。
 
-公共配置不得保存 raw archive root、私有会话目录、source、session、boundary、scratch、output、命令、
-privacy 决定或 approval。Raw 私有根继续只来自当次 `--output`／`--archive-root`、
-`STUDY_LOG_ARCHIVE_ROOT` 或操作系统用户级配置。
+公共配置不得保存私有会话目录、source、session、boundary、精确 output、命令、privacy 决定或 approval。
+不再配置独立 raw archive root；每个结构化目录派生同级 `<目录名>-raw`，例如 `systems/log` 对应
+`systems/log-raw`。验证器检查两类目录与其他目标均不重叠，避免原文进入结构化素材 collection。
 
 ## Materialized context
 
@@ -35,6 +35,7 @@ privacy 决定或 approval。Raw 私有根继续只来自当次 `--output`／`--
   "id": "systems-log",
   "record_type": "structured-study-log",
   "path": "systems/log",
+  "paired_raw_path": "systems/log-raw",
   "format": "markdown",
   "include_patterns": ["*.md"],
   "filename_policy": "yyyy-mm-dd-topic"
@@ -42,11 +43,12 @@ privacy 决定或 approval。Raw 私有根继续只来自当次 `--output`／`--
 ```
 
 它返回共享 materializer 要求的四个字段：`context`、`tracked_files`、`tracked_collections`、
-`write_paths`。前两项 read allowlist 固定为空；`write_paths` 只列 target roots。因此新目录或空目录可以
+`write_paths`。前两项 read allowlist 固定为空；`write_paths` 列结构化与派生 raw 两类 roots。因此新目录或空目录可以
 配置，materializer 不扫描目标 collection，也不会把其中的 tracked 或未跟踪文件隐式暴露给 Skill。
 
 生成 wrapper 的 `sources.repository` 与 `sources.skill` 只绑定公共配置文件及 digest，不是对话 source。
-对话 source、消息 boundary、临时 extract output 与 raw target 仍须由每次 CLI 调用显式给出。
+对话 source、消息 boundary 与具体结构化文件仍由当次调用选择；raw target 由已确认的结构化文件同名派生。
+临时提取默认在项目内 `.study-log/scratch/`，不作为长期记录或读取 collection。
 
 ## 授权与消费
 
