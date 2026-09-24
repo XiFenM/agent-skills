@@ -34,15 +34,18 @@ Skill 的 `docs/user-guides/memo-cards.md` 和组合指南 `docs/learning-skills
 
 1. 明确素材边界、目标 collection、目标文件以及用户要精选还是完整转换。只读取受管 context 允许的来源。
 2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
-3. 由 Agent 完成语义工作：先拆分单一回忆目标，再按[卡片内容与版式](references/card-content-layout.md)
-   撰写短促题面，以及按结论／要点／边界分层的答案；不要用颜色或字号掩盖应该拆卡的内容。判断
+3. 由 Agent 完成语义工作：先确定单一回忆目标，再按[卡片内容与版式](references/card-content-layout.md)
+   撰写可独立理解的题面与答案。聚焦的是知识点，不是字数：题面交代必要场景、对象、条件和作答目标，
+   答案补足理解结论所需的解释与边界；不以极短题面或提示词替代完整表达。按单张、乱序复习的情境
+   审阅，不依赖原课堂、相邻卡或来源链接才能读懂。判断
    A／B／C、常青／版本快照、原子／机制／综合口述层级。机制卡若声明子卡依赖，必须引用同一 request
    内 eligible、已核验且 active 的原子／机制卡；综合口述卡引用其中 2–5 张。不要手写 Markji 语法、
    逻辑 ID、XLSX、hash 或 manifest。结论与边界标签可按卡片语言覆盖，但必须短促，并在同一
    collection 中保持一致。
 4. 按 [受管 Markdown 与 XLSX 合同](references/markdown-xlsx-staging.md) 形成严格 request JSON，调用 `scripts/memo_cards.py prepare`。工具负责模板、身份、inventory、软目标、XLSX、差异和预览摘要。
-5. 向用户展示 included 卡片的短题面与内容层级，并列出 deferred、blocked、duplicate／conflict、完整
-   Markdown diff、逐 XLSX 的行级与哈希变化、风险原因和 `preview_digest`；不能只报告卡数或样式名。
+5. 向用户展示 included 卡片的完整题面、答案与内容层级；可另附简短目录，但目录摘要不能代替完整题答。
+   列出 deferred、blocked、duplicate／conflict、完整 Markdown diff、逐 XLSX 的行级与哈希变化、风险原因
+   和 `preview_digest`；不能只报告卡数或样式名。
    依赖漂移触发的 `review` 会持续保留；复核完成后，只有在对应卡片提供可摘要的
    `review_resolution`、展示新 diff 并取得 `confirmed` 授权，才能恢复 `active`。模板及内容语法边界见
    [Markji 3.8 兼容面](references/markji-3.8-compatibility.md)。修改渲染器、核对原始示例或判断精简
