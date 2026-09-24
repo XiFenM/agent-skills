@@ -33,11 +33,12 @@
 受管 context 的 repository fact role 只是查找提示：`source-catalog` 不自动成为 teaching spine，
 `knowledge-artifacts` 不自动裁决 claim，`validation-instructions` 不自动定义完成 gate，
 `evidence-artifacts` 不自动证明 mastery。读取实际内容、版本和适用范围后，再按本参考分配来源角色；
-配置中的 `learner-preferences` 也不能覆盖教学循环、提示边界或最低 mastery evidence。
+配置中的 `learner-preferences` 可以调整表达顺序与节奏，但不能降低提示边界或最低 mastery evidence。
 
 角色含义：
 
-- `teaching-spine`：决定本课沿什么顺序和例子推进。
+- `teaching-spine`：提供本课的内容主线与例证。可在既定目标内按依赖关系和学习偏好重排讲解顺序、
+  补充必要脚手架；这不等于替换来源或扩大采用范围、required 维度与练习门槛。
 - `implementation-authority`：裁决固定 revision 的具体实现、数据流或控制流。
 - `interface-authority`：裁决公开接口、规范和承诺语义。
 - `method-authority`：裁决论文或标准所定义的方法、假设和报告结论。
@@ -83,7 +84,7 @@
 
 在以下任一条件成立时主动做最小补充核验：
 
-1. teaching spine 缺少当前节点所需的必要前置；
+1. teaching spine 缺少当前节点所需的必要前置，包括关键 API 或数据类型的语义与必要约束；
 2. 来源可能过时或与目标版本冲突；
 3. 关键结论需要一手事实源裁决；
 4. 当前目标明确要求比较、迁移或跨版本解释。
@@ -110,6 +111,9 @@
 5. 只有冲突阻塞当前 Lesson 时扩大调查；否则登记 observation 并返回 teaching spine。
 
 冲突会改变目标、来源范围、责任或唯一下一动作时，让用户选择分支。不要静默修改 Lesson 契约。
+
+注释、变量名与实际数据流不一致时，明确指出差异并按对应事实权威解释；不要为了让教程看起来合理，
+把未经证实的作者动机、实现必要性或性能收益补成事实。
 
 ## Bound empirical claims
 
