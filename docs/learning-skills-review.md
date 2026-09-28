@@ -1621,3 +1621,26 @@ SuperMemo 的 minimum information／optimize wording 原则，以及 signaling �
 
 本轮在中央工作分支完成实现与测试，并同步调整 PlanA 的配置、学习者画像与说明文档。提交、推送与消费仓
 更新仍是独立授权。
+
+## D49：制卡与英语回顾的素材读取不再依赖 Git 跟踪状态（2026-09-28）
+
+用户指出，希望直接用 `study-log` 刚提取的学习记录制卡，却总被 Git 暂存和重新 materialize 打断。根因在
+配置层：`memo-cards` 的输入目录、卡片目录和 `english-coach` 的记录目录都被声明为 tracked collection，
+materializer 用 `git ls-files` 把已跟踪成员拍成快照写入 context，运行时只认快照。于是新记录必须先
+`git add` 再重新 materialize 才能用作素材；卡片提交后快照又会变化，引发 `--check` 漂移。这与"保存不自动
+执行 Git 暂存"的约定也相矛盾。本决策取代 D33、D42 与 D45 中与之冲突的部分：
+
+- `memo-cards` 与 `english-coach` 的 validator 不再声明 tracked collection；`memo-cards` 也不再声明精确
+  输入文件为 tracked file。输入、inventory 与记录目录只以路径和 pattern 作为边界保存在 context 中，
+  两项 allowlist 固定为空，暂存或提交文件不会改变 context。
+- 来源在运行时校验：必须命中所声明 input collection 的 pattern，是仓库内普通非链接 UTF-8 文件，
+  SHA-256 与 request 一致并写入 manifest。选择哪份来源由用户的本轮请求决定，Agent 不扫描 collection
+  自行挑选，也不为了让来源可用而执行 `git add` 或重新 materialize；来源尚未提交时只在预览中提醒。
+- inventory 在运行时扫描 inventory pattern：带 memo-cards manifest 的文件必须完整校验，其余可读
+  Markdown 记为 legacy，叶子为链接、特殊文件或非 UTF-8 的候选跳过，父目录含链接时失败关闭。
+- 仍带成员快照的旧 wrapper 会被运行时拒绝并提示重新 materialize。`input_collections[].producer` 随
+  精确 tracked file 一起退役；materializer 的通用 read handoff 机制保留给其他 Skill。
+- `english-coach` 读取结构化记录时，只要位于配置记录目录并命中 `include_patterns`，且由用户明确指定、
+  为本次对话刚生成或按主题唯一匹配，即可直接读取，不再要求已跟踪且工作树未修改。
+
+仓库事实文件与配置中逐个声明的记录文件仍按原规则作为 tracked file 校验。

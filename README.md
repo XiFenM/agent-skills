@@ -22,7 +22,7 @@
 - [`memo-cards`](docs/user-guides/memo-cards.md)
 - [`resource-planning`](docs/user-guides/resource-planning.md)
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D48 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D49 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
 
 ## 目录
 
@@ -79,6 +79,11 @@ materializer 只负责更新时的 Skill 本体、配置结构、路径安全与
 有效，资料类型和格式由实际使用它的 Skill 按需校验；`guide-learning` 使用
 [专属资料读取工具](skills/guide-learning/references/material-reading.md)，`memo-cards` 继续在运行时校验
 所选 UTF-8 来源及受管 XLSX。新增图片无需修改更新脚本或申请二进制例外。
+
+自 D49 起，`memo-cards` 的输入与卡片目录、`english-coach` 的学习记录目录不再声明为 tracked collection：
+它们只以路径和 pattern 作为边界保存在 context 中，运行时读取用户明确指定的文件，与 Git 是否跟踪无关。
+因此 study-log 刚写出的记录可以直接用于制卡或英语回顾，暂存或提交这些目录中的文件也不会使生成副本
+漂移、不需要重新 materialize。
 
 ### 新 clone：恢复消费仓库固定的版本
 

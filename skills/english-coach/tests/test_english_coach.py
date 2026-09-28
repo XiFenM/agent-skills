@@ -143,7 +143,9 @@ def test_validator_builds_exact_json_serializable_context_and_allowlists() -> No
         "learning/current-focus.md",
         "learning/current-summary.md",
     ]
-    assert result["tracked_collections"] == ["learning/logs"]
+    # Record collections are context boundaries, not snapshotted member lists.
+    assert result["tracked_collections"] == []
+    assert result["context"]["record_collections"][0]["path"] == "learning/logs"
     assert result["write_paths"] == ["english/reviews"]
     assert result["context"]["record_collections"][0]["include_patterns"] == [
         "*.md",

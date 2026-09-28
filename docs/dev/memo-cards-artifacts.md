@@ -21,11 +21,18 @@ JSON（YAML 1.2 子集），artifact v2 至少包含：
 
 ## Inventory
 
-inventory 从 materializer 展开的 concrete tracked files，以及已授权 output inventory pattern 下当前存在
-的 Markdown 候选中筛选主产物。后者覆盖"刚发布、尚未 Git add／materialize"的正常窗口；未跟踪候选
-只有通过完整 manifest／sidecar 校验才进入 inventory，任意未跟踪 Markdown 被忽略。XLSX 可以同时作为
-tracked collection member 出现在 allowlist，但其所有权和完整性只由 v2 Markdown manifest 确定。v1
-manifest 继续参与卡片去重并标记 `migration_required`；manifest payload 漂移不参与 canonical 去重。
+自 D49 起，validator 不再声明 tracked 文件或 collection，materialized context 中两项 allowlist 固定为空；
+运行时拒绝仍带成员快照的旧 wrapper，并提示重新 materialize。inventory 在运行时 glob 已授权的 inventory
+pattern，与 Git 跟踪状态无关：
+
+- 父目录含链接时失败关闭；叶子是链接、特殊文件、已消失或无法按 UTF-8 解码时跳过，不跟随也不继续读取；
+- 声明 memo-cards artifact schema 的文件必须通过完整 manifest 校验，否则报错；
+- 其余可读的 Markdown 记为 legacy，并进入 inventory fingerprint。
+
+XLSX 的所有权和完整性只由 v2 Markdown manifest 确定。v1 manifest 继续参与卡片去重并标记
+`migration_required`；manifest payload 漂移不参与 canonical 去重。来源校验同样不依赖 Git：request 中的
+来源必须命中所声明 input collection 的 pattern，是仓库内的普通非链接 UTF-8 文件，并与 request 的
+SHA-256 一致。
 
 ## 预览内容
 

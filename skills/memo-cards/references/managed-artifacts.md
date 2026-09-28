@@ -9,8 +9,9 @@
 来源、卡片身份与内容摘要、每个 XLSX 的行映射与哈希。身份和哈希不进入 XLSX 列；相同输入产生逐字节相同的
 产物。每张 active 卡恰好对应一个 XLSX 行，`review`／`archived` 卡不导出。
 
-inventory 由工具从受管 context 的 tracked 文件，以及授权输出 pattern 下已通过完整校验的 Markdown 中派生，
-用于跨文件去重；刚发布、尚未 Git add 的产物也会被识别。Agent 不手写 manifest、逻辑 ID 或哈希。
+inventory 由工具在运行时扫描授权的 inventory pattern 得到，用于跨文件去重，与 Git 是否跟踪无关：带
+memo-cards manifest 的文件必须通过完整校验，其余可读的 Markdown 记为 legacy，链接、特殊文件和非 UTF-8
+文件跳过。Agent 不手写 manifest、逻辑 ID 或哈希。
 
 ## 预览与授权等级
 

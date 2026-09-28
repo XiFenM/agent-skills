@@ -24,7 +24,10 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
 
 ## 工作流
 
-1. 明确素材边界、目标 collection、目标文件以及用户要精选还是完整转换。只读取受管 context 允许的来源。
+1. 明确素材边界、目标 collection、目标文件以及用户要精选还是完整转换。来源必须是用户本轮明确指定的文件
+   （包括本次对话中 study-log 刚生成的记录），并位于受管 context 声明的输入 collection 内；不要扫描
+   collection 自行挑选素材。来源是否已被 Git 跟踪或提交不影响可用性，不要为了让来源可用而执行
+   `git add` 或重新 materialize；来源尚未提交时，在预览中提醒一句，是否提交由用户决定。
 2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。制卡是为了理解与面试：优先"为什么这样设计""怎样取舍""怎样诊断"和口述类卡片；学习者已熟练或一眼即知的内容（首答即对且没有迁移价值的计数、查表、定义复述）评为 C，不制卡。A 级只给能防止高代价错误、或能回答一道可能面试题的卡，并为每张 A 卡写一句理由。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
 3. 由 Agent 完成语义工作：先确定单一回忆目标，再按[卡片内容与版式](references/card-content-layout.md)
    撰写可独立理解的题面与答案。聚焦的是知识点，不是字数：题面交代必要场景、对象、条件和作答目标，
@@ -47,7 +50,7 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    兼容面尚未覆盖的语法时，先核对兼容面中注明日期的官方在线指南；[随 Skill 固定保存的内容语法 PDF](references/markji-content-syntax.pdf)用于历史对照；
    不把内容语法文档当作表格导入协议。
 6. 无写入授权时停在预览。获得足够授权后，用同一 request 和 digest 调用 `publish`，一次发布 Markdown 与全部受管 XLSX；若任何来源、目标、sidecar、模板、候选或 inventory 漂移，重新预览。详细多文件 CAS、迁移与接管规则见 [受管产物合同](references/managed-artifacts.md)。
-7. 发布后用同一 request 调用 `verify --request <request.json>`，复核 context、模板、Markdown、全部 XLSX 与受管 inventory；只有返回的 `request_check.operation` 为 `no-op` 且 `would_write=false`，才表示该 request 无需再次写入。这也能复核尚未重新 materialize 进 inventory 的新目标。报告本地写入结果；手动导入时说明逐模板上传 XLSX，已要求直接上传时继续 API 流程。
+7. 发布后用同一 request 调用 `verify --request <request.json>`，复核 context、模板、Markdown、全部 XLSX 与受管 inventory；只有返回的 `request_check.operation` 为 `no-op` 且 `would_write=false`，才表示该 request 无需再次写入。发布、暂存或提交卡片都不需要重新 materialize。报告本地写入结果；手动导入时说明逐模板上传 XLSX，已要求直接上传时继续 API 流程。
 
 ## API 上传与凭据
 

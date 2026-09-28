@@ -421,15 +421,13 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
             assert module.validate_runtime_wrapper(wrappers[name]) == wrappers[name]
             module._validate_source_binding(consumer, wrappers[name])
 
-    memo_files = wrappers["memo-cards"]["allowlist"]["tracked_files"]
-    assert "articles/fixed.md" in memo_files
-    assert "articles/diagram.png" not in memo_files
-    assert "notes/tracked.md" in memo_files
-    assert "cards/tracked.md" in memo_files
-    assert "cards/tracked-technical-qa.xlsx" in memo_files
-    assert "english/logs/tracked.md" in memo_files
-    assert "notes/untracked.md" not in memo_files
-    assert "cards/untracked.md" not in memo_files
+    # memo-cards and english-coach keep their collections as context boundaries
+    # only; no Git-tracked member list is snapshotted, so committing records or
+    # cards never makes their generated copies drift.
+    for name in ("memo-cards", "english-coach"):
+        assert wrappers[name]["allowlist"]["tracked_collections"] == []
+    assert wrappers["memo-cards"]["allowlist"]["tracked_files"] == []
+    assert "english/logs/tracked.md" not in wrappers["english-coach"]["allowlist"]["tracked_files"]
 
     resource_files = wrappers["resource-planning"]["allowlist"]["tracked_files"]
     assert "facts/evidence/tracked.md" in resource_files

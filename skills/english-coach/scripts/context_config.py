@@ -427,6 +427,10 @@ def validate_materialized_context(
         fact["path"] for fact in selected_facts.values()
     } | {entry["path"] for entry in record_files}
 
+    # Record collections stay in the context as path and pattern boundaries.
+    # Their members are not snapshotted: a freshly written study record is
+    # readable once the user names it, and committing records never changes
+    # the materialized context.
     return {
         "context": {
             "repository": repository_context,
@@ -438,8 +442,6 @@ def validate_materialized_context(
             "save_targets": save_targets,
         },
         "tracked_files": sorted(tracked_files),
-        "tracked_collections": sorted(
-            {entry["path"] for entry in record_collections}
-        ),
+        "tracked_collections": [],
         "write_paths": sorted({target["path"] for target in save_targets}),
     }

@@ -28,23 +28,23 @@ Markdown frontmatter 保存受管 manifest，正文只保留模板定义、卡�
 XLSX 路径不由 request 或配置自由指定。工具只可在主目标同目录按
 `<markdown-stem>-<template-id>.xlsx` 派生，因此仍受同一 output collection 的 write ceiling 约束。
 
-输入 pattern 精确指向一个 `.md` 文件时，materializer 只把该文件加入 `tracked_files`；带通配符的输入与
-inventory 保存显式 collection 根目录，并把目录中当次 Git tracked 的普通文件展开为 `tracked_files`。
-collection 可以包含 XLSX 等二进制受管 sidecar；materializer 不把 collection member 当作文本读取，实际
-消费方仍须严格验证其格式。来源必须同时命中输入 pattern 和 concrete `tracked_files`，inventory 只在
-concrete 文件中筛选 Markdown 主产物，绝不重新 glob 文件系统。
+输入与 inventory pattern 只作为边界保存在 context 中；materializer 不再按 Git 跟踪状态展开目录成员，
+`tracked_files` 与 `tracked_collections` 固定为空，因此提交或暂存文件不会改变 context，也不需要重新
+materialize。pattern 必须锚定在明确的目录下，精确 `.md` pattern 表示单个文件。
 
-若一个精确文章或来源包由另一个已配置 Skill 维护，可在 input record 中声明唯一 `producer`。它只允许
-`kind: article` 或 `source-bundle` 且所有 pattern 都是精确 `.md` 文件；materializer 还会核对 producer 已配置、不是当前
-Skill，且该文件位于 producer 的 write ceiling 内。该声明不授予起草、覆盖、发布、提交或推送权限。
-来源包可以指向已有学习证据及其中的固定源码锚点；只采用本次选定的已核验材料，不能把待办、mastery
-状态或未核验假设直接制卡。交接只增加消费侧的精确读取关系，不改变文件的唯一写入者。
+来源在运行时逐个校验：request 中的每个来源必须声明所属 input collection 并命中其 pattern，是仓库内的
+普通非链接文件、可以按 UTF-8 解码，且 SHA-256 与 request 一致。是否已被 Git 跟踪不影响来源是否可用；
+选择哪一份来源由用户的本轮请求决定，Agent 不扫描 collection 自行挑选素材。来源包可以指向已有学习证据
+及其中的固定源码锚点；只采用本次选定的已核验材料，不能把待办、mastery 状态或未核验假设直接制卡。
+
+inventory 在运行时扫描 inventory pattern：带 memo-cards manifest 的文件必须通过完整校验，其余可读的
+Markdown 记为 legacy，链接、特殊文件和非 UTF-8 文件跳过且不阻塞。
 
 ## Request
 
 Agent 把语义判断写入 UTF-8 JSON，schema 保持 `memo-cards.request/v1`：
-每个 `sources[].path` 本身也必须是已跟踪、哈希匹配的 UTF-8 文本；collection 对 XLSX 的二进制例外不
-会放宽来源事实边界。
+每个 `sources[].path` 本身也必须是位于所声明 collection 内、哈希匹配的 UTF-8 文本；collection 中的 XLSX
+等受管 sidecar 不能作为来源。
 
 ```json
 {

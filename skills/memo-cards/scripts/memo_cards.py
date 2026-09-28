@@ -401,12 +401,6 @@ def _collection_root(pattern: str, label: str) -> str:
     return PurePosixPath(*literal).as_posix()
 
 
-def _exact_markdown_input(pattern: str) -> bool:
-    """Return whether an input pattern names one exact Markdown file."""
-
-    return "*" not in pattern and pattern.endswith(".md")
-
-
 def _glob_regex(pattern: str) -> re.Pattern[str]:
     parts = pattern.split("/")
     expression = "^"
@@ -498,31 +492,21 @@ def _validate_skill_config(value: Any) -> dict[str, Any]:
             record,
             label=f"input_collections[{index}]",
             required={"id", "kind", "patterns"},
-            optional={"producer"},
         )
         collection_id = _id(record["id"], f"input_collections[{index}].id")
         kind = _string(record["kind"], f"input_collections[{index}].kind", maximum=50)
         if kind not in INPUT_KINDS:
             raise MemoCardsError("config", f"input collection {collection_id} has an unsupported kind")
         patterns = _patterns(record["patterns"], f"input_collections[{index}].patterns")
-        normalized_input = {
-            "id": collection_id,
-            "kind": kind,
-            "patterns": patterns,
-        }
-        if "producer" in record:
-            producer = _id(record["producer"], f"input_collections[{index}].producer")
-            if kind not in {"article", "source-bundle"} or not all(
-                _exact_markdown_input(pattern) for pattern in patterns
-            ):
-                raise MemoCardsError(
-                    "config",
-                    "input producer is allowed only for exact Markdown article or source-bundle inputs",
-                )
-            if producer == "memo-cards":
-                raise MemoCardsError("config", "input producer cannot be memo-cards itself")
-            normalized_input["producer"] = producer
-        inputs.append(normalized_input)
+        for pattern in patterns:
+            _collection_root(pattern, f"collection {collection_id}")
+        inputs.append(
+            {
+                "id": collection_id,
+                "kind": kind,
+                "patterns": patterns,
+            }
+        )
 
     outputs_raw = config["output_collections"]
     if not isinstance(outputs_raw, list) or not outputs_raw:
@@ -587,8 +571,11 @@ def validate_materialized_context(
 ) -> dict[str, Any]:
     """Pure D27 validator called by the shared materializer.
 
-    It performs no filesystem, Git, or network access.  The materializer owns
-    tracked-file checks, special-file rejection, and wrapper creation.
+    It performs no filesystem, Git, or network access.  Input and inventory
+    patterns stay in the context as boundaries; the runtime resolves explicitly
+    requested sources and inventory candidates inside them.  No Git-tracked
+    member list is snapshotted, so tracking or committing files never changes
+    the materialized context.
     """
 
     repository = _validate_repository_config(repository_config)
@@ -600,27 +587,9 @@ def validate_materialized_context(
         "input_collections": skill["input_collections"],
         "output_collections": skill["output_collections"],
     }
-    tracked_files = sorted(
-        {
-            pattern
-            for record in skill["input_collections"]
-            for pattern in record["patterns"]
-            if _exact_markdown_input(pattern)
-        }
-    )
-    tracked_collections = sorted(
-        {
-            _collection_root(pattern, f"collection {record['id']}")
-            for record in skill["input_collections"]
-            for pattern in record["patterns"]
-            if not _exact_markdown_input(pattern)
-        }
-        | {
+    for record in skill["output_collections"]:
+        for pattern in record["inventory_patterns"]:
             _collection_root(pattern, f"inventory {record['id']}")
-            for record in skill["output_collections"]
-            for pattern in record["inventory_patterns"]
-        }
-    )
     write_paths = sorted(
         {
             _collection_root(pattern, f"output {record['id']}")
@@ -628,32 +597,11 @@ def validate_materialized_context(
             for pattern in record["patterns"]
         }
     )
-    binary_collection_extensions = {
-        collection: [".xlsx"]
-        for collection in sorted(
-            {
-                _collection_root(pattern, f"inventory {record['id']}")
-                for record in skill["output_collections"]
-                for pattern in record["inventory_patterns"]
-            }
-        )
-    }
-    read_handoffs = sorted(
-        (
-            {"path": pattern, "producer": record["producer"]}
-            for record in skill["input_collections"]
-            if "producer" in record
-            for pattern in record["patterns"]
-        ),
-        key=lambda item: (item["path"], item["producer"]),
-    )
     return {
         "context": context,
-        "tracked_files": tracked_files,
-        "tracked_collections": tracked_collections,
+        "tracked_files": [],
+        "tracked_collections": [],
         "write_paths": write_paths,
-        "binary_collection_extensions": binary_collection_extensions,
-        "read_handoffs": read_handoffs,
     }
 
 
@@ -722,12 +670,6 @@ def _validate_context_wrapper(value: Any) -> dict[str, Any]:
     return wrapper
 
 
-def _path_is_within(relative: str, collection: str) -> bool:
-    path_parts = PurePosixPath(relative).parts
-    collection_parts = PurePosixPath(collection).parts
-    return path_parts[: len(collection_parts)] == collection_parts
-
-
 def _load_json(path: Path, label: str) -> Any:
     try:
         raw = path.read_bytes()
@@ -774,12 +716,7 @@ def _windows_alias_relative(root: Path, absolute_path: Path) -> str:
     raise ValueError("context has no repository-root ancestor")
 
 
-def _load_runtime_context(
-    root: Path,
-    context_path: Path,
-    *,
-    check_tracked_files: bool = True,
-) -> dict[str, Any]:
+def _load_runtime_context(root: Path, context_path: Path) -> dict[str, Any]:
     try:
         absolute_context = Path(os.path.abspath(os.fspath(context_path)))
         common = Path(os.path.commonpath([root, absolute_context]))
@@ -834,35 +771,15 @@ def _load_runtime_context(
         raise MemoCardsError("conflict", "materialized context repository identity drifted")
 
     allowlist = wrapper["allowlist"]
-    if allowlist["tracked_collections"] != expected["tracked_collections"]:
-        raise MemoCardsError("conflict", "materialized tracked collections drifted")
-    if allowlist["write_paths"] != expected["write_paths"]:
-        raise MemoCardsError("conflict", "materialized write paths drifted")
-
-    explicit_files = set(expected["tracked_files"])
-    concrete_files = set(allowlist["tracked_files"])
-    if not explicit_files <= concrete_files:
-        raise MemoCardsError("conflict", "materialized context omitted an explicit tracked file")
-    collections = expected["tracked_collections"]
-    for relative in sorted(concrete_files):
-        if relative not in explicit_files and not any(
-            _path_is_within(relative, collection) for collection in collections
-        ):
+    for field, label in (
+        ("tracked_files", "tracked files"),
+        ("tracked_collections", "tracked collections"),
+        ("write_paths", "write paths"),
+    ):
+        if allowlist[field] != expected[field]:
             raise MemoCardsError(
-                "conflict",
-                "materialized context contains a tracked file outside declared collections",
-                details={"path": relative},
+                "conflict", f"materialized {label} drifted; materialize again"
             )
-        if check_tracked_files:
-            path = _resolve_under(
-                root, relative, label="materialized tracked file", must_exist=True
-            )
-            if not path.is_file() or _is_link_or_junction(path):
-                raise MemoCardsError(
-                    "safety",
-                    "materialized tracked file must remain a regular non-link file",
-                    details={"path": relative},
-                )
     return wrapper
 
 
@@ -1728,16 +1645,12 @@ def _validate_request(value: Any, context: Mapping[str, Any], registry: Registry
 def _verify_sources(
     root: Path,
     sources: Sequence[Mapping[str, str]],
-    tracked_files: set[str],
 ) -> tuple[SourcePrecondition, ...]:
+    # Request validation already bound every source to a configured input
+    # collection pattern.  Git tracking is deliberately irrelevant: the user's
+    # explicit request selects the file, and its hash is bound into the manifest.
     preconditions: list[SourcePrecondition] = []
     for source in sources:
-        if source["path"] not in tracked_files:
-            raise MemoCardsError(
-                "safety",
-                "source is not in the materialized tracked-file allowlist",
-                details={"path": source["path"]},
-            )
         path = _resolve_under(root, source["path"], label=f"source {source['id']}", must_exist=True)
         if not path.is_file() or _is_link_or_junction(path):
             raise MemoCardsError("safety", "source must be a regular non-link file", details={"path": source["path"]})
@@ -2353,16 +2266,11 @@ def _inspect_artifact_sidecars(
     return tuple(reports), tuple(issues)
 
 
-def _inventory_files(
-    root: Path, patterns: Sequence[str], tracked_files: set[str]
-) -> list[Path]:
-    relatives = {
-        relative for relative in tracked_files if _matches(relative, patterns)
-    }
-    # A newly published managed target is intentionally usable before the next
-    # Git add/materialization cycle.  Discover output candidates inside the
-    # already-authorized inventory roots so sequential publishes cannot bypass
-    # cross-file logical-ID uniqueness during that window.
+def _inventory_files(root: Path, patterns: Sequence[str]) -> list[Path]:
+    # Inventory is discovered at runtime inside the authorized inventory
+    # patterns, independent of Git tracking, so a card set is deduplicated
+    # against every published sibling whether or not it has been committed.
+    relatives: set[str] = set()
     for pattern in patterns:
         for candidate in root.glob(pattern):
             try:
@@ -2380,7 +2288,6 @@ def _inventory_files(
 
 def _scan_inventory(root: Path, runtime: Mapping[str, Any]) -> Inventory:
     context = runtime["context"]
-    tracked_files = set(runtime["allowlist"]["tracked_files"])
     patterns = sorted(
         {
             pattern
@@ -2392,41 +2299,30 @@ def _scan_inventory(root: Path, runtime: Mapping[str, Any]) -> Inventory:
     legacy: list[dict[str, str]] = []
     seen_cards: dict[str, str] = {}
     fingerprint_rows: list[dict[str, Any]] = []
-    for path in _inventory_files(root, patterns, tracked_files):
+    for path in _inventory_files(root, patterns):
         relative = path.relative_to(root).as_posix()
-        is_tracked = relative in tracked_files
+        # Links, special files, vanished files, and non-UTF-8 bytes cannot be
+        # managed artifacts; skip them without following or reading further.
+        # A link in a parent directory still fails closed.
         try:
             safe = _resolve_under(
                 root, relative, label="inventory path", must_exist=True
             )
         except MemoCardsError:
-            if not is_tracked:
+            if _is_link_or_junction(path) or not path.exists():
                 continue
             raise
         if not safe.is_file() or _is_link_or_junction(safe):
-            if not is_tracked:
-                continue
-            raise MemoCardsError("safety", "inventory contains a link or special file", details={"path": relative})
+            continue
         try:
             raw = safe.read_bytes()
             text = raw.decode("utf-8")
-        except (OSError, UnicodeError) as exc:
-            if not is_tracked:
-                continue
-            raise MemoCardsError("integrity", "cannot read inventory file", details={"path": relative}) from exc
+        except (OSError, UnicodeError):
+            continue
         file_sha256 = _sha256_bytes(raw)
-        try:
-            artifact = _parse_artifact(text, relative, file_sha256=file_sha256)
-        except MemoCardsError:
-            if not is_tracked:
-                continue
-            raise
+        # A file that claims a memo-cards manifest must validate.
+        artifact = _parse_artifact(text, relative, file_sha256=file_sha256)
         if artifact is None:
-            if not is_tracked:
-                # Untracked arbitrary Markdown is not inventory.  Only a
-                # self-validating managed artifact may bridge the short window
-                # before the next materialization.
-                continue
             digest = file_sha256
             legacy.append({"path": relative, "sha256": digest})
             fingerprint_rows.append({"path": relative, "sha256": digest, "kind": "legacy"})
@@ -3121,9 +3017,8 @@ def _prepare_plan(
     registry: Registry,
 ) -> Plan:
     context = runtime["context"]
-    tracked_files = set(runtime["allowlist"]["tracked_files"])
     request = _validate_request(request_value, context, registry)
-    source_preconditions = _verify_sources(root, request["sources"], tracked_files)
+    source_preconditions = _verify_sources(root, request["sources"])
     interrupted_transactions = _interrupted_transactions(root, runtime)
     if interrupted_transactions:
         raise MemoCardsError(
@@ -4304,9 +4199,7 @@ def _atomic_publish_set(
 
 def prepare(repo: Path, context_path: Path, request_path: Path) -> dict[str, Any]:
     root = _repository_root(repo)
-    runtime = _load_runtime_context(
-        root, context_path, check_tracked_files=False
-    )
+    runtime = _load_runtime_context(root, context_path)
     interrupted_transactions = _interrupted_transactions(root, runtime)
     if interrupted_transactions:
         raise MemoCardsError(
@@ -4314,7 +4207,6 @@ def prepare(repo: Path, context_path: Path, request_path: Path) -> dict[str, Any
             "an interrupted memo-cards publication requires recovery",
             details={"transactions": list(interrupted_transactions)},
         )
-    runtime = _load_runtime_context(root, context_path)
     registry = load_template_registry()
     plan = _prepare_plan(root, runtime, _load_json(request_path, "request"), registry)
     return plan.data
@@ -4322,14 +4214,10 @@ def prepare(repo: Path, context_path: Path, request_path: Path) -> dict[str, Any
 
 def verify(repo: Path, context_path: Path, request_path: Path | None = None) -> dict[str, Any]:
     root = _repository_root(repo)
-    runtime = _load_runtime_context(
-        root, context_path, check_tracked_files=False
-    )
+    runtime = _load_runtime_context(root, context_path)
     publication_locks = _publication_lock_states(root, runtime)
     interrupted_transactions = _interrupted_transactions(root, runtime)
     inventory_unavailable = bool(publication_locks or interrupted_transactions)
-    if not inventory_unavailable:
-        runtime = _load_runtime_context(root, context_path)
     context = runtime["context"]
     registry = load_template_registry()
     inventory = (
@@ -4413,9 +4301,7 @@ def _publish_under_repository_lock(
     authorization: str,
 ) -> dict[str, Any]:
     root = _repository_root(repo)
-    runtime = _load_runtime_context(
-        root, context_path, check_tracked_files=False
-    )
+    runtime = _load_runtime_context(root, context_path)
     interrupted_transactions = _interrupted_transactions(root, runtime)
     if interrupted_transactions:
         raise MemoCardsError(
@@ -4423,7 +4309,6 @@ def _publish_under_repository_lock(
             "an interrupted memo-cards publication requires recovery",
             details={"transactions": list(interrupted_transactions)},
         )
-    runtime = _load_runtime_context(root, context_path)
     registry = load_template_registry()
     plan = _prepare_plan(root, runtime, _load_json(request_path, "request"), registry)
     expected_preview = _digest(preview_digest, "preview digest", kind="conflict")
@@ -4490,9 +4375,7 @@ def publish(
     authorization: str,
 ) -> dict[str, Any]:
     root = _repository_root(repo)
-    coordination_runtime = _load_runtime_context(
-        root, context_path, check_tracked_files=False
-    )
+    coordination_runtime = _load_runtime_context(root, context_path)
     with _repository_publication_locks(root, coordination_runtime):
         # Planning happens after the repository-wide output lock set is held.
         # This makes the inventory fingerprint and cross-target logical-ID check

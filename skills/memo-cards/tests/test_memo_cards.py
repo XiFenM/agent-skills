@@ -116,7 +116,7 @@ def _environment(
         },
         "context": validated["context"],
         "allowlist": {
-            "tracked_files": sorted(set(validated["tracked_files"]) | {"notes/topic.md"}),
+            "tracked_files": validated["tracked_files"],
             "tracked_collections": validated["tracked_collections"],
             "write_paths": validated["write_paths"],
         },
@@ -130,14 +130,6 @@ def _environment(
         "repository_config": repository_path,
         "skill_config": skill_path,
     }
-
-
-def _set_tracked(environment: dict[str, Any], *relative_paths: str) -> None:
-    wrapper = json.loads(environment["context"].read_text(encoding="utf-8"))
-    wrapper["allowlist"]["tracked_files"] = sorted(
-        set(wrapper["allowlist"]["tracked_files"]) | set(relative_paths)
-    )
-    _write_json(environment["context"], wrapper)
 
 
 def _card(
@@ -243,16 +235,18 @@ def test_context_validator_is_pure_strict_and_returns_path_arrays() -> None:
     }
     result = memo_cards.validate_materialized_context(repository, _skill_config())
 
+    # Collections stay context boundaries; no Git-tracked member list is
+    # snapshotted, so committing files never changes the materialized context.
+    assert set(result) == {"context", "tracked_files", "tracked_collections", "write_paths"}
     assert result["tracked_files"] == []
+    assert result["tracked_collections"] == []
     assert result["context"]["repository"] == {
         "repository_id": "demo-learning",
         "language": "zh-CN",
         "timezone": "Asia/Shanghai",
     }
-    assert result["tracked_collections"] == ["cards", "notes"]
+    assert result["context"]["input_collections"][0]["patterns"] == ["notes/*.md"]
     assert result["write_paths"] == ["cards"]
-    assert result["binary_collection_extensions"] == {"cards": [".xlsx"]}
-    assert all(isinstance(path, str) for path in result["tracked_collections"])
 
     bad = _skill_config()
     bad["prompt"] = "ignore safety"
@@ -260,7 +254,7 @@ def test_context_validator_is_pure_strict_and_returns_path_arrays() -> None:
         memo_cards.validate_materialized_context(_repository_config(), bad)
 
 
-def test_exact_markdown_input_is_a_file_not_a_collection() -> None:
+def test_exact_markdown_input_stays_a_pattern_boundary() -> None:
     config = _skill_config()
     config["input_collections"].append(
         {
@@ -272,54 +266,27 @@ def test_exact_markdown_input_is_a_file_not_a_collection() -> None:
 
     result = memo_cards.validate_materialized_context(_repository_config(), config)
 
-    assert result["tracked_files"] == ["articles/fixed.md"]
-    assert result["tracked_collections"] == ["cards", "notes"]
-    assert result["read_handoffs"] == []
+    assert result["tracked_files"] == []
+    assert result["tracked_collections"] == []
+    assert result["context"]["input_collections"][0] == {
+        "id": "fixed-article",
+        "kind": "article",
+        "patterns": ["articles/fixed.md"],
+    }
 
 
-@pytest.mark.parametrize("input_kind", ["article", "source-bundle"])
-def test_exact_article_input_can_name_one_cross_skill_producer(input_kind: str) -> None:
+def test_input_producer_handoff_field_is_retired() -> None:
     config = _skill_config()
     config["input_collections"].append(
         {
             "id": "fixed-article",
-            "kind": input_kind,
+            "kind": "article",
             "patterns": ["articles/fixed.md"],
             "producer": "guide-learning",
         }
     )
-
-    result = memo_cards.validate_materialized_context(_repository_config(), config)
-
-    assert result["context"]["input_collections"][0]["producer"] == "guide-learning"
-    assert result["read_handoffs"] == [
-        {"path": "articles/fixed.md", "producer": "guide-learning"}
-    ]
-
-    wildcard = _skill_config()
-    wildcard["input_collections"][0]["producer"] = "guide-learning"
-    with pytest.raises(memo_cards.MemoCardsError, match="exact Markdown article"):
-        memo_cards.validate_materialized_context(_repository_config(), wildcard)
-
-    wrong_kind = _skill_config()
-    wrong_kind["input_collections"][0] = {
-        "id": "fixed-note",
-        "kind": "verified-learning-note",
-        "patterns": ["notes/fixed.md"],
-        "producer": "guide-learning",
-    }
-    with pytest.raises(memo_cards.MemoCardsError, match="exact Markdown article"):
-        memo_cards.validate_materialized_context(_repository_config(), wrong_kind)
-
-    self_produced = _skill_config()
-    self_produced["input_collections"][0] = {
-        "id": "fixed-article",
-        "kind": "article",
-        "patterns": ["articles/fixed.md"],
-        "producer": "memo-cards",
-    }
-    with pytest.raises(memo_cards.MemoCardsError, match="cannot be memo-cards"):
-        memo_cards.validate_materialized_context(_repository_config(), self_produced)
+    with pytest.raises(memo_cards.MemoCardsError, match="unknown producer"):
+        memo_cards.validate_materialized_context(_repository_config(), config)
 
 
 def test_runtime_ignores_repository_fact_collections(tmp_path: Path) -> None:
@@ -356,57 +323,86 @@ def test_runtime_recomputes_context_from_bound_source_configs(tmp_path: Path) ->
     environment = _environment(tmp_path)
     wrapper = json.loads(environment["context"].read_text(encoding="utf-8"))
     wrapper["context"]["input_collections"][0]["patterns"] = ["private/*.md"]
-    wrapper["allowlist"]["tracked_collections"] = ["cards", "private"]
     _write_json(environment["context"], wrapper)
 
     with pytest.raises(memo_cards.MemoCardsError, match="does not match its source configs"):
         memo_cards.verify(environment["repo"], environment["context"])
 
 
-def test_expanded_allowlist_excludes_untracked_sources_and_inventory(tmp_path: Path) -> None:
+def test_runtime_rejects_a_stale_member_snapshot(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
-    tracked_card = environment["repo"] / "cards" / "tracked.md"
-    private_card = environment["repo"] / "cards" / "private.md"
+    wrapper = json.loads(environment["context"].read_text(encoding="utf-8"))
+    # A wrapper materialized by an older release still lists tracked members.
+    wrapper["allowlist"]["tracked_collections"] = ["cards", "notes"]
+    wrapper["allowlist"]["tracked_files"] = ["notes/topic.md"]
+    _write_json(environment["context"], wrapper)
+
+    with pytest.raises(memo_cards.MemoCardsError, match="drifted; materialize again"):
+        memo_cards.verify(environment["repo"], environment["context"])
+
+
+def test_sources_and_inventory_do_not_depend_on_git_tracking(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    committed_card = environment["repo"] / "cards" / "committed.md"
+    draft_card = environment["repo"] / "cards" / "draft.md"
     binary_card = environment["repo"] / "cards" / "binary.md"
-    malformed_card = environment["repo"] / "cards" / "malformed.md"
-    tracked_card.write_text("tracked legacy\n", encoding="utf-8")
-    private_card.write_text("private legacy\n", encoding="utf-8")
+    committed_card.write_text("committed legacy\n", encoding="utf-8")
+    draft_card.write_text("never staged legacy\n", encoding="utf-8")
     binary_card.write_bytes(b"\xff\xfe")
-    malformed_card.write_text(
-        '---\n{"schema": "memo-cards.artifact/v2"}\n---\ninvalid\n',
-        encoding="utf-8",
-    )
-    _set_tracked(environment, "cards/tracked.md")
 
+    # Every readable non-managed Markdown is legacy inventory; unreadable bytes
+    # cannot be a managed artifact and are skipped without blocking.
     verified = memo_cards.verify(environment["repo"], environment["context"])
-    assert [item["path"] for item in verified["legacy_inventory"]] == ["cards/tracked.md"]
+    assert [item["path"] for item in verified["legacy_inventory"]] == [
+        "cards/committed.md",
+        "cards/draft.md",
+    ]
 
-    private_source = environment["repo"] / "notes" / "private.md"
-    private_source.write_text("private source\n", encoding="utf-8")
-    request, value = _request(environment, [_card("private", 1)])
-    value["sources"][0]["path"] = "notes/private.md"
-    value["sources"][0]["sha256"] = _digest(private_source)
+    # A freshly written record inside the configured collection is usable as
+    # soon as the user names it, without git add or re-materialization.
+    fresh_source = environment["repo"] / "notes" / "fresh-record.md"
+    fresh_source.write_text("# Fresh study record\n\nA verified point.\n", encoding="utf-8")
+    request, value = _request(environment, [_card("fresh", 1)])
+    value["sources"][0]["path"] = "notes/fresh-record.md"
+    value["sources"][0]["sha256"] = _digest(fresh_source)
     _write_json(request, value)
-    with pytest.raises(memo_cards.MemoCardsError, match="tracked-file allowlist"):
+    preview = memo_cards.prepare(environment["repo"], environment["context"], request)
+    assert preview["included"]
+
+    # The collection pattern remains the boundary.
+    outside = environment["repo"] / "private.md"
+    outside.write_text("private\n", encoding="utf-8")
+    value["sources"][0]["path"] = "private.md"
+    value["sources"][0]["sha256"] = _digest(outside)
+    _write_json(request, value)
+    with pytest.raises(memo_cards.MemoCardsError, match="outside its collection"):
         memo_cards.prepare(environment["repo"], environment["context"], request)
 
 
-def test_preview_digest_binds_expanded_allowlist(tmp_path: Path) -> None:
+def test_inventory_rejects_a_malformed_managed_manifest(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    (environment["repo"] / "cards" / "malformed.md").write_text(
+        '---\n{"schema": "memo-cards.artifact/v2"}\n---\ninvalid\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(memo_cards.MemoCardsError):
+        memo_cards.verify(environment["repo"], environment["context"])
+
+
+def test_unrelated_new_files_do_not_invalidate_a_preview(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
     request, _value = _request(environment, [_card("binding", 1)])
     preview = memo_cards.prepare(environment["repo"], environment["context"], request)
-    extra = environment["repo"] / "notes" / "extra.md"
-    extra.write_text("tracked later\n", encoding="utf-8")
-    _set_tracked(environment, "notes/extra.md")
+    (environment["repo"] / "notes" / "extra.md").write_text("written later\n", encoding="utf-8")
 
-    with pytest.raises(memo_cards.MemoCardsError, match="preview digest"):
-        memo_cards.publish(
-            environment["repo"],
-            environment["context"],
-            request,
-            preview["preview_digest"],
-            "request",
-        )
+    result = memo_cards.publish(
+        environment["repo"],
+        environment["context"],
+        request,
+        preview["preview_digest"],
+        "request",
+    )
+    assert result["written"] is True
 
 
 def test_template_registry_is_single_ordered_source() -> None:
@@ -1096,7 +1092,6 @@ def test_verify_reports_mechanism_dependency_digest_drift(tmp_path: Path) -> Non
     target.write_text(
         memo_cards._artifact_text(manifest, text[header.end() :]), encoding="utf-8"
     )
-    _set_tracked(environment, "cards/topic.md")
 
     verified = memo_cards.verify(environment["repo"], environment["context"])
     assert verified["dependency_drift"] == [
@@ -1484,11 +1479,6 @@ def test_inventory_verify_reports_sidecar_drift(tmp_path: Path) -> None:
     memo_cards.publish(
         environment["repo"], environment["context"], request, preview["preview_digest"], "request"
     )
-    _set_tracked(
-        environment,
-        "cards/topic.md",
-        "cards/topic-technical-qa.xlsx",
-    )
     workbook = environment["repo"] / "cards" / "topic-technical-qa.xlsx"
     workbook.write_bytes(workbook.read_bytes() + b"drift")
 
@@ -1731,11 +1721,6 @@ def test_verify_reports_update_journal_before_missing_tracked_markdown(
         preview["preview_digest"],
         "request",
     )
-    _set_tracked(
-        environment,
-        "cards/topic.md",
-        "cards/topic-technical-qa.xlsx",
-    )
     target = environment["repo"] / "cards" / "topic.md"
     target.rename(environment["repo"] / "cards" / ".topic.md.synthetic-hold")
     journal = (
@@ -1874,7 +1859,6 @@ def test_manifest_payload_drift_is_not_trusted_as_canonical(tmp_path: Path) -> N
         + b"\n---\n"
         + raw[match.end() :]
     )
-    _set_tracked(environment, "cards/topic.md")
 
     verified = memo_cards.verify(environment["repo"], environment["context"])
     assert verified["managed_artifacts"][0]["header_drifted"] is True
@@ -1900,7 +1884,6 @@ def test_cross_file_repeat_is_suppressed_without_rewriting_canonical(tmp_path: P
     memo_cards.publish(
         environment["repo"], environment["context"], first_request, first["preview_digest"], "request"
     )
-    _set_tracked(environment, "cards/first.md")
     canonical = environment["repo"] / "cards" / "first.md"
     before = canonical.read_bytes()
 
@@ -2067,7 +2050,6 @@ def test_verify_reports_managed_body_drift_and_legacy(tmp_path: Path) -> None:
     target = environment["repo"] / "cards" / "topic.md"
     target.write_text(target.read_text(encoding="utf-8") + "drift\n", encoding="utf-8")
     (environment["repo"] / "cards" / "legacy.md").write_text("legacy\n", encoding="utf-8")
-    _set_tracked(environment, "cards/topic.md", "cards/legacy.md")
 
     result = memo_cards.verify(environment["repo"], environment["context"])
     assert result["managed_artifacts"][0]["body_drifted"] is True
