@@ -1,239 +1,150 @@
 ---
 name: guide-learning
-description: "Guide human learners through source-grounded explanation, post-explanation adaptive checks, evidence-gap-driven formal practice, artifact review, mastery verification, minimal cross-session recovery, and optional source-grounded learning articles. Use when a user asks to learn or understand a topic; study documentation, tutorials, papers, examples, or source code; start, continue, or resume a lesson; design or review a learning exercise; turn completed learning into an article; or run a multi-session course. Do not use for ordinary implementation, bug fixing, or code review without learning intent, or for resource governance, dialogue extraction, card generation, or English-specific feedback or coaching."
+description: "Guide human learners to deep, transferable understanding: explain mechanisms and design rationale, connect them to real systems, check understanding rather than computation, run evidence-gap-driven practice only when needed, and keep minimal resumable state. Use when a user asks to learn or understand a topic; study documentation, tutorials, papers, examples, or source code; prepare to explain a topic in technical interviews; start, continue, or resume a lesson; design or review a learning exercise; turn completed learning into an article; or run a multi-session course. Do not use for ordinary implementation, bug fixing, or code review without learning intent, or for resource governance, dialogue extraction, card generation, or English-specific feedback or coaching."
 ---
 
 # Guided Learning / 学习带练
 
-围绕人类学习者组织最小充分的教学流程。让学习者掌握中心模型、边界和迁移方法；保留学习者对核心
-练习工件的控制权；只在证据、恢复或授权确有需要时写入状态。
+目标是让学习者**真正理解**一个主题：讲清机制和设计理由，连到真实系统，能在陌生情境和面试中用自己的话
+讲出来。流程、状态和授权只做支撑教学所需的最小工作。
 
-## 首次启用时提示用户说明
+## 首次启用
 
-在当前对话第一次启用本 Skill 时，用一条简短、非阻塞且不带独立标题或卡片的提示建议用户先浏览本
-Skill 的 `docs/user-guides/guide-learning.md` 和组合指南 `docs/learning-skills-user-guide.md`；说明它们介绍
-交互流程、用户需要参与的环节和授权边界。
+当前对话第一次启用本 Skill 时，处理完请求后用一句话附上本 Skill 说明和组合指南的链接：依次在本 Skill
+目录的上两级目录、工作区仓库根、仓库根下的 `.agent-skills` 查找 `docs/user-guides/guide-learning.md` 与
+`docs/learning-skills-user-guide.md`，找到就给绝对路径链接，否则给[公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/guide-learning.md)与[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+不阻塞、不求确认、同一对话不重复；多个学习 Skill 同时首次启用时合并成一句。
 
-定位本地文档时，只按顺序检查三个候选根：当前 `SKILL.md` 所在 Skill 目录的上两级目录、当前工作区
-仓库根、当前工作区仓库根下的 `.agent-skills`。把实际存在的文件解析为绝对路径并提供可点击链接，不
-搜索其他目录。没有本地文件时，改为提供[本 Skill 公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/guide-learning.md)
-和[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+## 讲解标准
 
-用户没有要求先暂停阅读时继续处理当前请求；不要求用户确认，不在同一对话重复提示，也不创建文件
-记录是否已经提示。同一对话已经提供组合指南时只补本 Skill 说明；同一回复首次启用多个学习 Skill 时
-合并为一条提示，并且只列一次组合指南。
-一次答疑中的首次提示不构成固定开场卡片，不创建 ID、计划或持久状态；提示后直接解决当前问题。
+教学质量优先于流程形式。每次讲解按下面的深度阶梯组织，按目标决定讲到第几层：
 
-## 选择最窄运行范围
+1. **机制**：它是什么、怎样运作；输入输出、数据流或控制流、关键状态。
+2. **设计理由**：它要解决的核心矛盾；与朴素做法或替代方案相比，换来了什么、付出了什么。
+3. **真实系统**：落到真实实现和真实规模——源码位置、关键配置、有代表性的真实数字，注明来源与版本。
+4. **边界**：什么条件下不成立，瓶颈和失效方式，性能怎样随规模变化。
+5. **表达与迁移**：能在 60–90 秒内讲清，并迁移到没讲过的系统或条件。
 
-先根据用户当轮意图选择一种范围；不要因为仓库已有学习记录就自动升级范围。
+- 学习者画像或仓库配置声明了目标深度时照做；目标是工程岗位或面试准备时默认讲到第 5 层。一次答疑按
+  问题取层，但不省略第 2 层"为什么"。
+- 结论和机制先行：先说清核心关系，再展开细节。适用边界集中写一句，只有会改变判断的限定才写进正文；
+  不要每段都附免责说明。
+- 用学习者已熟悉的系统做锚点和对照；新符号先定义含义、维度和单位。
+- 小算例只用来让机制可见，讲完随即回到真实规模和真实系统，不让整课停留在玩具例子里。
+- 算法、算子和多阶段程序：先给未优化的整体数学和接口，再讲实现怎样分解与分工；阶段之间传递的状态要
+  说明谁产生、谁消费、为什么需要；精度和数据表示的选择要说明理由。
+- 关键事实给出来源和版本；来源没有直接支持的动机或收益标为推断。来源角色、版本与冲突处理见
+  [source-authority.md](references/source-authority.md)。
 
-- **一次答疑**：直接解决当前问题；按需加入一个轻量理解检查。不要创建 ID、固定开场卡片、后续计划
-  或持久状态；用户明确要求保存时才生成紧凑记录。
-- **独立 Session**：在用户明确开始、继续或恢复一段学习时，建立或读取最小上下文，运行教学循环，
-  并在会话边界保存一条 Session event；存在恢复任务时维护唯一 Checkpoint。不要自动创建 Lesson。
-- **持久 Course**：仅在用户明确开展跨会话、多 Lesson 学习时，维护 Program、已授权 Lesson、逐目标
-  mastery 和长期证据。
+两个完整的正面示例见 [teaching-exemplars.md](references/teaching-exemplars.md)。开讲一门新课前先读它。
 
-允许独立 Session 在综合验收后进入受约束的正式练习。不要因此自动声明长期 mastery；用户需要长期
-证据账本时，先取得创建 Lesson 或并入既有 Course 的授权。
+## 提问：考理解，不考计算
 
-## 建立或恢复上下文
+检查题用来确认学习者能**解释、预测、判断**，而不是复现刚才的计算步骤。优先使用：
 
-1. 读取仓库指令、相关来源、既有学习记录、当前工作状态和可用验证方式。
-2. 从证据中推断主题、学习者当前水平、预期结果和已有授权。只有缺失选择会实质改变目标、范围、
-   mastery、写入路径或所有权时，才提出一个简短问题。
-3. 恢复既有状态时，读取 Program、前台 Lesson 和 Checkpoint 的实际映射；把恢复操作保持为只读。
-4. 做低成本 drift 核验。没有 drift 时原地继续且不写入；drift 会改变范围、责任或唯一下一动作时，
-   展示分支并等待用户选择。
-5. 在同一工作上下文中只保持一个前台 active Lesson。允许其他 Program 或 Lesson 保持 planned、frozen
-   或等待恢复。
+- 解释为什么：这个设计解决了什么，去掉它会坏在哪里；
+- 改一个条件，预测结果并说明理由；
+- 从现象诊断原因，或定位失效环节；
+- 比较两种方案，按场景作出选择并说出代价；
+- 把模型迁移到没讲过的系统或配置；
+- 口述：用 60–90 秒向面试官讲清一个机制。
 
-若生成副本含 `.agent-skills-context.json`，只把其中的 repository facts 当作只读 locator，把
-`record_mappings` 当作物理位置候选，把 `allowlist.write_paths` 当作机械上限。配置和 allowlist 都不授予
-写入、所有权、Lesson 启动、连续推进、练习接受、mastery 或结课权限；实际文件内容与本 Skill 的行为
-规范继续裁决这些事实。context 缺失时按仓库约定正常发现；context 损坏、身份不符或与实际事实源冲突
-时不要部分采信，保持只读并要求重新 materialize 或让用户选择唯一映射。
+计数、查表、代入公式等计算题，只在估算本身就是目标能力时使用（例如通信量、显存或算力估算），并要求
+解释数字的含义。不要用学习者已熟练的算术、定义复述或照着答案复述充当检查。
 
-materializer 只检查 Skill、配置和引用路径，不读取学习资料正文；context 存在不表示资料已通过类型或
-内容校验。实际需要读取本地混合资料或核验其格式时，先读
-[material-reading.md](references/material-reading.md)，使用 `scripts/material_reader.py` 检查本次明确
-选中的文件。不要在更新 Skill、恢复课程或普通答疑时默认扫描整个 collection。
+出题前自检：符号都已定义；影响答案的条件（数据在哪、布局、单位、表示域）都已写明；题目只依赖已讲内容
+和已确认的前置；判对标准明确。题意含糊是出题问题：澄清后换一道题复查，不记为学习者的错误。不要要求
+学习者猜测尚未讲过、也无法从已知推出的事实。
 
-按范围投影最小开场信息：
+## 按学习者调节节奏
 
-- 一次答疑不展示固定卡片；仅在来源、版本、假设或回答边界会改变答案时补一句说明。
-- 独立 Session 只展示当前上下文、精确位置和唯一首动作；仅在存在时补充阻塞、前进门槛、drift 分支
-  和首次授权的 Agent-owned 状态路径。
-- 首次建立 Program 时展示长期目标、范围、排除项、候选 Lesson 和授权路径；不要虚构当前 Lesson。
-- 激活 Lesson 时展示 2–4 个目标、各目标所需 mastery 维度、来源角色、证据目标、授权记录路径、唯一
-  首动作，以及“关闭本课需确认、下一课不自动启动”的边界。
+- 默认连讲 2–3 个紧密相关的节点，再问 1 道高层级的题；不必每个节点都提问。
+- 学习者连续首答正确时，扩大节点、提高题目层级（从解释走向取舍、诊断、迁移），并省去复述类练习。
+- 回答有差距时只补差值，换条件或例子复查；持续困难时缩小节点、补最短前置、降低信息密度。
+- 学习者说"讲快点""多讲少问""多出题"等，照做并保持。
+- 检查已经给出充分证据时，不再追加形式性的复述或"做一遍"。
 
-上述内容是范围、授权和恢复的控制面投影，不代替首次开始结构化 Lesson 时的教学导入。
+## 一堂课的结构
 
-在创建、恢复或写入状态前读取 [state-records.md](references/state-records.md)。在决定逻辑对象应落到
-仓库何处前读取 [repository-adaptation.md](references/repository-adaptation.md)。
+1. **开课导入**：首次进入结构化 Lesson 或多节点 Session 时，用一段连贯叙述交代背景与核心矛盾、将形成的
+   能力、关键节点路线和完成标准，并给出可回看的全流程骨架（接口、主数据流、关键状态）。不要写成目标
+   清单或状态卡片。恢复已开始的课，只用一句话挂回当前位置。
+2. **核对前置**：先看已有证据；只有答案会改变讲解起点时才问一个最小问题。"不知道"是有效信息。
+3. **逐节点讲解与检查**：按讲解标准、提问方式和节奏规则推进；进入新节点时一句话指出当前位置。
+4. **导师串讲**：所有节点讲完后，由导师亲自沿同一个贯穿案例串起全流程，并提升到真实系统的规模和取舍。
+   不把首次串联留给学习者或综合题。
+5. **综合验收**：通常 2–4 题，覆盖中心模型、一个关键取舍或边界、一个没讲过的迁移，并至少包含一道口述题。
+   已有证据覆盖的部分不重复考。
+6. **按证据分流**：证据充分就进入结课确认；仍缺实践或实证证据时，才进入最小正式练习。
 
-## 管理来源与事实权威
+一次答疑直接回答，按需附一个理解检查，不走完整结构。详细做法见
+[teaching-cycle.md](references/teaching-cycle.md)。
 
-- 把用户选择的资料作为 teaching spine；不要把它自动视为所有 claim 的最高权威。
-- 为来源记录角色和版本锚点。让固定 revision 的源码裁决该实现，让官方文档或规范裁决公开承诺，让
-  论文裁决其方法和报告结论，让本地实验只裁决声明条件下的观测。
-- 仅在缺少必要前置、存在过时或版本冲突风险、关键结论需要一手核验，或目标要求比较与迁移时主动
-  做最小补充核验。替换教学主线、加入较大资料或扩大投入前先确认。
-- 不要静默揉合来源冲突。先核对版本、分支、配置和适用条件，再分别说明各来源支持与不支持什么；
-  只有冲突阻塞当前目标时才扩大调查。
-- 涉及当前或最新信息时重新核验；不要凭记忆猜测未知或易变事实。
+## 选择运行范围
 
-遇到多来源、源码、论文、版本敏感结论、实验或事实冲突时读取
-[source-authority.md](references/source-authority.md)。
+按用户当轮意图选最窄的一种，不因仓库里已有学习记录而自动升级：
 
-## 运行教学循环
+- **一次答疑**：直接解决问题；零写入。
+- **独立 Session**：用户明确开始、继续或恢复一段学习；需要跨会话时只保存会话事件和断点，不自动建 Lesson。
+- **持久 Course**：用户明确开展多课学习；维护计划、已授权 Lesson 的账本和断点。
 
-首次进入一个尚未开始讲解的结构化 Lesson，或具有多个依赖节点的独立 Session 时，在公式、API、
-代码的局部展开与理解检查之前，先用连贯的课程导入说明背景、将形成的能力、适用时的现有方案及其
-限制或核心矛盾、本课目标、关键节点路线和完成证据。再按主题建立足以追踪全过程的模型；算法、
-算子或多阶段程序需要连接接口、整体数学、分解方式、表示／精度和阶段间状态，具体覆盖见
-[teaching-cycle.md](references/teaching-cycle.md)。不要把全貌降格为目标清单或状态卡片，也不要把
-所有局部细节塞进开场；“简短”不能省略理解全流程所必需的关系。算法流程不能代替学习路线，
-还应让学习者知道本轮所在位置、后续有哪些关键学习点。
+## 状态：三处、稀疏写入
 
-恢复已经开始的 Lesson 时，只把当前位置、已建立的模型和唯一下一动作挂回整体路线，不重复完整导入。
-一次答疑、窄问题和短主题直接回答或只给与范围相称的局部框架；用户或来源在当轮已经建立全貌时只补
-缺失连接。用户明确要求跳到某个节点时遵从其节奏，但按需用一句话交代该节点在整体路线中的位置。
-学习者明确反馈全貌仍不清时，先在已授权范围内补足整体关系，再恢复局部检查；不能以资料中已有
-全流程或局部回答已通过，替代其提出的整体理解缺口。
+- **计划（Program）**：长期目标、范围、排除项和候选课程；只在范围变化时写。
+- **课程账本（Lesson）**：目标、来源与版本、阶段事件、练习约定、证据和结课结论。
+- **断点（Checkpoint）**：唯一的"现在在哪、下一步做什么"。当前前台课程只由断点指向；计划和账本不重复
+  记录"当前课""未启动""不会自动推进"之类的状态。
 
-建立课程全貌后，再围绕每个关键节点执行：
+只在会话边界、练习约定被接受、核心工件提交、证据或结课结论改变时写入；普通讲解、追问和答对都不写。
+每条事实只写在唯一位置，其他地方用链接。事件只记实质进展，用一两句说明"证明了什么、凭什么"；详细过程
+交给按需生成的学习记录。创建、恢复或写入状态前读 [state-records.md](references/state-records.md)，
+映射到仓库文件前读 [repository-adaptation.md](references/repository-adaptation.md)。
 
-1. 讲清当前节点的中心关系、机制和边界；按主题与学习者偏好选择符号／通式、图示或实例，并先补足
-   理解本节点所需的关键 API、数据类型或抽象的使用语义。
-2. 留出追问，并只做服务当前节点的必要深挖。
-3. 针对已经讲过或确认的前置知识提出一个最有区分力的理解检查。
-4. 判断回答：理解无误时跳过补差和再探，直接进入轻量“做”；只有存在差距时才补当前差值，再换
-   条件、例子或问法复查，不重复整段长讲。
-5. 通过理解检查后，让学习者完成一次轻量复述、举例、自测、映射或推导。
-6. 即时纠正；证据充分时推进，否则缩小节点或补最短前置。
+## 授权
 
-不要要求学习者猜测尚未教授且无法从已有知识推导的事实。不要固定执行课前考试；先从既有 evidence
-核对前置，只在答案会改变教学起点时提出一个最小问题。把“不知道”作为有效定位信息。
+受管配置、`.agent-skills-context.json` 及其中的 allowlist 只提供位置和写入上限，**不是授权**。context 损坏、
+身份不符或与仓库实际事实冲突时，停止使用它并保持只读。
 
-完成所有关键节点后，Agent 先沿已经讲过的对象或案例串联完整模型、状态传递和关键边界，再让学习者
-独立解释或迁移。综合题不能代替导师的首次全流程串讲，也不提前给出验收新变式的答案。通常选 2–4
-个整合问题，按已有证据减少重复检查；实证型目标在结果出现前加入可证伪预测。把题数视为证据需要，
-不视为固定配额。
+- **需要用户确认**：首次使用某个状态路径、开始新 Lesson、接受或修改练习约定、扩大目标或完成门槛、修改
+  学习者负责的文件、结课。
+- **已授权范围内自动进行**：讲解、检查、补差、维护 Agent 自己负责的测试和记录。
+- **从不自动进行**：开始下一课、生成文章或学习记录或卡片、保存原始对话、提交或推送。
 
-根据综合验收分流：
+同一 Lesson 内授权一次后自然推进，不在每一步重复询问。
 
-- 所需证据已充分时，跳过形式性的正式练习，进入 mastery gate。
-- 仍缺实践、迁移或实证证据时，选择能补足缺口的最小正式练习。
+## 正式练习与结课
 
-规划关键节点、核对前置、设计检查、补差或综合验收时读取
-[teaching-cycle.md](references/teaching-cycle.md)。一次简单答疑不必为了形式加载完整教学流程。
+只有综合验收后仍缺实践或实证证据、且练习是补足它的最小途径时，才进入正式练习。开始前一次性说明：为什么
+做、学习者交付什么、怎样算通过、文件边界（你写／我维护／我只读／本次不动）、求助如何影响独立证据、
+非目标。学习者接受后才创建验收工件。
 
-## 划定 Lesson 与推进授权
+- 代码练习默认测试驱动：Agent 编写并核验验收测试，学习者实现核心逻辑，从可信的失败推进到通过。只有测试
+  设计本身是学习目标时，才让学习者写测试。
+- 实验或 benchmark：学习者在结果出现前给出有依据的预测，之后解释证据；由 Agent 主导实验方法与 harness
+  （预热、同步、重复、对照、指标、判据）并说明思路，不让学习者猜这些参数。
+- 学习者求助时先一句话诊断，再给最低必要的帮助；透露了关键解法时，用一个表面不同、原理相同的新变式恢复
+  独立证据，不要求整课重做。
+- 结课：逐个目标列出证据链接、仍未关闭的阻塞问题和非阻塞余项，用户确认后才写入结论；不自动开始下一课。
 
-- 让一个 Lesson 围绕一项可独立描述和验收的能力；把 2–4 个紧密相关目标绑定到同一组 mastery gate。
-- 当内容包含独立心智模型、可分别关闭的正式练习、新前置能力，或验证从正确性转为独立实证研究时，
-  提议拆分 Lesson。
-- 允许同一能力的互补变式留在一个 Lesson。把 optional extension 明确放在核心 gate 之外。
-- 在开课时为每个目标声明概念、实践、实证维度是 `required` 还是 `not-required`。新增 required 维度
-  等同扩大完成门槛，须重新取得授权。
-- 获得当前 Lesson 授权后，在其内部自然推进讲解、检查、补差和轻量工件；不要在每一步重复询问。
-- 进入正式练习时另行取得完整契约授权。达到 mastery gate 时展示证据并等待关闭确认。
-- 不要把候选 Lesson 顺序当作执行授权，不要因关闭当前 Lesson 自动启动下一 Lesson 或 optional 内容。
-  用户明确授予连续推进权限时，也不要跳过每课的 mastery 展示与关闭确认。
+细节见 [practice-review-mastery.md](references/practice-review-mastery.md)。
 
-## 进入正式练习、Review 与 mastery
+## 与其他 Skill 的分工
 
-只在综合验收仍有证据缺口且正式练习是最低充分路径时进入练习。开始前读取
-[practice-review-mastery.md](references/practice-review-mastery.md)，一次性展示六块契约并请求接受：
+广泛的资料发现与治理交给 `resource-planning`，学习过程记录与原始对话交给 `study-log`，制卡交给
+`memo-cards`，英语反馈交给 `english-coach`。它们只在用户明确请求后交接，本 Skill 不直接写它们的文件。
+没有学习意图的普通实现、修复或代码审查不使用本 Skill。
 
-1. 为什么做；
-2. 学习者交付什么；
-3. 怎样算通过；
-4. learner-owned、agent-owned、read-only 与 excluded 边界；
-5. 帮助如何影响独立证据；
-6. 非目标与完成门槛。
-
-在契约接受后，由 Agent 在逐项列明的 Agent-owned 路径创建或维护最小测试、rubric、fixture、实验
-harness、记录和 Checkpoint。代码练习默认采用测试驱动：Agent 先准备并核验验收工件，再让学习者拥有
-核心实现并从可信的 red 推进到 green。只有测试、fixture 或验证工具设计本身属于学习目标时，才把它们
-交给学习者。不要因验证失败自动接管 learner-owned 核心工件。
-
-实证型练习默认让学习者在结果出现前提出有机制依据的可证伪预测，并在结果出现后解释证据；由 Agent
-主导实验方法与 harness，按目标 claim 选择最低充分的 warm-up、同步、重复、运行顺序、控制变量、
-指标，以及支持／否定／证据不足的判据，并在运行前向学习者说明设置思路。除非实验设计本身是明确
-目标，不要把这些方法参数变成学习者必须设计或猜测的检查题；不要为了“严谨”自动加入超出 claim 的
-统计负担。方法若会扩大范围、成本、依赖或所有权，先修订契约并取得确认。
-
-需要修改 learner-owned 工件、扩大 gate、引入依赖、修改配置或公共接口、改变所有权，或升级为
-生产级工程时，重新取得授权。
-
-验证时先报告证据和差距。只保存映射到 required acceptance 或 mastery 的稳定 finding；同一根因只建
-一个并原地更新。向用户透明展示全部紧凑摘要，但每轮最多激活三个 learner-owned 当前动作；让
-Checkpoint 只指向第一个可执行动作。Agent-owned 验收工件或环境故障由 Agent 在既有授权内自行修复。
-minor 与 suggestion 默认不阻塞 mastery。
-
-在学习者自然表达卡住或主动求助后，先做一句最小诊断，再提供最低必要支持。按实际透露内容判断
-material assistance，不向用户暴露提示层号。material hint 或 Agent 接管只撤销受影响范围的独立实践
-证据；用无材料提示、表面不同但心智模型相同的新变式恢复，不要求整课重做。
-
-按目标验证三个 mastery 维度：
-
-- **概念已掌握**：独立复述中心模型，解释关键边界，并完成未直接讲过的同构迁移。
-- **实践已验证**：learner-owned 核心工件通过验收，映射到 required gate 的 blocking／major finding
-  已关闭，学习者能解释重要验证并完成独立变式。
-- **实证已验证**：学习者的事前预测可证伪，Agent-owned 方法明确环境与测量边界、可复现且有适当
-  对照，学习者能解释证据支持、不支持的结论和剩余不确定性。
-
-在 Lesson gate 展示一行一个“目标 × required 维度”的最小证据矩阵、未关闭且映射到 required gate
-的 blocking／major finding、assistance 恢复情况、非阻塞 minor／suggestion 余项和关闭建议。只有用户
-确认后才写入 final mastery。独立 Session 只关闭练习并保存会话级 evidence，不写 final Lesson mastery。
-
-## 稀疏记录状态
-
-- 只在会话边界或耐久事实变化时写入；普通讲解、追问、正确回答和节点推进保持零写。
-- 让 Program 只承担长期控制面，让 Lesson 承担证据账本，让 Session event 承担一段实质增量，让
-  Checkpoint 承担唯一恢复游标。不要复制职责。
-- 每个实质会话段最多追加一条简短 Session event。存在恢复任务时覆盖唯一 Checkpoint；真正终结时
-  移除无用 Checkpoint 和引用，不伪造下一动作。
-- 在练习契约接受、核心工件提交、形成 durable finding、验证改变 evidence 或 mastery、跨越综合验收、
-  进入 mastery gate、暂停、收工或确认关闭时，按需同步授权状态。
-- 应用 semantic diff：状态、证据和下一动作均未变化时不写；不要只更新时间戳，不要猜测学习时长。
-- 不要自动生成文章、学习日志、卡片或原始对话。只有用户明确请求并确认相应范围时，才生成或交接。
-- 形成完整且值得整理的主题时，可以自然提议文章；先让用户确认素材范围与用途后再起草，取得本次目标文件的
-  明确授权后才写入。文章按主题综合已核验理解与纠错，不保存对话流水，也不拥有 Lesson 状态或 mastery。
-  起草、适配结构或选择受管文章目标前读取 [article-artifacts.md](references/article-artifacts.md)。
-
-## 处理暂停、专项与跨能力边界
-
-- 把“暂停一下”“继续刚才的学习”“今天先到这里”“我卡住了”“讲快一点”等自然表达映射到流程；
-  不要求固定命令或固定措辞。
-- 暂停或收工不把 Lesson 改成 paused 或 complete。恢复时从唯一游标继续。
-- 只有旁支需要跨会话推进、形成独立目标或产物，或替换原唯一下一动作时，才建立临时专项并冻结原
-  上下文和返回点；单轮答疑不建立专项状态。专项结束后让用户选择返回、延长或转向。
-- 把广泛资料发现与课程治理交给 `resource-planning`；只记录当前 Lesson 内的 observation 或提出交接。
-- 把结构化过程记录与原始对话保存交给 `study-log`，把制卡交给 `memo-cards`，把英语专项反馈交给
-  `english-coach`。保存原始对话前先让用户确认边界与隐私；不要直接写入这些能力拥有的治理文件。
-- 对没有学习意图的普通实现、修复或代码审查退出本 Skill。若用户要求 Agent 接管学习者核心实现，
-  先按练习契约重新授权并记录 AI-assisted 范围。
+"暂停一下""继续刚才的""讲快点""我卡住了"等自然表达直接映射到相应流程，不要求固定命令。主题完整、
+值得沉淀时可以提议写学习文章；确认素材与用途后才起草，获得目标文件授权后才写入，见
+[article-artifacts.md](references/article-artifacts.md)。
 
 ## 按需读取参考
 
-- [teaching-cycle.md](references/teaching-cycle.md)：在规划或继续结构化教学、核对必要前置、设计检查、
-  补差或跨节点综合验收时读取。
-- [source-authority.md](references/source-authority.md)：在使用资料、源码、论文、版本敏感事实、实验或处理
-  来源冲突时读取。
-- [practice-review-mastery.md](references/practice-review-mastery.md)：在设计正式练习、创建验收工件、
-  Review 学习者产物、提供 material assistance 或判断 mastery 时读取。
-- [state-records.md](references/state-records.md)：在创建、恢复、暂停、写入或关闭 Program、Lesson、
-  Session event 或 Checkpoint 时读取。
-- [repository-adaptation.md](references/repository-adaptation.md)：在发现消费仓库约定、映射逻辑状态、选择
-  授权路径、解释受管 context 或采用 schema-only fallback 时读取。
-- [material-reading.md](references/material-reading.md)：实际读取本地混合资料或需要核验文件类型时读取；
-  用专用工具检查精确选中的文件，不把格式校验或图片元数据当作教学内容核验。
-- [article-artifacts.md](references/article-artifacts.md)：在提议、起草、写入或适配学习文章时读取；用于区分
-  文章与过程日志、应用通用骨架、解释文章 profile 并选择安全目标。
-- [examples.md](references/examples.md)：只在一次答疑、独立 Session、跳过练习、drift、临时专项、来源
-  冲突或不同关闭分支的边界仍不清楚时读取；把示例视为非规范性说明。
+- [teaching-exemplars.md](references/teaching-exemplars.md)：开讲新课、写开课导入或节点讲解、设计检查题前读。
+- [teaching-cycle.md](references/teaching-cycle.md)：设定目标深度、开课、划分节点、提问、补差、串讲与综合验收时读。
+- [source-authority.md](references/source-authority.md)：使用源码、论文、版本敏感事实或实验，或来源冲突时读。
+- [practice-review-mastery.md](references/practice-review-mastery.md)：设计正式练习、Review 学习者产物、处理求助或结课时读。
+- [state-records.md](references/state-records.md)：创建、恢复、暂停、写入或关闭学习状态时读。
+- [repository-adaptation.md](references/repository-adaptation.md)：把状态映射到仓库文件、选择路径或解释受管 context 时读。
+- [material-reading.md](references/material-reading.md)：读取本地图片、drawio 等混合资料或核验文件类型时读。
+- [article-artifacts.md](references/article-artifacts.md)：提议、起草或写入学习文章时读。

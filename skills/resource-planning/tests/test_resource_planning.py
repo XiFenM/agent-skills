@@ -1328,3 +1328,136 @@ def test_source_has_no_network_subprocess_or_git_runtime() -> None:
     assert "--force" not in source
     assert "--skip-cas" not in source
     assert "--accept-latest" not in source
+
+
+SLOT = "resources-after-existing"
+SLOT_STATE = '<!-- resource-state:{"completion":"planned","notes":"keep"} -->\n'
+
+
+def _slot_edit(managed_repo: dict[str, object], after: str, **kwargs: object) -> dict:
+    return rp.edit_portfolio_slot(
+        managed_repo["repo"],
+        managed_repo["wrapper"],
+        managed_repo["context"],
+        path=kwargs.pop("path", "curriculum/guide.md"),
+        slot=kwargs.pop("slot", SLOT),
+        action=kwargs.pop("action", "add"),
+        after=after.encode("utf-8"),
+        **kwargs,
+    )
+
+
+def test_light_slot_edit_previews_then_applies_without_touching_the_registry(
+    managed_repo: dict[str, object],
+) -> None:
+    repo = managed_repo["repo"]
+    guide = repo / "curriculum" / "guide.md"
+    before_text = guide.read_text(encoding="utf-8")
+    after = _replace_slot(before_text, SLOT, SLOT_STATE + "- Existing\n- Added resource\n")
+
+    preview = _slot_edit(managed_repo, after)
+    assert preview["operation"] == "update"
+    assert preview["applied"] is False
+    assert preview["registry_updated"] is False
+    assert "+- Added resource" in preview["diff"]
+    assert guide.read_text(encoding="utf-8") == before_text
+    assert not (repo / "managed" / "registry.json").exists()
+
+    applied = _slot_edit(managed_repo, after, apply=True, before_sha256=preview["before_sha256"])
+    assert applied["applied"] is True
+    assert guide.read_text(encoding="utf-8") == after
+    assert _sha(guide) == preview["after_sha256"]
+    assert not (repo / "managed" / "registry.json").exists()
+
+    noop = _slot_edit(managed_repo, after)
+    assert noop["operation"] == "no-op"
+
+
+@pytest.mark.parametrize(
+    ("violation", "expected"),
+    [
+        ("outside-slot", "outside the resource slot"),
+        ("protected-state", "protected learning state"),
+        ("not-portfolio", "configured module portfolio"),
+        ("disallowed-action", "only add or annotate"),
+        ("stale-preview", "changed since the reviewed preview"),
+        ("journal", "unfinished transaction journal"),
+    ],
+)
+def test_light_slot_edit_refuses_unsafe_changes(
+    managed_repo: dict[str, object], violation: str, expected: str
+) -> None:
+    repo = managed_repo["repo"]
+    guide = repo / "curriculum" / "guide.md"
+    before_text = guide.read_text(encoding="utf-8")
+    good = _replace_slot(before_text, SLOT, SLOT_STATE + "- Existing\n- Added resource\n")
+    kwargs: dict[str, object] = {}
+    after = good
+    if violation == "outside-slot":
+        after = good + "outside managed slot\n"
+    elif violation == "protected-state":
+        after = _replace_slot(
+            before_text,
+            SLOT,
+            '<!-- resource-state:{"completion":"done","notes":"keep"} -->\n- Existing\n',
+        )
+    elif violation == "not-portfolio":
+        kwargs["path"] = "facts/goal.md"
+    elif violation == "disallowed-action":
+        kwargs["action"] = "retire"
+    elif violation == "stale-preview":
+        kwargs.update(apply=True, before_sha256="0" * 64)
+    else:
+        (repo / "managed" / ".resource-planning-journal.json").write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(rp.ResourcePlanningError, match=expected):
+        _slot_edit(managed_repo, after, **kwargs)
+    assert guide.read_text(encoding="utf-8") == before_text
+
+
+def test_light_slot_edit_rechecks_the_materialized_write_ceiling(
+    managed_repo: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A valid wrapper always lists every portfolio; this guards the invariant
+    # itself should the validator ever stop deriving it.
+    original = rp.validate_runtime_wrapper
+
+    def without_portfolio(data: object) -> dict:
+        managed = original(data)
+        managed["allowlist"]["write_paths"] = [
+            path for path in managed["allowlist"]["write_paths"] if path != "curriculum/guide.md"
+        ]
+        return managed
+
+    monkeypatch.setattr(rp, "validate_runtime_wrapper", without_portfolio)
+    guide = managed_repo["repo"] / "curriculum" / "guide.md"
+    after = _replace_slot(guide.read_text(encoding="utf-8"), SLOT, SLOT_STATE + "- Existing\n- Added\n")
+    with pytest.raises(rp.ResourcePlanningError, match="outside the materialized write ceiling"):
+        _slot_edit(managed_repo, after)
+
+
+def test_light_slot_edit_cli_round_trip(managed_repo: dict[str, object], tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo = managed_repo["repo"]
+    guide = repo / "curriculum" / "guide.md"
+    after_file = tmp_path / "after.md"
+    after_file.write_text(
+        _replace_slot(guide.read_text(encoding="utf-8"), SLOT, SLOT_STATE + "- Existing\n- CLI resource\n"),
+        encoding="utf-8",
+    )
+    base = [
+        "slot-edit",
+        "--repo", str(repo),
+        "--context", managed_repo["context"],
+        "--path", "curriculum/guide.md",
+        "--slot", SLOT,
+        "--action", "add",
+        "--after-file", str(after_file),
+    ]
+    assert rp.main(base) == 0
+    preview = json.loads(capsys.readouterr().out)["data"]
+    assert preview["applied"] is False
+
+    assert rp.main([*base, "--apply", "--before-sha256", preview["before_sha256"]]) == 0
+    applied = json.loads(capsys.readouterr().out)["data"]
+    assert applied["applied"] is True
+    assert "- CLI resource" in guide.read_text(encoding="utf-8")

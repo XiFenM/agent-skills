@@ -5,36 +5,39 @@ description: 研究、刷新与治理学习或工作资料组合，支持证据�
 
 # Resource Planning
 
-## 首次启用时提示用户说明
+## 首次启用
 
-在当前对话第一次启用本 Skill 时，用一条简短、非阻塞且不带独立标题或卡片的提示建议用户先浏览本
-Skill 的 `docs/user-guides/resource-planning.md` 和组合指南 `docs/learning-skills-user-guide.md`；说明它们
-介绍交互流程、用户需要参与的环节和授权边界。
+当前对话第一次启用本 Skill 时，处理完请求后用一句话附上本 Skill 说明和组合指南的链接：依次在本 Skill
+目录的上两级目录、工作区仓库根、仓库根下的 `.agent-skills` 查找 `docs/user-guides/resource-planning.md`
+与 `docs/learning-skills-user-guide.md`，找到就给绝对路径链接，否则给[公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/resource-planning.md)与[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+不阻塞、不求确认、同一对话不重复；多个学习 Skill 同时首次启用时合并成一句。
 
-定位本地文档时，只按顺序检查三个候选根：当前 `SKILL.md` 所在 Skill 目录的上两级目录、当前工作区
-仓库根、当前工作区仓库根下的 `.agent-skills`。把实际存在的文件解析为绝对路径并提供可点击链接，不
-搜索其他目录。没有本地文件时，改为提供[本 Skill 公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/resource-planning.md)
-和[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
-
-用户没有要求先暂停阅读时继续处理当前请求；不要求用户确认，不在同一对话重复提示，也不创建文件
-记录是否已经提示。同一对话已经提供组合指南时只补本 Skill 说明；同一回复首次启用多个学习 Skill 时
-合并为一条提示，并且只列一次组合指南。
+## 选择模式
 
 在开始时明确选择一种模式；不自动串联模式：
 
 - `research`：围绕当前问题搜索、比较和推荐。默认只在对话中预览；只有用户当次明确要求保存，才准备独立 brief。保存的 brief 不进入 registry。
+- `adopt`（轻量采用）：用户明确要求把一两项已经研究过的资料加入或标注到某个模块学习指引的具体 slot，且不需要 registry 跟踪时使用。只改这一个 slot，不读写 registry、报告或 cursor；见下方"轻量采用"。
 - `refresh`：扫描配置的 source/query 覆盖区间，登记资源、证据、候选、逐项 coverage/cursor，并创建不可变报告；绝不修改稳定资源组合。
 - `review`：只评审已登记且适合评审的候选。允许重新打开已登记的一手来源做最小定向复核，但禁止广泛发现；意外发现的新资料只能留作后续 observation。
 
-若模式不明确，先用一句话确认。日历提醒、报告命名、bootstrap 窗口和决策数量都属于消费配置，不作为中央前置条件。
+若模式不明确，先用一句话确认。批量或周期性的资料治理、替换或退役已由 registry 跟踪的条目，走 `refresh` 与 `review`；日常单项增补优先用 `adopt`。日历提醒、报告命名、bootstrap 窗口和决策数量都属于消费配置，不作为中央前置条件。
+
+## 轻量采用
+
+1. 先完成与资料相称的核验：身份与版本、至少一个一手锚点、与目标模块的相关性和主要代价；把结论与来源在对话中说明。
+2. 写出只改动目标 slot 的完整学习指引文本（保留 slot 外所有字节和 slot 内的 `resource-state` 标记），调用 `scripts/resource_planning.py slot-edit` 预览。工具只接受模块已允许的 `add` 或 `annotate`，并拒绝 slot 外改动、学习状态变化或存在未完成事务日志的情况。
+3. 向用户展示 diff；用户确认后，用预览返回的 `before_sha256` 加 `--apply` 写入。文件在预览后发生变化时重新预览。
+4. 报告写入结果，并说明 registry 未更新：该条目之后若需要纳入周期治理，由 `refresh` 登记。
 
 ## 按需读取
 
 - 普通 `research`：读取 [evidence-and-ranking.md](references/evidence-and-ranking.md)。需要登记身份、版本或关系时，再读取 [resource-model.md](references/resource-model.md)。
+- `adopt`：读取 [evidence-and-ranking.md](references/evidence-and-ranking.md) 完成核验；写入按上方"轻量采用"执行。
 - `refresh` 或 `review`：读取 [resource-model.md](references/resource-model.md)、[evidence-and-ranking.md](references/evidence-and-ranking.md) 和 [registry-and-publishing.md](references/registry-and-publishing.md)。
-- 任何 registry、报告、brief、portfolio 或 progress 写入前：必须读取 [registry-and-publishing.md](references/registry-and-publishing.md)。
+- 任何 registry、报告或 brief 写入前，以及 `review` 写入 portfolio 或 progress 前：必须读取 [registry-and-publishing.md](references/registry-and-publishing.md)。
 
-## 公共流程
+## research、refresh 与 review 的流程
 
 1. 明确研究问题、范围、截止点和模式。只启用仍有效且适用于本次范围的 overlay，并在结果中列出它们。
 2. 由 Agent 使用适合的搜索与阅读工具收集证据。不要把搜索摘要、排行榜、star 数或“官方”标签当作已核验结论。
@@ -54,6 +57,7 @@ Skill 的 `docs/user-guides/resource-planning.md` 和组合指南 `docs/learning
 - 每次 `refresh` 都逐项列出配置中的全部 source/query；未选或禁用项显式记为 `skipped`，不能靠省略隐藏失败。
 - 历史报告不可回写。不要制造 Changelog、月评日志或通用进度投影；只写配置和精确预览声明的必要目标。
 - 课程与进度 adapter 只允许修改 decision unit 所绑定的同 module、action 与 `target_slot`。消费文档必须预置中央固定的 `resource-slot` 标记；`add` 也不例外。缺少标记时只报告阻塞并保留零写预览，不猜插入位置。
+- `adopt` 只通过 `slot-edit` 写入单个 slot，不写 registry、报告、cursor 或 progress；替换或退役 registry 已跟踪的条目不走 `adopt`，走 `review`。
 - 不手写稳定 ID、状态投影、cursor merge、digest 或多文件事务；使用确定性工具。不要使用或发明 `--yes`、`--force`、跳过 CAS 等绕过方式。
 - 恢复仅按 journal 中可证明的 before/after 状态机械完成或回滚。遇到第三态目标或 journal 篡改时停止并报告人工冲突。
 

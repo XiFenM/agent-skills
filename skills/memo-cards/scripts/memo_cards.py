@@ -3319,7 +3319,7 @@ def _prepare_plan(
 
     included_candidates: list[dict[str, Any]] = []
     cross_duplicates: list[dict[str, Any]] = []
-    eligible_new_b: list[dict[str, Any]] = []
+    eligible_new: list[dict[str, Any]] = []
     eligible_other: list[dict[str, Any]] = []
     for card in cards:
         reasons = base_reasons[card["logical_id"]] + dependency_reasons.get(
@@ -3351,31 +3351,28 @@ def _prepare_plan(
             card["logical_id"] not in inventory_cards
             and card["logical_id"] not in current_cards
         )
-        if card["lifecycle"] == "active" and card["quality"] == "B" and is_new:
-            eligible_new_b.append(card)
+        if card["lifecycle"] == "active" and is_new:
+            eligible_new.append(card)
         else:
             eligible_other.append(card)
 
+    # The soft target bounds the attention load of every new active card: A
+    # cards fill the batch first, then B cards, each in the agent's rank order.
+    # Cards beyond the target are deferred and shown, never silently dropped.
     output = next(record for record in context["output_collections"] if record["id"] == request["output_collection"])
+    quality_order = {"A": 0, "B": 1, "C": 2}
+    ordered_new = sorted(
+        eligible_new,
+        key=lambda item: (quality_order[item["quality"]], item["rank"], item["logical_id"]),
+    )
     included_candidates.extend(eligible_other)
     if request["selection"] == "complete" or "soft_target" not in output:
-        included_candidates.extend(eligible_new_b)
+        included_candidates.extend(ordered_new)
     else:
-        maximum = output["soft_target"]["maximum"]
-        new_a_count = sum(
-            1
-            for card in eligible_other
-            if card["quality"] == "A"
-            and card["lifecycle"] == "active"
-            and card["logical_id"] not in inventory_cards
-            and card["logical_id"] not in current_cards
-        )
-        slots = max(0, maximum - new_a_count)
-        ordered_b = sorted(eligible_new_b, key=lambda item: (item["rank"], item["logical_id"]))
-        included_candidates.extend(ordered_b[:slots])
+        included_candidates.extend(ordered_new[: output["soft_target"]["maximum"]])
 
     eligible_by_id = {
-        card["logical_id"]: card for card in eligible_other + eligible_new_b
+        card["logical_id"]: card for card in eligible_other + eligible_new
     }
     selected_by_id = {card["logical_id"]: card for card in included_candidates}
     changed = True
@@ -3402,7 +3399,7 @@ def _prepare_plan(
     selected_ids = set(selected_by_id)
     deferred = [
         _card_summary(card, reasons=["soft-target-attention-load"])
-        for card in sorted(eligible_new_b, key=lambda item: (item["rank"], item["logical_id"]))
+        for card in ordered_new
         if card["logical_id"] not in selected_ids
     ]
 

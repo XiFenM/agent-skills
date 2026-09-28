@@ -89,8 +89,11 @@ Agent 把语义判断写入 UTF-8 JSON，schema 保持 `memo-cards.request/v1`�
 }
 ```
 
-`selection=selected` 应用消费环境软目标，但永不截断 A 卡；`complete` 纳入全部合格 A／B 卡。`rank` 表示
-Agent 已完成的语义排序，数值越小越优先。
+`selection=selected` 应用消费环境软目标：新增 active 卡按等级（A 在 B 前）再按 `rank` 排序，超出上限的列为
+deferred；`complete` 纳入全部合格 A／B 卡。`rank` 表示 Agent 已完成的语义排序，数值越小越优先。
+
+request 文件保存在目标同目录的 `.requests/<目标文件名>.json`（不匹配输出 pattern，不进入 inventory），供之后的
+`verify` 与 API 上传复用；工具输出只在对话中展示，不另存为文件。
 
 事实范围只允许 `{"kind":"evergreen"}`，或至少提供 product 且带 version／commit 之一的 `snapshot`。
 原子卡不得声明依赖。机制卡若使用 `depends_on`，只能引用同 request 内 eligible、已核验且 active 的

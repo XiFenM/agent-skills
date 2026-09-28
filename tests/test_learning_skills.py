@@ -16,13 +16,13 @@ LEARNING_USER_GUIDES = {
 
 REFERENCE_FILES = {
     "article-artifacts.md",
-    "examples.md",
     "material-reading.md",
     "practice-review-mastery.md",
     "repository-adaptation.md",
     "source-authority.md",
     "state-records.md",
     "teaching-cycle.md",
+    "teaching-exemplars.md",
 }
 EXPECTED_GUIDE_FILES = {
     "SKILL.md",
@@ -33,6 +33,12 @@ EXPECTED_GUIDE_FILES = {
     "tests/test_material_reader.py",
     *(f"references/{name}" for name in REFERENCE_FILES),
 }
+
+# Size budgets keep the agent-facing text from growing by accretion. Raise them
+# only together with a deliberate removal elsewhere.
+GUIDE_MAIN_MAX_LINES = 170
+GUIDE_TOTAL_MAX_BYTES = 85_000
+FIRST_USE_SECTION_MAX_LINES = 8
 
 
 def _relative_files(root: Path) -> set[str]:
@@ -49,6 +55,26 @@ def _text_files(root: Path) -> list[Path]:
         for path in root.rglob("*")
         if path.is_file() and path.suffix in {".md", ".py", ".yaml"}
     ]
+
+
+def _h2_headings(text: str) -> list[str]:
+    return re.findall(r"(?m)^## (.+?)\s*$", text)
+
+
+def _section(text: str, heading_prefix: str) -> str:
+    match = re.search(
+        rf"(?ms)^## {re.escape(heading_prefix)}[^\n]*\n(?P<body>.*?)(?=^## |\Z)",
+        text,
+    )
+    assert match is not None, heading_prefix
+    return match.group("body")
+
+
+def _index_of_heading(headings: list[str], prefix: str) -> int:
+    for index, heading in enumerate(headings):
+        if heading.startswith(prefix):
+            return index
+    raise AssertionError(f"missing heading starting with {prefix!r}: {headings}")
 
 
 def test_guide_learning_has_the_exact_progressive_disclosure_tree() -> None:
@@ -73,7 +99,13 @@ def test_guide_learning_frontmatter_and_main_are_compact() -> None:
     }
     assert frontmatter_keys == {"name", "description"}
     assert re.search(r"(?m)^name:\s*[\"']?guide-learning[\"']?\s*$", match.group("body"))
-    assert len(text.splitlines()) < 500
+    assert len(text.splitlines()) <= GUIDE_MAIN_MAX_LINES
+
+
+def test_guide_learning_stays_within_its_size_budget() -> None:
+    files = [GUIDE_ROOT / "SKILL.md", *sorted((GUIDE_ROOT / "references").glob("*.md"))]
+    total = sum(len(path.read_bytes()) for path in files)
+    assert total <= GUIDE_TOTAL_MAX_BYTES, total
 
 
 def test_guide_learning_links_every_one_level_reference() -> None:
@@ -104,57 +136,62 @@ def test_guide_learning_openai_metadata_routes_to_the_skill() -> None:
     assert "$guide-learning" in interface["default_prompt"]
 
 
-def test_guide_learning_keeps_validation_and_experiments_agent_owned_by_default() -> None:
+def test_guide_learning_puts_teaching_before_governance() -> None:
     main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
-    compact_main = re.sub(r"\s+", "", main)
-    teaching = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(encoding="utf-8")
-    practice = (GUIDE_ROOT / "references" / "practice-review-mastery.md").read_text(
+    headings = _h2_headings(main)
+
+    teaching = [
+        _index_of_heading(headings, prefix)
+        for prefix in ("讲解标准", "提问", "按学习者调节节奏", "一堂课的结构")
+    ]
+    governance = [
+        _index_of_heading(headings, prefix)
+        for prefix in ("选择运行范围", "状态", "授权", "正式练习与结课")
+    ]
+    assert teaching == sorted(teaching)
+    assert max(teaching) < min(governance)
+    assert headings[_index_of_heading(headings, "首次启用") + 1].startswith("讲解标准")
+
+    standard = _section(main, "讲解标准")
+    assert len(re.findall(r"(?m)^\d\. \*\*", standard)) == 5
+    assert "(references/teaching-exemplars.md)" in standard
+
+
+def test_guide_learning_references_keep_their_teaching_structure() -> None:
+    cycle = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(encoding="utf-8")
+    numbered = [
+        int(match)
+        for match in re.findall(r"(?m)^## (\d+)\. ", cycle)
+    ]
+    assert numbered == list(range(1, 11))
+
+    exemplars = (GUIDE_ROOT / "references" / "teaching-exemplars.md").read_text(
         encoding="utf-8"
     )
-    user_guide = (ROOT / "docs" / "user-guides" / "guide-learning.md").read_text(encoding="utf-8")
-
-    assert "代码练习默认采用测试驱动" in main
-    assert "由Agent主导实验方法与harness" in compact_main
-    assert "不要要求学习者决定 warm-up" in teaching
-    assert "不要把“学习者写测试”" in practice
-    assert "Agent 设计并维护实验方法与 harness" in practice
-    assert all(term in practice for term in ("支持", "否定", "证据不足"))
-    assert "只有实验设计本身属于学习目标时" in user_guide
+    exemplar_headings = _h2_headings(exemplars)
+    assert sum(heading.startswith("示例") for heading in exemplar_headings) >= 2
+    assert any(heading.startswith("写法对照") for heading in exemplar_headings)
+    assert exemplars.count("### 检查题") >= 2
 
 
-def test_guide_learning_orients_new_structured_lessons_before_local_work() -> None:
+def test_guide_learning_keeps_core_behavior_anchors() -> None:
     main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
-    teaching = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(
+    teaching = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(encoding="utf-8")
+    practice = (GUIDE_ROOT / "references" / "practice-review-mastery.md").read_text(
         encoding="utf-8"
     )
     user_guide = (ROOT / "docs" / "user-guides" / "guide-learning.md").read_text(
         encoding="utf-8"
     )
 
-    main_cycle = main.split("## 运行教学循环", 1)[1].split("\n## ", 1)[0]
-    assert all(
-        term in main_cycle
-        for term in ("背景", "能力", "现有方案", "核心矛盾", "目标", "路线")
-    )
-    assert "在公式、API" in main_cycle
-    assert "之前" in main_cycle
-    assert "不重复完整导入" in main_cycle
-    assert "一次答疑、窄问题和短主题" in main_cycle
-
-    arc = teaching.split("## Establish the learning arc", 1)[1].split("\n## ", 1)[0]
-    compact_arc = re.sub(r"\s+", "", arc)
-    assert all(term in arc for term in ("背景", "能力", "现有方案", "核心矛盾", "目标", "路线"))
-    assert "简短而连贯的课程叙事" in arc
-    assert "不要强行制造" in arc
-    assert "重复完整导入" in compact_arc
-    assert teaching.index("## Establish the learning arc") < teaching.index(
-        "## Check only necessary prerequisites"
-    )
-
-    compact_user_guide = re.sub(r"\s+", "", user_guide)
-    assert "建立课程全貌" in compact_user_guide
-    assert "然后才进入公式、API、代码细节或局部" in compact_user_guide
-    assert "恢复课只简短定位当前位置" in compact_user_guide
+    # Validation and experiment methods stay agent-owned by default.
+    assert "测试驱动" in main and "harness" in main
+    assert "warm-up" in teaching
+    assert all(term in practice for term in ("expected red", "我维护", "支持", "否定", "证据不足"))
+    assert "实验方法" in user_guide
+    # Practice contracts are versioned without hand-computed digests.
+    assert "digest" not in practice.lower()
+    assert "sha-256" not in practice.lower()
 
 
 def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> None:
@@ -166,7 +203,7 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
     for forbidden in ("PlanA", "JSONL", ".jsonl", "TODO"):
         assert forbidden not in combined
     slash_command = re.compile(
-        r"(?<![A-Za-z0-9_)])/(?!/)[A-Za-z0-9_\-\u3400-\u9fff]+"
+        r"(?<![A-Za-z0-9_)])/(?!/)[A-Za-z0-9_\-㐀-鿿]+"
     )
     # Slash commands are a user-facing instruction concern. Python shebangs and
     # filesystem handling are not commands being required of the learner.
@@ -182,29 +219,20 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
 def test_learning_skills_announce_user_guides_once_per_conversation() -> None:
     combined_guide = ROOT / "docs" / "learning-skills-user-guide.md"
     assert combined_guide.is_file()
+    public_root = "https://github.com/XiFenM/agent-skills/blob/main/docs/"
 
     for skill_name, guide_name in LEARNING_USER_GUIDES.items():
         skill = (ROOT / "skills" / skill_name / "SKILL.md").read_text(encoding="utf-8")
-        compact_skill = re.sub(r"\s+", "", skill)
         assert (ROOT / "docs" / "user-guides" / guide_name).is_file()
-        assert "## 首次启用时提示用户说明" in skill
-        assert "在当前对话第一次启用" in skill
-        assert f"docs/user-guides/{guide_name}" in skill
-        assert "docs/learning-skills-user-guide.md" in skill
-        public_guide = (
-            "https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/"
-            f"{guide_name}"
-        )
-        public_combined_guide = (
-            "https://github.com/XiFenM/agent-skills/blob/main/docs/"
-            "learning-skills-user-guide.md"
-        )
-        assert public_guide in skill
-        assert public_combined_guide in skill
-        assert "不要求用户确认" in skill
-        assert "不在同一对话重复提示" in skill
-        assert "不创建文件记录是否已经提示" in compact_skill
-        assert "同一回复首次启用多个学习 Skill 时" in skill
+
+        section = _section(skill, "首次启用")
+        compact = re.sub(r"\s+", "", section)
+        assert f"docs/user-guides/{guide_name}" in compact, skill_name
+        assert "docs/learning-skills-user-guide.md" in compact, skill_name
+        assert f"{public_root}user-guides/{guide_name}" in compact, skill_name
+        assert f"{public_root}learning-skills-user-guide.md" in compact, skill_name
+        non_empty = [line for line in section.splitlines() if line.strip()]
+        assert len(non_empty) <= FIRST_USE_SECTION_MAX_LINES, skill_name
 
 
 def test_retired_learning_skills_leave_no_runtime_entry_or_route() -> None:

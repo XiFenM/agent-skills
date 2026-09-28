@@ -7,20 +7,12 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
 
 把成熟学习证据转成可审阅的 Markji 暂存卡片。始终用自然语言理解用户请求；不要要求用户记忆脚本命令。
 
-## 首次启用时提示用户说明
+## 首次启用
 
-在当前对话第一次启用本 Skill 时，用一条简短、非阻塞且不带独立标题或卡片的提示建议用户先浏览本
-Skill 的 `docs/user-guides/memo-cards.md` 和组合指南 `docs/learning-skills-user-guide.md`；说明它们介绍
-交互流程、用户需要参与的环节和授权边界。
-
-定位本地文档时，只按顺序检查三个候选根：当前 `SKILL.md` 所在 Skill 目录的上两级目录、当前工作区
-仓库根、当前工作区仓库根下的 `.agent-skills`。把实际存在的文件解析为绝对路径并提供可点击链接，不
-搜索其他目录。没有本地文件时，改为提供[本 Skill 公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/memo-cards.md)
-和[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
-
-用户没有要求先暂停阅读时继续处理当前请求；不要求用户确认，不在同一对话重复提示，也不创建文件
-记录是否已经提示。同一对话已经提供组合指南时只补本 Skill 说明；同一回复首次启用多个学习 Skill 时
-合并为一条提示，并且只列一次组合指南。
+当前对话第一次启用本 Skill 时，处理完请求后用一句话附上本 Skill 说明和组合指南的链接：依次在本 Skill
+目录的上两级目录、工作区仓库根、仓库根下的 `.agent-skills` 查找 `docs/user-guides/memo-cards.md` 与
+`docs/learning-skills-user-guide.md`，找到就给绝对路径链接，否则给[公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/memo-cards.md)与[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+不阻塞、不求确认、同一对话不重复；多个学习 Skill 同时首次启用时合并成一句。
 
 ## 边界
 
@@ -33,7 +25,7 @@ Skill 的 `docs/user-guides/memo-cards.md` 和组合指南 `docs/learning-skills
 ## 工作流
 
 1. 明确素材边界、目标 collection、目标文件以及用户要精选还是完整转换。只读取受管 context 允许的来源。
-2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
+2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。制卡是为了理解与面试：优先"为什么这样设计""怎样取舍""怎样诊断"和口述类卡片；学习者已熟练或一眼即知的内容（首答即对且没有迁移价值的计数、查表、定义复述）评为 C，不制卡。A 级只给能防止高代价错误、或能回答一道可能面试题的卡，并为每张 A 卡写一句理由。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
 3. 由 Agent 完成语义工作：先确定单一回忆目标，再按[卡片内容与版式](references/card-content-layout.md)
    撰写可独立理解的题面与答案。聚焦的是知识点，不是字数：题面交代必要场景、对象、条件和作答目标，
    答案补足理解结论所需的解释与边界；不以极短题面或提示词替代完整表达。按单张、乱序复习的情境
@@ -43,9 +35,12 @@ Skill 的 `docs/user-guides/memo-cards.md` 和组合指南 `docs/learning-skills
    逻辑 ID、XLSX、hash 或 manifest。结论与边界标签可按卡片语言覆盖，但必须短促，并在同一
    collection 中保持一致。
 4. 按 [受管 Markdown 与 XLSX 合同](references/markdown-xlsx-staging.md) 形成严格 request JSON，调用 `scripts/memo_cards.py prepare`。工具负责模板、身份、inventory、软目标、XLSX、差异和预览摘要。
-5. 向用户展示 included 卡片的完整题面、答案与内容层级；可另附简短目录，但目录摘要不能代替完整题答。
-   列出 deferred、blocked、duplicate／conflict、完整 Markdown diff、逐 XLSX 的行级与哈希变化、风险原因
-   和 `preview_digest`；不能只报告卡数或样式名。
+   request 保存在目标同目录的 `.requests/<目标文件名>.json`，供之后的 verify 与 API 上传复用；prepare、
+   publish 和 verify 的输出只在对话中展示摘要，不另存为文件，除非用户要求。
+5. 向用户展示 included 卡片的完整题面、答案与内容层级，A 卡附上它的一句理由；可另附简短目录，但目录摘要
+   不能代替完整题答。列出 deferred（软目标以外的卡按等级和排序延后，用户可以要求完整转换）、blocked、
+   duplicate／conflict、完整 Markdown diff、逐 XLSX 的行级与哈希变化、风险原因和 `preview_digest`；不能只
+   报告卡数或样式名。
    依赖漂移触发的 `review` 会持续保留；复核完成后，只有在对应卡片提供可摘要的
    `review_resolution`、展示新 diff 并取得 `confirmed` 授权，才能恢复 `active`。模板及内容语法边界见
    [Markji 3.8 兼容面](references/markji-3.8-compatibility.md)。修改渲染器、核对原始示例或判断精简

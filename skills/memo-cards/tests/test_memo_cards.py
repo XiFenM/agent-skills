@@ -879,7 +879,7 @@ def test_cloze_is_optional_and_limited_to_three_words(tmp_path: Path) -> None:
         _prepare(environment, [bad])
 
 
-def test_soft_target_keeps_all_a_and_defers_only_new_b(tmp_path: Path) -> None:
+def test_soft_target_bounds_every_new_card_in_quality_then_rank_order(tmp_path: Path) -> None:
     environment = _environment(tmp_path, minimum=2, maximum=3)
     cards = [
         _card("a1", 1),
@@ -894,9 +894,25 @@ def test_soft_target_keeps_all_a_and_defers_only_new_b(tmp_path: Path) -> None:
     assert [item["key"] for item in result["deferred"]] == ["b2", "b3"]
     assert result["soft_target"]["is_hard_limit"] is False
 
+    # A cards are not exempt: surplus A cards are deferred and shown, not dropped.
     all_a = _prepare(environment, [_card(f"a{index}", index) for index in range(1, 6)])
-    assert len(all_a["included"]) == 5
-    assert all_a["soft_target"]["above_maximum"] is True
+    assert [item["key"] for item in all_a["included"]] == ["a1", "a2", "a3"]
+    assert [item["key"] for item in all_a["deferred"]] == ["a4", "a5"]
+    assert all(item["reasons"] == ["soft-target-attention-load"] for item in all_a["deferred"])
+    assert all_a["soft_target"]["above_maximum"] is False
+
+    # Quality fills first; a B card ranked above an A card still waits for it.
+    mixed = _prepare(
+        environment,
+        [
+            _card("b-first", 1, quality="B"),
+            _card("a-late1", 2),
+            _card("a-late2", 3),
+            _card("a-late3", 4),
+        ],
+    )
+    assert sorted(item["key"] for item in mixed["included"]) == ["a-late1", "a-late2", "a-late3"]
+    assert [item["key"] for item in mixed["deferred"]] == ["b-first"]
 
 
 def test_complete_conversion_ignores_soft_target_but_not_quality_gate(tmp_path: Path) -> None:

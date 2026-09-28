@@ -109,9 +109,16 @@ resource_planning.py verify  --repo ROOT --context WRAPPER --now ISO_TIME
 resource_planning.py prepare --repo ROOT --context WRAPPER --proposal PROPOSAL [--plan-out OUTSIDE_REPO]
 resource_planning.py publish --repo ROOT --context WRAPPER --plan PLAN --envelope ENVELOPE
 resource_planning.py recover --repo ROOT --context WRAPPER
+resource_planning.py slot-edit --repo ROOT --context WRAPPER --path PORTFOLIO --slot SLOT \
+  --action add|annotate --after-file AFTER [--apply --before-sha256 REVIEWED]
 ```
 
 CLI 始终输出稳定 JSON。`prepare` 默认把完整 plan 输出到 stdout；若使用 `--plan-out`，目标必须在消费仓库外。调用方不要自行修改 prepare 产出的 plan。
+
+`slot-edit` 是 `adopt` 轻量采用的唯一写入口：不带 `--apply` 时零写入，返回 diff 与 before／after 摘要；带
+`--apply` 时要求 `--before-sha256` 等于用户审阅预览时的值，再原子替换文件。它只接受配置中的模块 portfolio，
+只允许该模块 adapter 已允许的 `add` 或 `annotate`，要求 slot 外字节、slot 集合、adapter anchor 与 slot 内
+`resource-state` 完全不变，并在存在未完成 journal 时拒绝。它不读写 registry、报告、cursor 或 progress projection。
 
 ## 8. Proposal 与 execution envelope
 

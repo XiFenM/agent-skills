@@ -1,318 +1,128 @@
 # State records
 
-在创建、恢复、暂停、写入或关闭 Program、Lesson、Session event 或 Checkpoint 时读取本参考。把这里的
-对象视为逻辑职责，不要求固定目录或 Markdown 模板；先用 `repository-adaptation.md` 映射到仓库既有
-事实源。
+创建、恢复、暂停、写入或关闭学习状态时读取本参考。这里的对象是逻辑职责，不要求固定目录或模板；先用
+[repository-adaptation.md](repository-adaptation.md) 映射到仓库已有的文件。
 
 ## Contents
 
-1. [Keep state logical and singular](#keep-state-logical-and-singular)
-2. [Project the minimum opening](#project-the-minimum-opening)
-3. [Use the Program schema](#use-the-program-schema)
-4. [Use the Lesson schema](#use-the-lesson-schema)
-5. [Use the Session event schema](#use-the-session-event-schema)
-6. [Use the Checkpoint schema](#use-the-checkpoint-schema)
-7. [Enforce relations and invariants](#enforce-relations-and-invariants)
-8. [Write only semantic transitions](#write-only-semantic-transitions)
-9. [Pause, resume, and close](#pause-resume-and-close)
-10. [Handle temporary programs](#handle-temporary-programs)
+1. [三个对象，各管一件事](#1-三个对象各管一件事)
+2. [开场只展示必要信息](#2-开场只展示必要信息)
+3. [计划](#3-计划)
+4. [课程账本](#4-课程账本)
+5. [断点](#5-断点)
+6. [何时写入](#6-何时写入)
+7. [暂停、恢复与结课](#7-暂停恢复与结课)
+8. [临时专项](#8-临时专项)
+9. [边界速查](#9-边界速查)
 
-## Keep state logical and singular
+## 1. 三个对象，各管一件事
 
-分开四种职责，即使它们物理上共用一个文件：
+| 对象 | 负责 | 不负责 |
+| --- | --- | --- |
+| 计划（Program） | 长期目标、范围、排除项、候选课程及顺序 | 当前是哪一课、课程证据、会话历史 |
+| 课程账本（Lesson） | 本课目标、来源与版本、阶段事件、练习约定、问题、证据、结课结论 | 教学正文、逐题问答、恢复游标 |
+| 断点（Checkpoint） | 唯一的当前位置、下一步动作、前进门槛、返回点 | 历史、证据明细、预算 |
 
-- **Program control plane**：保存长期范围、候选 Lesson、已授权 Lesson 和条件性的前台指针。
-- **Lesson evidence ledger**：保存目标、来源、阶段、练习契约、finding、evidence 和 final mastery。
-- **Session event**：保存一次具有实质增量的会话片段。
-- **Checkpoint**：保存唯一、可覆盖的精确恢复游标。
+- 一个物理文件可以承载多个对象（用稳定的小节区分），也可以分文件保存；同一事实只能有一个活动来源，其他
+  位置只链接。
+- "当前前台是哪一课"只由断点表达。计划和账本不重复记录"当前课""未启动""不会自动推进"等状态，也不在
+  多处重复声明同一条边界。
+- 课程是否已授权，看它是否已有账本；已结课与否，看账本的阶段。计划只列候选。
+- 文章、学习记录、卡片、原始对话和派生汇总都不是状态来源。
+- 独立 Session 没有 Lesson 时，只保存会话事件（放在仓库已有的主题记录处）和必要的断点。
 
-不要让 Program 复制 Lesson evidence，不要让 Lesson 复制教学正文或会话游标，不要让 event 复制 Lesson
-状态，不要让 Checkpoint 累积历史。派生 dashboard、文章、学习日志、卡片和原始对话不是状态事实源。
+## 2. 开场只展示必要信息
 
-允许一个物理文件承载多个逻辑对象，也允许分文件保存；同一语义只能有一个活动事实源。不要为通用
-schema 强制创建档案树。
+- **一次答疑**：直接回答，零写入。
+- **独立 Session**：主题、当前位置、一个首要动作；首次需要持久化时，说明将写到哪里。
+- **首次建立计划**：长期目标、范围与排除项、候选课程、将使用的路径和下一项需要授权的动作；不虚构当前课。
+- **开始一课**：能力标题和 2–4 个目标、每个目标所需的证据类型、主要来源与版本、账本和断点的路径、第一个
+  动作；一句话说明结课需要确认、下一课不会自动开始。
 
-受管 context 的 `record_mappings` 只提供这些逻辑对象的候选物理 locator。它不提供对象内容，也不改变
-本参考的字段、关系或写入事务。映射到同一文件时使用各自稳定 section；映射与实际职责不符时以仓库
-指令和实际记录为准并先消除歧义。`allowlist.write_paths` 不构成创建、修改或关闭授权。
+开场信息只是控制面，一两行即可，不能代替课程导入。练习的测试、rubric 和文件边界不在开课时预先展示，
+等综合验收确认需要练习时再按 [practice-review-mastery.md](practice-review-mastery.md) 展示。
 
-确实需要独立 Lesson 文件时，把约 50–80 行作为非约束性精简目标；只在练习、实验、Review 或 mastery
-实际发生时增加条件片段，不为凑齐模板预建空章节。
+## 3. 计划
 
-## Project the minimum opening
+必填：ID、标题、状态（planned、active、frozen 或 closed）、长期目标、范围与排除项、候选课程（ID、标题、顺序）。
 
-开场投影只呈现既有逻辑状态，不生成第二份“开课契约”。
+可选：预算来源的引用（只引用，不复制数字）；用户授予的"按既定顺序连续推进"及其范围——它不包括可选内容、
+范围扩大、新依赖、新写入权限，也不跳过每课的结课确认；临时专项的父计划与返回点。
 
-### 一次答疑
+候选课程不是已授权课程，也不构成执行许可。计划只在范围、候选列表或状态变化时写入。
 
-直接回答。不要展示固定卡片、创建 ID、读取无关长期状态或写入文件。只有来源、版本、假设或回答边界
-会改变答案时，才用一句话说明。
+## 4. 课程账本
 
-### 独立 Session
+必填：ID、能力标题、所属计划、来源（位置、角色、版本锚点、使用范围）、2–4 个目标及各自所需的证据类型、
+阶段（teaching、synthesis、practice、review、gate 或 complete）。
 
-开始或恢复时只展示：
+按实际发生追加：
 
-- 当前上下文或短主题；
-- 精确语义位置；
-- 恰好一个首动作。
+- **阶段事件**：日期、覆盖范围、证明了什么（一两句）、证据链接；每个有实质进展的会话段最多一条，结课或
+  练习关闭时在同一条事件上标注，不另建一条。
+- **练习约定**与需要跟踪的**问题**（见 [practice-review-mastery.md](practice-review-mastery.md)）。
+- **帮助影响**：透露程度、影响范围、Agent 是否写了学习者的核心工件。
+- **结课结论**：用户确认后写入。
 
-仅在存在时展示阻塞、前进门槛、drift 分支，以及首次建立的 Agent-owned 状态或基础记录路径。不要因为
-跨会话恢复就自动创建 Lesson。
+不写：教学正文、逐题问答、完整命令输出、原始对话、按轮复制的 Review 表、重复的边界声明、`paused` 状态。
+账本以简洁为目标；详细的学习过程交给按需生成的学习记录，账本只链接。
 
-### 只创建 Program
+## 5. 断点
 
-首次只授权 Program 时展示：
+只在存在恢复任务时保存，覆盖更新，不追加历史：
 
-- 长期目标和范围；
-- 明确排除项；
-- 候选 Lesson 的有序短描述；
-- Agent-owned Program 路径；
-- 实际需要恢复任务时的 Checkpoint 路径；
-- 下一项授权动作。
+- 前台上下文：计划、课程、临时专项或独立主题的引用；
+- 精确的语义位置：来源节点、学习阶段或 Review 位置；
+- 恰好一个下一步动作（展示给学习者的当前动作可以有多个，断点只指向第一个可执行的）；
+- 前进门槛：继续之前必须满足什么；
+- 可选：阻塞项引用、最近一条有效证据的链接、临时专项的返回点、`as_of`（只随语义变化更新）。
 
-不要虚构 active Lesson。候选 Lesson 不是已授权 Lesson，也不构成执行许可。
+## 6. 何时写入
 
-### 激活 Lesson
+默认只读。只在以下耐久事实变化时写入：
 
-展示：
-
-- 能力标题和 2–4 个目标；
-- 每个目标的 required mastery 维度；
-- teaching spine、事实权威和版本范围；
-- 本课专属 evidence 目标；
-- Agent-owned Lesson、event 和必要 Checkpoint 路径；
-- 恰好一个首动作；
-- 关闭本课需要确认，下一 Lesson 不自动启动。
-
-用户一次请求同时明确授权 Program 与 Lesson 时可以合并投影。目标、范围、mastery、required gate、
-路径或所有权存在重大歧义时先确认；否则足够具体的自然语言请求可以直接构成授权。
-
-正式练习的测试、rubric、fixture 和完整 ownership scope 不在开课时预加载。只有综合验收确认需要练习
-时，才按 `practice-review-mastery.md` 展示并接受练习契约。
-
-## Use the Program schema
-
-使用以下最小逻辑形状：
-
-```yaml
-program:
-  id: <stable Program ID>
-  title: <human-readable title>
-  state: <planned | active | frozen | closed>
-  objective_scope:
-    objective: <long-term outcome>
-    included: [<short scope item>]
-    excluded: [<short non-goal>]
-  candidate_lessons:
-    - id: <candidate ID>
-      title: <short capability title>
-      order: <integer>
-  authorized_lesson_refs: [<zero or more real Lesson references>]
-  active_lesson_ref: <conditional>
-  suspended_lesson_ref: <conditional>
-  checkpoint_ref: <conditional>
-  budget_ref: <conditional unique external source>
-  continuous_progression: <conditional authorization boundary>
-  parent_program_ref: <temporary Program only>
-  return_ref: <temporary Program only>
-```
-
-必填：ID、标题、状态、目标范围、`candidate_lessons[]` 的有序短描述，以及可为空的
-`authorized_lesson_refs[]`。
-
-条件字段：
-
-- 有前台 Lesson 时使用 `active_lesson_ref`。
-- 冻结原 Lesson 时使用 `suspended_lesson_ref`，不要同时把它当作 active。
-- 存在恢复任务时使用 `checkpoint_ref`。
-- 已有预算时只保存 `budget_ref`；不要复制金额或时长。
-- 用户明确授予按既定顺序连续推进时保存 `continuous_progression` 的适用范围；它不包含 optional、范围
-  扩张、新依赖、新写入权限或跳过每课关闭确认。
-- 临时 Program 才使用 parent 和 return 引用。
-
-明确禁止：Lesson evidence、finding、精确游标、Session 历史、实际工时明细，以及把 candidate 写成
-已授权 Lesson。
-
-## Use the Lesson schema
-
-使用以下最小逻辑形状：
-
-```yaml
-lesson:
-  id: <stable Lesson ID>
-  title: <one independently assessable capability>
-  program_ref: <owning Program>
-  sources:
-    - locator: <source reference>
-      role: <source role>
-      version_anchor: <commit, tag, version, or date>
-      scope: <used portion>
-  objectives:
-    - id: <objective ID>
-      statement: <observable target>
-      mastery:
-        conceptual: <required | not-required>
-        practical: <required | not-required>
-        empirical: <required | not-required>
-  stage: <teaching | synthesis | practice | review | mastery-gate | complete>
-  evidence_targets: [<lesson-specific evidence goal>]
-  prerequisite_gaps: <conditional>
-  core_artifacts: <conditional>
-  accepted_practice: <conditional revision and digest reference>
-  findings: <conditional stable finding records or references>
-  material_assistance: <conditional affected-scope records>
-  event_refs: <conditional index>
-  final_mastery: <conditional after confirmed closure>
-  fallback_mental_model: <conditional 3–6 lines>
-```
-
-必填：ID、能力标题、Program 引用、带角色和版本范围的来源、2–4 个目标及其 required mastery 维度、
-当前 stage 和本课专属 evidence 目标。
-
-仅在实际发生时添加条件片段。只有没有文章或其他权威知识产物可以链接时，才保存 3–6 行、明确标为
-fallback 的简短心智模型。
-
-明确禁止：完整教学正文、逐题问答、完整命令输出、原始对话、暂停快照、逐轮 Review、重复 checklist、
-changelog 和 `paused` 状态。
-
-## Use the Session event schema
-
-每个具有实质增量的会话或暂停段最多追加一条 event：
-
-```yaml
-session_event:
-  id: <stable event ID>
-  date: <absolute date>
-  context:
-    lesson_ref: <when a Lesson exists>
-    topic: <short independent Session label when no Lesson exists>
-  covered_scope: <short source or capability span>
-  completed_actions: [<substantive action>]
-  evidence_refs: <conditional>
-  open_issues: <conditional>
-  confirmed_duration: <conditional, only user-provided or confirmed>
-  marker: <conditional closure | practice-closed>
-```
-
-`lesson_ref` 与独立 `topic` 选择一个。`marker` 只在同一 event 完成相应关闭事务时出现；不要为 closure
-额外再建一条 event。
-
-明确禁止：精确游标、完整会话摘要、逐轮问答、全部产物清单和 Lesson 状态副本。
-
-## Use the Checkpoint schema
-
-只在存在恢复任务时保存：
-
-```yaml
-checkpoint:
-  foreground_context: <Program, Lesson, temporary Program, or independent topic reference>
-  semantic_position: <exact source node, learning phase, or review location>
-  next_action: <exactly one executable action>
-  forward_gate: <what must be true before advancing>
-  blockers: <conditional short references>
-  latest_evidence_ref: <conditional, at most one latest useful anchor>
-  return_point: <temporary Program only>
-  as_of: <conditional, update only with semantic change>
-```
-
-覆盖更新 Checkpoint，不追加历史快照。`next_action` 恰好一个；即使 Review 向用户展示最多三个当前
-动作，Checkpoint 也只指向第一个可执行动作。
-
-明确禁止：完成内容长叙述、Session 历史、预算、cadence、隐私政策、finding 明细、多个下一动作和纯
-时间戳更新。
-
-## Enforce relations and invariants
-
-### Program and Lesson pointers
-
-- `candidate_lessons[]` 只保存候选 ID、标题和顺序；不创建 Lesson。
-- `authorized_lesson_refs[]` 只指向真实、已授权 Lesson。
-- 开放 Program 的 candidate 或 authorized 集合至少一个非空。
-- `active` Program 有前台 Lesson 时设置 `active_lesson_ref`；等待下一 Lesson 授权时可以为空。
-- `frozen` Program 将原引用放入 `suspended_lesson_ref` 并保留 Checkpoint 或 return capsule。
-- `planned` 与 `closed` Program 的 active 和 suspended 指针均为空。
-- 同一工作上下文只允许一个前台 active Lesson。
-
-### Checkpoint presence
-
-- 已有可恢复上下文时 `checkpoint_ref` 必填。
-- `planned` 且尚未开始，或 `closed` 且没有返回任务时，可以没有 Checkpoint。
-- Lesson 边界等待用户决定时，把唯一下一动作写为等待下一 Lesson 授权。
-- 真正终态不伪造下一动作；移除 Checkpoint 和引用。
-
-### Session and Lesson state
-
-- 暂停或结束 Session 不改变 Lesson 为 paused 或 complete。
-- 读完来源、完成文章或生成学习日志不构成 Lesson complete。
-- 独立 Session 可以保存 topic、event 和 Checkpoint，不自动升级为 Lesson。
-- 独立 Session 的练习契约、测试或 rubric 可以作为工件保存并由 Checkpoint 引用；它们不是新的状态层。
-
-## Write only semantic transitions
-
-默认保持只读。普通讲解、追问、理解检查、正确回答、关键节点推进和无 drift 恢复均不写入。
-
-只在以下耐久事实变化时按需同步授权状态：
-
-- 正式练习契约被接受；
+- 练习约定被接受或修订；
 - 学习者提交核心工件；
-- material assistance 改变独立 evidence 的有效范围；
-- 正式 Review 形成新的 durable finding；
-- 验证改变 finding、evidence 或 mastery 判断；
-- 跨过综合验收或进入 mastery gate；
-- 为跨会话恢复而改变唯一下一动作；
-- Session 暂停、计划内收工，或用户确认关闭 Lesson／Program。
+- 帮助改变了独立证据的有效范围；
+- Review 形成或关闭需要跟踪的问题；
+- 验证改变了证据或结课判断；
+- 跨过综合验收或进入结课；
+- 为跨会话恢复改变了下一步动作；
+- 暂停、计划内收工，或用户确认结课。
 
-应用 semantic diff：状态、证据和下一动作均未改变时不写；不要只更新时间戳。`as_of` 只随它所描述
-语义变化。学习时长只记录用户明确提供或确认的值；缺少时长不阻塞 event 或 Checkpoint。
+状态、证据和下一步都没变时不写；不只为了更新时间戳而写。实际学习时长只记录用户提供或确认的值，缺少时长
+不阻塞记录。新增路径、扩大目标或门槛、改变所有权、开始未授权的课、重开或关闭课程，先取得授权；已授权
+范围内的事件、问题和断点更新自动进行，不逐次展示 diff。
 
-新增路径、扩大目标、范围、required mastery 或 gate、改变所有权、启动未授权 Lesson、重开 complete
-Lesson、关闭 Lesson 或 Program，都先取得相应授权。已授权范围内的 Review、验证、event 和 Checkpoint
-更新可以自动执行，不逐次展示 diff。
+## 7. 暂停、恢复与结课
 
-## Pause, resume, and close
+- **暂停或收工**：有实质进展时追加一条事件；仍有恢复任务时覆盖断点；什么都没变时零写入。不把课程标为
+  paused 或 complete，不自动生成文章、学习记录、卡片或原始对话。
+- **恢复**：读取断点及其引用，做低成本的漂移核验（来源版本、范围、工件）。无漂移时直接执行下一步动作，
+  零写入，不追加"已恢复"事件；漂移会改变范围、责任或下一步时，给出不超过三个分支（例如沿用旧版本、迁移到
+  新版本、冻结当前课另做兼容性调查）由用户选择，选择前不改状态。
+- **结课**：先按 [practice-review-mastery.md](practice-review-mastery.md) 展示证据。用户确认后，一次写入结课
+  结论和阶段 complete，在当段事件上标注结课；断点移到课程边界，下一步动作写为"等待下一课授权"；没有后续
+  任务时删除断点，不伪造下一步。
+- **结课之后**：对已结课的课做补充答疑默认零写入；只有新证据推翻结论或用户扩大目标时，才提议重开或另建课程。
+- **独立练习关闭**：保存会话级证据和练习工件的引用，在当段事件上标注练习关闭；不写 Lesson 结论。需要长期
+  结论时，先授权建立或并入 Lesson。
 
-### Pause or planned stop
+## 8. 临时专项
 
-把暂停与计划内收工视为一个最小事务：
+只有旁支需要跨会话推进、会形成独立目标或产物，或者会替换原来的下一步动作时，才建立临时专项：原课程保持
+原状态，断点记录专项的位置和原返回点。专项结束时展示结果和返回点，由用户选择返回、延长或转向；不自动跳回，
+也不自动开始新课。返回时恢复原下一步动作，并对期间的漂移做最小核验。单轮的旁支答疑不建专项。
 
-1. 有实质进展时追加当段唯一 Session event。
-2. 仍有恢复任务时覆盖 Checkpoint；真正终态时移除它。
-3. 没有进展、evidence 或游标变化时零写。
+## 9. 边界速查
 
-不要自动生成文章、结构化学习日志、原始对话或卡片。不要把 Lesson 改为 paused 或 complete。
-
-### Resume
-
-读取 Program、Lesson 和 Checkpoint 的实际映射，执行低成本 drift 核验。没有 drift 时直接执行唯一下一
-动作且零写。drift 会改变范围、责任、来源版本或下一动作时，向用户展示最小分支并等待选择。
-
-### Close a Lesson
-
-先展示每项目标、required 维度、最小 evidence、required finding 和 nonblocking 余项。用户确认后：
-
-1. 一次写入 `final_mastery` 与 `stage: complete`；
-2. 把当段唯一 Session event 标为 `closure`；
-3. 把 Checkpoint 移到 Lesson 边界，等待下一 Lesson 授权；
-4. 没有后续恢复任务时移除 Checkpoint。
-
-不要自动启动下一 Lesson。complete Lesson 的一次补充答疑默认零写；只有当轮本就是独立 Session 时才
-追加补充 event。只有新 evidence 推翻 mastery 或目标扩大时，才提议重开或另建 Lesson。
-
-### Close independent practice
-
-保存会话级 evidence、练习工件引用，并把当段唯一 event 标为 `practice-closed`。不要写 final Lesson
-mastery。需要长期 mastery 时先授权创建或并入 Lesson。
-
-## Handle temporary programs
-
-只有旁支满足至少一个条件时才建立临时 Program：
-
-- 需要跨会话推进；
-- 形成独立目标或产物；
-- 会替换原唯一下一动作。
-
-启动时冻结原 Program、Lesson 和 Checkpoint，保存 parent、return point 和最小 return capsule。单轮旁支
-答疑不创建临时状态。
-
-临时 Program 结束时展示专项结果和原返回点，让用户选择返回、延长或转向。不要自动跳回或启动新的
-Lesson。返回时恢复原唯一下一动作，并对期间 drift 做最小核验。
+| 情况 | 做法 |
+| --- | --- |
+| 用户只问一个概念 | 一次答疑：直接讲清机制和理由，可附一道检查题；零写入 |
+| 想今天集中学一个主题，可能明天继续 | 独立 Session：只存事件和断点，不建 Lesson |
+| 规划多课课程，但还没选第一课 | 只建计划和候选课程；下一步是请用户选择第一课，不自动开始候选第一项 |
+| 概念课综合验收已充分，实践与实证都不需要 | 跳过练习，直接结课确认 |
+| 配置映射了断点文件，但用户只是一次答疑 | 映射不是授权：零写入；若仓库已有另一个唯一游标，保持只读并请用户选择 |
+| 已接受的约定中某个验收项有歧义 | 标为约定澄清，版本号加一，展示变化并重新接受；不记为学习者的问题 |
+| 学习者求助后得到了核心分解和伪代码 | 记录透露程度与影响范围；用表面不同、原理相同的新变式恢复证据 |
+| 教程与固定版本的源码不一致 | 讲解顺序沿用教程，事实以固定版本源码为准并注明版本；阻塞时做最小核验，不静默更换教程 |

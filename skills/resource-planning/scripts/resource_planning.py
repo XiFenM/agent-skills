@@ -3250,6 +3250,122 @@ def recover_transaction(repo: Path | str, wrapper: Any) -> dict[str, Any]:
     return {"status": "rolled-back", "txn_id": journal["txn_id"]}
 
 
+LIGHT_SLOT_ACTIONS = {"add", "annotate"}
+
+
+def edit_portfolio_slot(
+    repo: Path | str,
+    wrapper: Any,
+    context_path: str,
+    *,
+    path: str,
+    slot: str,
+    action: str,
+    after: bytes,
+    apply: bool = False,
+    before_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Preview, and optionally apply, a light edit of exactly one portfolio slot.
+
+    The light path never reads or writes the registry, reports, cursors, or
+    progress projections.  It refuses while a transaction journal exists,
+    requires every byte outside the named slot and every resource-state marker
+    inside it to stay identical, and applies only against the before digest the
+    user reviewed.
+    """
+
+    root = _absolute(Path(repo))
+    managed = validate_runtime_wrapper(wrapper)
+    _validate_source_binding(root, managed)
+    context_relative = _safe_relative(context_path, "context_path")
+    context_file = _repo_path(root, context_relative, label="managed context", leaf_kind="file", allow_missing_leaf=False)
+    try:
+        disk_wrapper = json.loads(_read_bytes(context_file, "managed context").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        _fail("malformed", "managed context file is invalid", reason=str(exc))
+    if disk_wrapper != wrapper:
+        _fail("conflict", "provided managed context differs from context_path")
+    storage = managed["context"]["configuration"]["storage"]
+    journal = _repo_path(root, storage["journal_path"], label="transaction journal", leaf_kind="file", allow_missing_leaf=True)
+    if _path_present(journal):
+        _fail("conflict", "an unfinished transaction journal exists; recover before any new operation", path=storage["journal_path"])
+
+    relative = _safe_relative(path, "--path")
+    slot_id = _identifier(slot, "--slot")
+    if action not in LIGHT_SLOT_ACTIONS:
+        _fail("usage", "light slot edits support only add or annotate", action=action)
+    modules, _sources, _queries, _overlays = _configuration_indexes(managed)
+    module = next((item for item in modules.values() if item["portfolio_path"] == relative), None)
+    if module is None:
+        _fail("safety", "--path must be a configured module portfolio", path=relative)
+    if not any(
+        relative == allowed or _is_under(relative, allowed)
+        for allowed in managed["allowlist"]["write_paths"]
+    ):
+        _fail("safety", "--path is outside the materialized write ceiling", path=relative)
+    adapter = module["adapter"]
+    if adapter["adapter_id"] not in {"markdown-curriculum", "problem-curriculum"}:
+        _fail("integrity", "module adapter has no central scoped-diff implementation", adapter_id=adapter["adapter_id"])
+    if action not in adapter["allowed_actions"]:
+        _fail("safety", "module adapter does not allow this action", module_id=module["module_id"], action=action)
+
+    target = _repo_path(root, relative, label="portfolio", leaf_kind="file", allow_missing_leaf=False)
+    before = _read_bytes(target, "portfolio")
+    current_sha = _sha256(before)
+    try:
+        before_text = before.decode("utf-8")
+        after_text = after.decode("utf-8")
+    except UnicodeDecodeError:
+        _fail("malformed", "portfolio edits must be UTF-8", path=relative)
+    for field in ("heading", "anchor"):
+        required_text = adapter.get(field)
+        if required_text and (required_text not in before_text or required_text not in after_text):
+            _fail("integrity", f"light slot edit does not preserve its configured adapter {field}", value=required_text)
+    before_skeleton, before_slots = _parse_resource_slots(before_text, f"{relative} before")
+    after_skeleton, after_slots = _parse_resource_slots(after_text, f"{relative} after")
+    if before_skeleton != after_skeleton or set(before_slots) != set(after_slots):
+        _fail("integrity", "light slot edit changes content or slot markers outside the resource slot", path=relative)
+    if slot_id not in before_slots:
+        _fail("conflict", "resource slot is absent from the portfolio", path=relative, slot=slot_id)
+    changed = sorted(name for name in before_slots if before_slots[name] != after_slots[name])
+    if changed and changed != [slot_id]:
+        _fail("integrity", "light slot edit changed a different resource slot", expected=[slot_id], actual=changed)
+    before_state = _resource_state(before_slots[slot_id], f"{relative} slot {slot_id} before")
+    after_state = _resource_state(after_slots[slot_id], f"{relative} slot {slot_id} after")
+    if before_state != after_state:
+        _fail("integrity", "light slot edit changes protected learning state", path=relative, slot=slot_id)
+
+    result: dict[str, Any] = {
+        "path": relative,
+        "module_id": module["module_id"],
+        "slot": slot_id,
+        "action": action,
+        "operation": "update" if changed else "no-op",
+        "before_sha256": current_sha,
+        "after_sha256": _sha256(after),
+        "diff": _unified_diff(relative, before, after),
+        "registry_updated": False,
+        "applied": False,
+    }
+    if not apply:
+        return result
+    if before_sha256 is None:
+        _fail("usage", "--apply requires --before-sha256 from the reviewed preview")
+    if before_sha256 != current_sha:
+        _fail("conflict", "portfolio changed since the reviewed preview", expected=before_sha256, actual=current_sha)
+    if changed:
+        _atomic_replace(target, after, current_sha)
+        result["applied"] = True
+    return result
+
+
+def _read_external_bytes(raw: str, label: str) -> bytes:
+    path = _absolute(Path(raw))
+    if not _path_present(path) or _is_link_or_junction(path) or not path.is_file():
+        _fail("safety", f"{label} must be an existing regular file", path=os.fspath(path))
+    return _read_bytes(path, label)
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         _fail("usage", message)
@@ -3279,6 +3395,16 @@ def _parser() -> argparse.ArgumentParser:
     recover = subparsers.add_parser("recover", help="mechanically resolve an existing journal")
     recover.add_argument("--repo", required=True)
     recover.add_argument("--context", required=True)
+
+    slot_edit = subparsers.add_parser("slot-edit", help="preview or apply a light single-slot portfolio edit")
+    slot_edit.add_argument("--repo", required=True)
+    slot_edit.add_argument("--context", required=True)
+    slot_edit.add_argument("--path", required=True, help="configured module portfolio, repository-relative")
+    slot_edit.add_argument("--slot", required=True)
+    slot_edit.add_argument("--action", required=True, choices=sorted(LIGHT_SLOT_ACTIONS))
+    slot_edit.add_argument("--after-file", required=True, help="complete proposed portfolio text")
+    slot_edit.add_argument("--apply", action="store_true", help="write after the user confirmed the preview")
+    slot_edit.add_argument("--before-sha256", help="before digest from the reviewed preview")
     return parser
 
 
@@ -3352,6 +3478,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             plan = _read_external_json(arguments.plan, "plan")
             envelope = _read_external_json(arguments.envelope, "execution envelope")
             data = publish_plan(repo, wrapper, plan, envelope)
+        elif command == "slot-edit":
+            data = edit_portfolio_slot(
+                repo,
+                wrapper,
+                context_relative,
+                path=arguments.path,
+                slot=arguments.slot,
+                action=arguments.action,
+                after=_read_external_bytes(arguments.after_file, "--after-file"),
+                apply=arguments.apply,
+                before_sha256=arguments.before_sha256,
+            )
         else:
             data = recover_transaction(repo, wrapper)
         _emit({"schema_version": 1, "ok": True, "command": command, "data": data})

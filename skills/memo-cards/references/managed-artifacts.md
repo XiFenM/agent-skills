@@ -1,72 +1,45 @@
 # 受管产物、差异与发布合同
 
-## Artifact set 与 inventory
+发布、刷新、接管旧产物或处理发布失败时读取本参考。manifest 字段、锁和事务步骤等工具内部实现记录在开发者
+文档 `docs/dev/memo-cards-artifacts.md`，Agent 不需要手工执行它们。
 
-一个受管目标由一个 Markdown 主文件和零到多个同目录 XLSX sidecar 组成。Markdown frontmatter 使用
-JSON（YAML 1.2 子集），artifact v2 至少包含：
+## 产物与 inventory
 
-- Markji adapter 与模板 registry 版本；
-- 来源摘要、逐来源 SHA-256 与聚合 fingerprint；
-- 每张卡的完整身份、逻辑 ID、内容摘要、内容 SHA-256、模板版本、生命周期与依赖 hash；
-- 每个 XLSX 的确定性路径、模板、sheet、字段、行映射、字节数、表格摘要和文件 SHA-256；
-- 受管 Markdown 正文 SHA-256、整个正文＋sidecar manifest 的 artifact-set SHA-256；
-- 除自身以外完整 manifest payload 的 SHA-256。
+一个受管目标由一个 Markdown 主文件和零到多个同目录 XLSX 组成。Markdown frontmatter 保存工具生成的 manifest：
+来源、卡片身份与内容摘要、每个 XLSX 的行映射与哈希。身份和哈希不进入 XLSX 列；相同输入产生逐字节相同的
+产物。每张 active 卡恰好对应一个 XLSX 行，`review`／`archived` 卡不导出。
 
-身份和 hash 不进入 XLSX 列。manifest 不写生成时间；相同 context、来源、候选和模板必须产生逐字节
-相同的 Markdown 与 XLSX。每张 active 卡恰好映射到一个 sidecar 行；`review`／`archived` 不导出。
+inventory 由工具从受管 context 的 tracked 文件，以及授权输出 pattern 下已通过完整校验的 Markdown 中派生，
+用于跨文件去重；刚发布、尚未 Git add 的产物也会被识别。Agent 不手写 manifest、逻辑 ID 或哈希。
 
-inventory 从 materializer 展开的 concrete tracked files，以及已授权 output inventory pattern 下当前存在
-的 Markdown 候选中筛选主产物。后者覆盖“刚发布、尚未 Git add／materialize”的正常窗口；未跟踪候选
-只有通过完整 manifest／sidecar 校验才进入 inventory，任意未跟踪 Markdown 被忽略。XLSX 可以同时作为
-tracked collection member 出现在 allowlist，但其所有权和完整性只由 v2 Markdown manifest 确定。v1
-manifest 继续参与卡片去重并标记 `migration_required`；manifest payload 漂移不参与 canonical 去重。
+## 预览与授权等级
 
-## 预览与风险
+`prepare` 零写入，展示 included、deferred、blocked、跨文件重复与依赖复核，卡片的增删改，完整 Markdown diff，
+每个文件的操作与哈希变化，每个 XLSX 的行级变化，以及所需授权等级和 `preview_digest`。
 
-`prepare` 保持零写入并展示：
+清晰来源、新目标且没有同名 sidecar 的明确保存请求可以使用 `request` 授权。下列情形必须在用户看到精确变化后
+使用 `confirmed`：
 
-- included、soft-deferred、blocked、跨文件 duplicate 与 dependent review；
-- 卡片 add／change／remove；
-- 完整 Markdown unified diff；
-- artifact set 内每个文件的 role、ownership、create／update／remove／no-op、当前／候选 SHA-256 与大小；
-- 每个 XLSX 的模板、前后行数，以及逻辑卡行的 add／change／remove；
-- 所需授权等级和绑定完整文件集的 `preview_digest`。
-
-二进制 XLSX 不进入 JSON 或 diff 的 base64。清晰来源、新目标且没有现有同名 sidecar 的明确保存请求可
-使用 `request` 授权。下列情形必须在看到精确变化后使用 `confirmed`：
-
-- legacy adoption、v1→v2 迁移、人工 Markdown 漂移；
+- legacy 接管、v1→v2 迁移、人工 Markdown 漂移；
 - 未受管同名 XLSX 接管、受管 sidecar 缺失／漂移／删除；
 - 来源集合或 fingerprint 变化；
 - template registry 或单卡模板升级；
 - 依赖漂移、跨文件 dependent review 或 `review_resolution`；
 - 卡片删除、生命周期停用或其他既有冲突。
 
-没有语义或任一文件字节差异时返回 `no-op`，不重写文件。任何 Markdown 或 sidecar 在预览后变化都会
-使旧 digest 失效。
+没有任何语义或字节差异时返回 `no-op`，不重写文件；预览之后任一文件变化都会使旧 digest 失效。
 
-## 多文件 CAS 与事务式发布
+## 发布与失败处理
 
-`publish` 先在所有已授权 output root 中按稳定顺序取得 publication lock，再重新执行完整 prepare，并
-要求相同 `preview_digest`。因此两个不同 Markdown 目标也不能并发或在 materialize 前顺序绕过 inventory
-去重，协调文件也不会写出 context 的 write ceiling。随后发布使用目标级 artifact-set lock：
+`publish` 用同一 request 与 `preview_digest` 以事务方式一次发布 Markdown 与全部 XLSX；工具在发布前重新执行
+完整 prepare，任何漂移都会被拒绝，此时重新预览。
 
-1. 对新旧文件并集执行 SHA-256／不存在性预检；
-2. 在目标目录写入并 fsync 全部候选临时文件，同时复核来源仍是 request 中的 UTF-8 字节快照；
-3. 写入事务 journal；
-4. 把待更新或删除的原文件原子隔离到唯一 holding 路径并复核 hash；
-5. 以排他 hard-link 安装 XLSX，最后安装 Markdown 作为提交点；
-6. 再次复核来源与全部候选 hash 后，才接受提交并删除 temp、holding 与 journal。
-
-任一步失败时，只删除仍与本次候选 hash 相同的已安装文件，并只在目标为空时恢复 holding。竞争文件永不
-被覆盖；无法安全恢复时保留 recovery 文件与 journal 并在错误详情中列出。文件系统不提供真正的跨文件
-事务，因此异常进程终止可能留下 journal；`verify` 直接扫描所有受管输出根，不依赖 Markdown 是否仍在，
-会报告 interrupted transaction 或遗留 publication lock。出现任一标记时 inventory 暂停读取，后续发布
-停止，不能把部分结果宣称为成功；先按 recovery 详情人工核验并恢复完整旧 bundle 或完整新 bundle。没有
-`--force`、`--yes` 或跳过 CAS 的入口。
-
-一次请求同时保存学习记录和制卡时，两者仍是独立事务。上游失败后不得继续消费未生成结果；本工具不
-顺带导入 Markji、提交或推送。
+- 发布失败时不重试、不手工修补：报告工具返回的错误与 recovery 详情。
+- `verify` 报告 interrupted transaction 或遗留 publication lock 时，停止后续发布，请用户按 recovery 详情人工
+  核验，恢复完整的旧产物或完整的新产物；不能把部分结果说成成功。
+- 没有 `--force`、`--yes` 或跳过校验的入口，也不要自行实现。
+- 同时保存学习记录和制卡时，两者是独立事务；上游失败后不继续消费未生成的结果。本工具不导入 Markji、不提交
+  也不推送。
 
 ## v1 迁移、渐进接管与跨日复发
 

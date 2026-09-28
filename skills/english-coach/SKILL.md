@@ -8,22 +8,13 @@ description: "Provide low-interruption English feedback on user-authored English
 帮助学习者在真实交流与复盘中主动使用英语，同时避免打断主任务、混淆语言表现与内容掌握，或未经请求
 保存任何产物。
 
-## 首次启用时提示用户说明
+## 首次启用
 
-在当前对话第一次启用本 Skill 时，用一条简短、非阻塞且不带独立标题或卡片的提示建议用户先浏览本
-Skill 的 `docs/user-guides/english-coach.md` 和组合指南 `docs/learning-skills-user-guide.md`；说明它们介绍
-交互流程、用户需要参与的环节和授权边界。
-
-定位本地文档时，只按顺序检查三个候选根：当前 `SKILL.md` 所在 Skill 目录的上两级目录、当前工作区
-仓库根、当前工作区仓库根下的 `.agent-skills`。把实际存在的文件解析为绝对路径并提供可点击链接，不
-搜索其他目录。没有本地文件时，改为提供[本 Skill 公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/english-coach.md)
-和[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
-
-用户没有要求先暂停阅读时继续处理当前请求；不要求用户确认，不在同一对话重复提示，也不创建文件
-记录是否已经提示。同一对话已经提供组合指南时只补本 Skill 说明；同一回复首次启用多个学习 Skill 时
-合并为一条提示，并且只列一次组合指南。
-随行反馈仍先完成用户的主请求，再在回复末尾给出首次提示；该提示是“没有高价值改进时保持安静”的
-一次性例外，不代表必须同时提供语言纠错。
+当前对话第一次启用本 Skill 时，处理完请求后用一句话附上本 Skill 说明和组合指南的链接：依次在本 Skill
+目录的上两级目录、工作区仓库根、仓库根下的 `.agent-skills` 查找 `docs/user-guides/english-coach.md` 与
+`docs/learning-skills-user-guide.md`，找到就给绝对路径链接，否则给[公开说明](https://github.com/XiFenM/agent-skills/blob/main/docs/user-guides/english-coach.md)与[公开组合指南](https://github.com/XiFenM/agent-skills/blob/main/docs/learning-skills-user-guide.md)。
+不阻塞、不求确认、同一对话不重复；多个学习 Skill 同时首次启用时合并成一句。这是"没有高价值改进时保持
+安静"的一次性例外，不代表必须同时提供语言纠错。
 
 ## 选择最窄模式
 
@@ -113,4 +104,6 @@ Skill 的 `docs/user-guides/english-coach.md` 和组合指南 `docs/learning-ski
 - 重新教授、查证或验证内容掌握：`guide-learning`。
 
 一次普通反馈、回顾结束、保存日志或上游建议都不得自动触发另一项能力。先说明建议交接的目的和最小
-素材范围，再等待用户以自然语言确认。
+素材范围，再等待用户以自然语言确认。用户一句话同时提出多项时（例如"英语收尾：整理今天的记录并预览
+卡片"），这就是对每一项的明确请求：按顺序交接执行，不再逐项追问；写入和覆盖仍按各 Skill 的预览与确认
+规则进行。
