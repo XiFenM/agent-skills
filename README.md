@@ -22,7 +22,7 @@
 - [`memo-cards`](docs/user-guides/memo-cards.md)
 - [`resource-planning`](docs/user-guides/resource-planning.md)
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D49 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D50 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态，D50 让 guide-learning 的记录映射支持并行计划。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
 
 ## 目录
 

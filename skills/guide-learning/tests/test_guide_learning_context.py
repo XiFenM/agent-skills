@@ -223,6 +223,88 @@ def test_record_roots_cannot_overlap_and_shared_files_need_distinct_sections() -
             )
 
 
+def test_parallel_programs_map_each_role_to_several_stable_locations() -> None:
+    result = context_config.validate_materialized_context(
+        _repository(),
+        _config(
+            record_mappings={
+                "program": [
+                    {"path": "tracks/kernels/README.md", "kind": "file", "section": "Program"},
+                    {"path": "tracks/algorithms/README.md", "kind": "file", "section": "Program"},
+                ],
+                "checkpoint": [
+                    {"path": "tracks/kernels/README.md", "kind": "file", "section": "Checkpoint"},
+                    {"path": "tracks/algorithms/README.md", "kind": "file", "section": "Checkpoint"},
+                ],
+                "lesson": [
+                    {"path": "tracks/kernels/lessons", "kind": "collection"},
+                    {"path": "tracks/algorithms/lessons", "kind": "collection"},
+                ],
+            }
+        ),
+    )
+    mappings = result["context"]["record_mappings"]
+    # Arrays are normalized by path so reordering the config never drifts the context.
+    assert [item["path"] for item in mappings["lesson"]] == [
+        "tracks/algorithms/lessons",
+        "tracks/kernels/lessons",
+    ]
+    assert result["write_paths"] == [
+        "tracks/algorithms/README.md",
+        "tracks/algorithms/lessons",
+        "tracks/kernels/README.md",
+        "tracks/kernels/lessons",
+    ]
+
+
+def test_parallel_program_locations_keep_every_boundary_rule() -> None:
+    invalid = (
+        ({"lesson": []}, "empty array"),
+        (
+            {"checkpoint": [{"path": "tracks/kernels", "kind": "collection"}]},
+            "must use kind 'file'",
+        ),
+        (
+            {
+                "lesson": [
+                    {"path": "tracks", "kind": "collection"},
+                    {"path": "tracks/algorithms/lessons", "kind": "collection"},
+                ]
+            },
+            "overlap",
+        ),
+        (
+            {
+                "program": [
+                    {"path": "tracks/state.md", "kind": "file", "section": "Program"},
+                    {"path": "tracks/state.md", "kind": "file", "section": "program"},
+                ]
+            },
+            "distinct sections",
+        ),
+    )
+    for records, message in invalid:
+        with pytest.raises(context_config.ContextConfigError, match=message):
+            context_config.validate_materialized_context(
+                _repository(), _config(record_mappings=records)
+            )
+    with pytest.raises(context_config.ContextConfigError, match="overlaps read-only fact"):
+        context_config.validate_materialized_context(
+            _repository(),
+            _config(
+                repository_fact_refs=[
+                    {"fact_id": "sources", "role": "source-catalog", "kind": "collection"}
+                ],
+                record_mappings={
+                    "lesson": [
+                        {"path": "tracks/kernels/lessons", "kind": "collection"},
+                        {"path": "learning/sources/lessons", "kind": "collection"},
+                    ]
+                },
+            ),
+        )
+
+
 def test_article_profile_is_canonical_and_derives_only_write_ceilings() -> None:
     result = context_config.validate_materialized_context(
         _repository(),

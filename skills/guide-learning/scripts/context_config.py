@@ -281,7 +281,39 @@ def _fact_refs(value: Any, repository: dict[str, Any]) -> list[dict[str, str]]:
     return sorted(result, key=lambda item: item["fact_id"])
 
 
-def _record_mappings(value: Any) -> dict[str, dict[str, str]]:
+def _record_mapping_entry(value: Any, role: str, label: str) -> dict[str, str]:
+    mapping = _object(value, label)
+    _exact_keys(
+        mapping,
+        allowed=frozenset({"path", "kind", "section"}),
+        required=frozenset({"path", "kind"}),
+        label=label,
+    )
+    kind = _enum(mapping["kind"], _KINDS, f"{label}.kind")
+    if role == "checkpoint" and kind != "file":
+        raise ContextConfigError(
+            "skill_config.record_mappings.checkpoint must use kind 'file'"
+        )
+    parsed = {
+        "path": _relative_path(mapping["path"], f"{label}.path"),
+        "kind": kind,
+    }
+    if "section" in mapping:
+        if kind != "file":
+            raise ContextConfigError(f"{label}.section is only valid for a file")
+        parsed["section"] = _string(mapping["section"], f"{label}.section", maximum=160)
+    return parsed
+
+
+def _record_mappings(value: Any) -> dict[str, Any]:
+    """Parse record locators.
+
+    A role maps to one location object, or to a non-empty array of locations
+    when a repository runs several parallel Programs (for example one Program,
+    Checkpoint, and Lesson tree per learning track).  Arrays are normalized by
+    path and section; every location is a stable write ceiling, never state.
+    """
+
     label = "skill_config.record_mappings"
     mappings = _object(value, label)
     unknown = [role for role in mappings if role not in _RECORD_ROLES]
@@ -291,35 +323,35 @@ def _record_mappings(value: Any) -> dict[str, dict[str, str]]:
             + ", ".join(sorted(repr(role) for role in unknown))
         )
 
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, Any] = {}
     for role in sorted(mappings):
         mapping_label = f"{label}.{role}"
-        mapping = _object(mappings[role], mapping_label)
-        _exact_keys(
-            mapping,
-            allowed=frozenset({"path", "kind", "section"}),
-            required=frozenset({"path", "kind"}),
-            label=mapping_label,
-        )
-        kind = _enum(mapping["kind"], _KINDS, f"{mapping_label}.kind")
-        if role == "checkpoint" and kind != "file":
-            raise ContextConfigError(
-                "skill_config.record_mappings.checkpoint must use kind 'file'"
+        raw = mappings[role]
+        if isinstance(raw, list):
+            if not raw:
+                raise ContextConfigError(f"{mapping_label} must not be an empty array")
+            entries = [
+                _record_mapping_entry(item, role, f"{mapping_label}[{index}]")
+                for index, item in enumerate(raw)
+            ]
+            result[role] = sorted(
+                entries, key=lambda item: (item["path"], item.get("section", ""))
             )
-        parsed = {
-            "path": _relative_path(mapping["path"], f"{mapping_label}.path"),
-            "kind": kind,
-        }
-        if "section" in mapping:
-            if kind != "file":
-                raise ContextConfigError(
-                    f"{mapping_label}.section is only valid for a file"
-                )
-            parsed["section"] = _string(
-                mapping["section"], f"{mapping_label}.section", maximum=160
-            )
-        result[role] = parsed
+        else:
+            result[role] = _record_mapping_entry(raw, role, mapping_label)
     return result
+
+
+def _flatten_record_mappings(records: dict[str, Any]) -> list[tuple[str, dict[str, str]]]:
+    flattened: list[tuple[str, dict[str, str]]] = []
+    for role, value in records.items():
+        if isinstance(value, list):
+            flattened.extend(
+                (f"{role}[{index}]", mapping) for index, mapping in enumerate(value)
+            )
+        else:
+            flattened.append((role, value))
+    return flattened
 
 
 def _enum_list(
@@ -494,14 +526,15 @@ def _is_proper_ancestor(left: str, right: str) -> bool:
 
 def _validate_mapping_boundaries(
     fact_refs: list[dict[str, str]],
-    records: dict[str, dict[str, str]],
+    records: dict[str, Any],
     repository: dict[str, Any],
 ) -> None:
     read_facts = [
         (ref["fact_id"], repository["facts"][ref["fact_id"]]["path"])
         for ref in fact_refs
     ]
-    for role, mapping in records.items():
+    items = _flatten_record_mappings(records)
+    for role, mapping in items:
         for fact_id, fact_path in read_facts:
             if (
                 _folded_path(mapping["path"]) == _folded_path(fact_path)
@@ -512,7 +545,6 @@ def _validate_mapping_boundaries(
                     f"record mapping {role!r} overlaps read-only fact {fact_id!r}"
                 )
 
-    items = list(records.items())
     for index, (left_role, left) in enumerate(items):
         for right_role, right in items[index + 1 :]:
             same_path = _folded_path(left["path"]) == _folded_path(right["path"])
@@ -545,7 +577,7 @@ def _validate_mapping_boundaries(
 def _validate_article_target_boundaries(
     article_profile: dict[str, Any] | None,
     fact_refs: list[dict[str, str]],
-    records: dict[str, dict[str, str]],
+    records: dict[str, Any],
     repository: dict[str, Any],
 ) -> None:
     if article_profile is None:
@@ -575,7 +607,7 @@ def _validate_article_target_boundaries(
                     f"article target {target['id']!r} overlaps read-only fact "
                     f"{ref['fact_id']!r}"
                 )
-        for role, mapping in records.items():
+        for role, mapping in _flatten_record_mappings(records):
             mapping_path = mapping["path"]
             if (
                 _folded_path(collection) == _folded_path(mapping_path)
@@ -675,6 +707,7 @@ def validate_materialized_context(
         "tracked_files": sorted(tracked_files),
         "tracked_collections": sorted(tracked_collections),
         "write_paths": sorted(
-            {mapping["path"] for mapping in records.values()} | article_write_paths
+            {mapping["path"] for _role, mapping in _flatten_record_mappings(records)}
+            | article_write_paths
         ),
     }
