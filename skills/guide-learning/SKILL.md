@@ -25,7 +25,7 @@ description: "Guide human learners to deep, transferable understanding: explain 
 4. **边界**：什么条件下不成立，瓶颈和失效方式，性能怎样随规模变化。
 5. **表达与迁移**：能在 60–90 秒内讲清，并迁移到没讲过的系统或条件。
 
-- 学习者画像或仓库配置声明了目标深度时照做；目标是工程岗位或面试准备时默认讲到第 5 层。一次答疑按
+- 学习者画像声明了目标深度时照做；目标是工程岗位或面试准备时默认讲到第 5 层。一次答疑按
   问题取层，但不省略第 2 层"为什么"。
 - 结论和机制先行：先说清核心关系，再展开细节。适用边界集中写一句，只有会改变判断的限定才写进正文；
   不要每段都附免责说明。
@@ -64,13 +64,25 @@ description: "Guide human learners to deep, transferable understanding: explain 
 - 学习者说"讲快点""多讲少问""多出题"等，照做并保持。
 - 检查已经给出充分证据时，不再追加形式性的复述或"做一遍"。
 
+## 学习者画像
+
+学习者画像是必备输入：背景与目标、目标深度、讲解与提问偏好、已有基础。它决定讲到第几层、拿什么做对照、按什么
+顺序讲。先在受管 context 的 `learner-preferences` 事实或仓库已有的学习者说明里找到它。
+
+没有画像时主动建立：开始 Session 或 Course 之前，一次问完背景、目标、起点、讲解偏好、提问与练习方式、节奏约束，
+再提议保存位置，确认后写入；一次答疑先回答，答完再提出建立。只记录学习者说过或确认过的内容；学习中出现新的
+稳定背景或偏好时提议更新。问题清单与落盘规则见 [repository-adaptation.md](references/repository-adaptation.md)。
+
 ## 一堂课的结构
 
 1. **开课导入**：首次进入结构化 Lesson 或多节点 Session 时，用一段连贯叙述交代背景与核心矛盾、将形成的
    能力、关键节点路线和完成标准，并给出可回看的全流程骨架（接口、主数据流、关键状态）。不要写成目标
-   清单或状态卡片。恢复已开始的课，只用一句话挂回当前位置。
-2. **核对前置**：先看已有证据；只有答案会改变讲解起点时才问一个最小问题。"不知道"是有效信息。
-3. **逐节点讲解与检查**：按讲解标准、提问方式和节奏规则推进；进入新节点时一句话指出当前位置。
+   清单或状态卡片。有教学主线资料时先指路：资料在哪里、本课对应其中哪几部分。恢复已开始的课，只用一句话
+   挂回当前位置。
+2. **核对画像与前置**：先读学习者画像，再看已有证据；只有答案会改变讲解起点时才问一个最小问题。"不知道"是
+   有效信息。
+3. **逐节点讲解与检查**：按讲解标准、提问方式和节奏规则推进；进入新节点时一句话指出当前位置，以及它对应教学
+   主线资料的哪一部分、建议先读还是讲完再读。
 4. **导师串讲**：所有节点讲完后，由导师亲自沿同一个贯穿案例串起全流程，并提升到真实系统的规模和取舍。
    不把首次串联留给学习者或综合题。
 5. **综合验收**：通常 2–4 题，覆盖中心模型、一个关键取舍或边界、一个没讲过的迁移，并至少包含一道口述题。
@@ -84,7 +96,7 @@ description: "Guide human learners to deep, transferable understanding: explain 
 
 按用户当轮意图选最窄的一种，不因仓库里已有学习记录而自动升级：
 
-- **一次答疑**：直接解决问题；零写入。
+- **一次答疑**：直接解决问题；零写入。没有学习者画像时，答完再提出建立。
 - **独立 Session**：用户明确开始、继续或恢复一段学习；需要跨会话时只保存会话事件和断点，不自动建 Lesson。
 - **持久 Course**：用户明确开展多课学习；维护计划、已授权 Lesson 的账本和断点。
 
@@ -105,8 +117,8 @@ description: "Guide human learners to deep, transferable understanding: explain 
 受管配置、`.agent-skills-context.json` 及其中的 allowlist 只提供位置和写入上限，**不是授权**。context 损坏、
 身份不符或与仓库实际事实冲突时，停止使用它并保持只读。
 
-- **需要用户确认**：首次使用某个状态路径、开始新 Lesson、接受或修改练习约定、扩大目标或完成门槛、修改
-  学习者负责的文件、结课。
+- **需要用户确认**：首次使用某个状态路径、建立或修改学习者画像、开始新 Lesson、接受或修改练习约定、扩大目标
+  或完成门槛、修改学习者负责的文件、结课。
 - **已授权范围内自动进行**：讲解、检查、补差、维护 Agent 自己负责的测试和记录。
 - **从不自动进行**：开始下一课、生成文章或学习记录或卡片、保存原始对话、提交或推送。
 
@@ -145,6 +157,6 @@ description: "Guide human learners to deep, transferable understanding: explain 
 - [source-authority.md](references/source-authority.md)：使用源码、论文、版本敏感事实或实验，或来源冲突时读。
 - [practice-review-mastery.md](references/practice-review-mastery.md)：设计正式练习、Review 学习者产物、处理求助或结课时读。
 - [state-records.md](references/state-records.md)：创建、恢复、暂停、写入或关闭学习状态时读。
-- [repository-adaptation.md](references/repository-adaptation.md)：把状态映射到仓库文件、选择路径或解释受管 context 时读。
+- [repository-adaptation.md](references/repository-adaptation.md)：把状态映射到仓库文件、选择路径、解释受管 context，或建立、更新学习者画像时读。
 - [material-reading.md](references/material-reading.md)：读取本地图片、drawio 等混合资料或核验文件类型时读。
 - [article-artifacts.md](references/article-artifacts.md)：提议、起草或写入学习文章时读。

@@ -194,6 +194,36 @@ def test_guide_learning_keeps_core_behavior_anchors() -> None:
     assert "sha-256" not in practice.lower()
 
 
+def test_guide_learning_requires_a_learner_profile() -> None:
+    main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    headings = _h2_headings(main)
+
+    # The profile is established before a lesson is structured.
+    assert _index_of_heading(headings, "学习者画像") < _index_of_heading(headings, "一堂课的结构")
+    profile = _section(main, "学习者画像")
+    assert "learner-preferences" in profile
+    assert "(references/repository-adaptation.md)" in profile
+    assert "学习者画像" in _section(main, "授权")
+
+    adaptation = (GUIDE_ROOT / "references" / "repository-adaptation.md").read_text(
+        encoding="utf-8"
+    )
+    interview = _section(adaptation, "6. 学习者画像")
+    assert "learner-preferences" in interview
+    assert len(re.findall(r"(?m)^\d\. ", interview)) == 6
+
+
+def test_guide_learning_points_the_learner_at_the_teaching_spine() -> None:
+    main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    cycle = (GUIDE_ROOT / "references" / "teaching-cycle.md").read_text(encoding="utf-8")
+
+    # Once in the opening and once per node.
+    structure = re.sub(r"\s+", "", _section(main, "一堂课的结构"))
+    assert structure.count("教学主线资料") >= 2
+    assert "先指路" in _section(cycle, "2. 开课导入")
+    assert "教学主线资料" in _section(cycle, "5. 讲一个节点")
+
+
 def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> None:
     combined = "\n".join(
         path.read_text(encoding="utf-8")
