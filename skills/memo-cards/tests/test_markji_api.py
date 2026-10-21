@@ -27,9 +27,25 @@ class Remote:
         self.name = "测试牌组"
         self.calls = []
         self.fail = None
+        self.new_id_on_update = False
 
     def request(self, method, path, body=None, query=None):
         self.calls.append((method, path, copy.deepcopy(body)))
+        if method == "POST" and path.startswith("/decks/Deck1/cards/"):
+            card_id = path.rsplit("/", 1)[1]
+            assert set(body) == {"deck_id", "card_id", "card"}
+            assert body["deck_id"] == "Deck1" and body["card_id"] == card_id
+            if self.fail == "before-update":
+                raise api.UploadError("测试超时")
+            old = self.cards[card_id]
+            new_id = card_id + "r" if self.new_id_on_update else card_id
+            # Whether production keeps the ID is unverified; a new revision keeps its root.
+            card = {**old, **body["card"], "id": new_id}
+            self.cards = {(new_id if key == card_id else key): (card if key == card_id else value)
+                          for key, value in self.cards.items()}
+            if self.fail == "after-update":
+                raise api.UploadError("测试连接断开")
+            return {"card": copy.deepcopy(card)}
         if method == "POST":
             assert path == "/decks/Deck1/chapters/Chapter1/cards"
             assert set(body) == {"deck", "chapter", "card", "order"}
@@ -264,7 +280,8 @@ def test_transport_errors_do_not_echo_headers_body_or_retry(status, monkeypatch,
 def test_transport_rejects_redirects_origins_and_mutations():
     client = api.Client("test-token")
     for method, path in [("GET", "https://example.com/"), ("GET", "/decks/../tokens"),
-                         ("POST", "/decks/D/cards/C"), ("DELETE", "/decks/D")]:
+                         ("POST", "/decks/D/chapters/C"), ("POST", "/decks/D/chapters/C/cards/move"),
+                         ("POST", "/decks/D/cards/C/extra"), ("DELETE", "/decks/D/cards/C")]:
         with pytest.raises(api.UploadError):
             client.request(method, path)
     with pytest.raises(api.UploadError, match="重定向"):
@@ -418,4 +435,124 @@ def test_create_wire_body_omits_path_bound_ids(monkeypatch):
     client._last_request = None
     with pytest.raises(api.UploadError, match="目标不一致"):
         client.request("POST", "/decks/mkjd_OTHER/chapters/mkjch_c.D/cards", body)
+    assert len(sent) == 1
+
+
+def _revise(ready, answer):
+    repo, context, request, *_ = ready
+    value = json.loads(request.read_text())
+    value["cards"][0]["fields"]["答案"] = answer
+    request.write_text(json.dumps(value))
+    preview = memo.prepare(repo, context, request)
+    memo.publish(repo, context, request, preview["preview_digest"], "confirmed")
+
+
+def _posts(remote, kind):
+    return [call for call in remote.calls if call[0] == "POST" and ("/chapters/" in call[1]) == (kind == "create")]
+
+
+@pytest.mark.parametrize("new_id", [False, True])
+def test_changed_card_updates_in_place_only_with_confirmation(ready, new_id):
+    remote = ready[-1]
+    remote.new_id_on_update = new_id
+    first = api.prepare_upload(*ready)
+    api.upload(*ready, first["preview_digest"], "request")
+    _revise(ready, "修订后的答案与边界。")
+    plan = api.prepare_upload(*ready)
+    action = plan["actions"][0]
+    assert action["operation"] == "update" and plan["required_authorization"] == "confirmed"
+    assert "修订后的答案" in action["content"] and "修订后的答案" not in action["previous_content"]
+    with pytest.raises(api.UploadError, match="confirmed"):
+        api.upload(*ready, plan["preview_digest"], "request")
+    assert not _posts(remote, "update")
+    result = api.upload(*ready, plan["preview_digest"], "confirmed")
+    assert result["updated"] == 1 and result["created"] == 0
+    assert _posts(remote, "update")[0][1] == "/decks/Deck1/cards/Card1"
+    assert len(remote.cards) == 1 and next(iter(remote.cards.values()))["content"] == action["content"]
+    entry = next(iter(json.loads(Path(plan["receipt_path"]).read_text())["cards"].values()))
+    assert entry["status"] == "verified" and entry["card_id"] == ("Card1r" if new_id else "Card1")
+    assert entry["content_sha256"] == action["content_sha256"] and "previous_content_sha256" not in entry
+    again = api.prepare_upload(*ready)
+    assert again["actions"][0]["operation"] == "skip" and again["required_authorization"] == "request"
+    assert len(_posts(remote, "create")) == 1
+
+
+def test_update_never_overwrites_a_remote_manual_edit(ready):
+    plan = api.prepare_upload(*ready)
+    api.upload(*ready, plan["preview_digest"], "request")
+    ready[-1].cards["Card1"]["content"] = "在墨墨里人工改过的卡片"
+    _revise(ready, "修订后的答案与边界。")
+    with pytest.raises(api.UploadError, match="人工修改"):
+        api.prepare_upload(*ready)
+    del ready[-1].cards["Card1"]
+    with pytest.raises(api.UploadError, match="找不到唯一的原卡"):
+        api.prepare_upload(*ready)
+    assert not _posts(ready[-1], "update")
+
+
+@pytest.mark.parametrize("new_id", [False, True])
+@pytest.mark.parametrize("failure", ["before-update", "after-update"])
+def test_uncertain_update_is_not_resent_and_recovers_from_the_remote(ready, failure, new_id):
+    remote = ready[-1]
+    remote.new_id_on_update = new_id
+    plan = api.prepare_upload(*ready)
+    api.upload(*ready, plan["preview_digest"], "request")
+    _revise(ready, "修订后的答案与边界。")
+    plan = api.prepare_upload(*ready)
+    remote.fail = failure
+    with pytest.raises(api.UploadError):
+        api.upload(*ready, plan["preview_digest"], "confirmed")
+    entry = next(iter(json.loads(Path(plan["receipt_path"]).read_text())["cards"].values()))
+    assert entry["status"] == "updating" and entry["previous_content_sha256"] != entry["content_sha256"]
+    assert len(_posts(remote, "update")) == 1
+    remote.fail = None
+    recovered = api.prepare_upload(*ready)
+    # Not landed: the remote still holds the recorded old text, so a fresh confirmed preview may
+    # send the update again. Landed: the new text is already there and is only read back.
+    expected = "update" if failure == "before-update" else "skip"
+    assert recovered["actions"][0]["operation"] == expected
+    result = api.upload(*ready, recovered["preview_digest"], "confirmed")
+    assert result["updated" if expected == "update" else "skipped"] == 1
+    assert len(_posts(remote, "update")) == (2 if expected == "update" else 1)
+    assert json.loads(Path(plan["receipt_path"]).read_text())["cards"][recovered["actions"][0]["logical_id"]]["status"] == "verified"
+
+
+def test_rejected_update_keeps_the_record_and_invalidates_the_preview(ready, monkeypatch):
+    remote = ready[-1]
+    plan = api.prepare_upload(*ready)
+    api.upload(*ready, plan["preview_digest"], "request")
+    before = next(iter(json.loads(Path(plan["receipt_path"]).read_text())["cards"].values()))
+    _revise(ready, "修订后的答案与边界。")
+    plan = api.prepare_upload(*ready)
+    original = remote.request
+    def reject(method, path, body=None, query=None):
+        if method == "POST":
+            raise api.UploadError("HTTP 400: invalid field", http_status=400)
+        return original(method, path, body, query)
+    monkeypatch.setattr(remote, "request", reject)
+    with pytest.raises(api.UploadError):
+        api.upload(*ready, plan["preview_digest"], "confirmed")
+    entry = next(iter(json.loads(Path(plan["receipt_path"]).read_text())["cards"].values()))
+    assert entry == {**before, "update_rejected": 400}
+    monkeypatch.setattr(remote, "request", original)
+    with pytest.raises(api.UploadError, match="已变化"):
+        api.upload(*ready, plan["preview_digest"], "confirmed")
+    fresh = api.prepare_upload(*ready)
+    assert api.upload(*ready, fresh["preview_digest"], "confirmed")["updated"] == 1
+
+
+def test_update_wire_body_omits_path_bound_ids(monkeypatch):
+    client = api.Client("test-token")
+    sent = []
+    def response(request, timeout):
+        sent.append(request)
+        return io.BytesIO(b'{"success":true,"data":{"card":{"id":"mkjc_a.B"}},"errors":[]}')
+    monkeypatch.setattr(client._opener, "open", response)
+    body = {"deck_id": "mkjd_a.B", "card_id": "mkjc_a.B", "card": {"content": "Q\n---\nA", "grammar_version": 3}}
+    client.request("POST", "/decks/mkjd_a.B/cards/mkjc_a.B", body)
+    assert sent[0].full_url.endswith("/decks/mkjd_a.B/cards/mkjc_a.B")
+    assert json.loads(sent[0].data) == {"card": body["card"]}
+    client._last_request = None
+    with pytest.raises(api.UploadError, match="目标不一致"):
+        client.request("POST", "/decks/mkjd_a.B/cards/mkjc_OTHER", body)
     assert len(sent) == 1

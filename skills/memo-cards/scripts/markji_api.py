@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Upload verified memo-cards artifacts through the official Markji OpenAPI.
 
-No token argument, arbitrary API origin, remote overwrite, or automatic POST retry.
+No token argument, arbitrary API origin, or automatic POST retry. Remote content is
+overwritten only for a card this tool uploaded whose remote text still matches its receipt.
 The local journal is written before each POST so uncertain outcomes stop safely.
 """
 from __future__ import annotations
@@ -181,8 +182,9 @@ class Client:
         opaque_id = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
         get_path = rf"/decks(?:/{opaque_id}(?:/chapters(?:/{opaque_id})?|/cards/{opaque_id})?)?"
         create_path = rf"/decks/{opaque_id}/chapters/{opaque_id}/cards"
+        update_path = rf"/decks/{opaque_id}/cards/{opaque_id}"
         if not ((method == "GET" and re.fullmatch(get_path, path)) or
-                (method == "POST" and re.fullmatch(create_path, path))):
+                (method == "POST" and (re.fullmatch(create_path, path) or re.fullmatch(update_path, path)))):
             raise UploadError("操作不在当前已核验的官方接口范围内。")
         url = ORIGIN + BASE_PATH + path
         if query:
@@ -199,6 +201,13 @@ class Client:
             if body.get("deck") != parts[2] or body.get("chapter") != parts[4]:
                 raise UploadError("创建请求的路径与正文目标不一致。")
             wire_body = {key: value for key, value in body.items() if key not in {"deck", "chapter"}}
+        if method == "POST" and re.fullmatch(update_path, path) and isinstance(body, dict):
+            # UpdateCard's schema repeats deck_id/card_id in the body like CreateCard does; bind
+            # them from the URL the same way and check that the two agree.
+            parts = path.split("/")
+            if body.get("deck_id") != parts[2] or body.get("card_id") != parts[4]:
+                raise UploadError("更新请求的路径与正文目标不一致。")
+            wire_body = {key: value for key, value in body.items() if key not in {"deck_id", "card_id"}}
         request = urllib.request.Request(url, method=method,
             data=None if wire_body is None else json.dumps(wire_body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
             headers={"Authorization": "Bearer " + self._token,
@@ -240,7 +249,7 @@ class Client:
                 message += " 结构化错误（已脱敏）：" + detail
             raise UploadError(message, http_status=status) from None
         except (OSError, urllib.error.URLError, http.client.HTTPException, ValueError):
-            raise UploadError("请求未获得可验证的响应；创建请求的结果可能不确定，请先核对回执与远端。") from None
+            raise UploadError("请求未获得可验证的响应；写入请求的结果可能不确定，请先核对回执与远端。") from None
         if not isinstance(data, dict):
             raise UploadError("官方响应结构不符合已核验合同。")
         # The published operation schemas describe the payload; production
@@ -364,7 +373,7 @@ def load_receipt(path):
         raise UploadError("上传回执结构异常，请先检查。")
     for key, item in value["cards"].items():
         if (not memo.LOGICAL_ID_RE.fullmatch(key) or not isinstance(item, dict)
-                or item.get("status") not in {"pending", "created", "verified", "rejected"}
+                or item.get("status") not in {"pending", "created", "verified", "rejected", "updating", "updated"}
                 or not isinstance(item.get("content_sha256"), str)
                 or not memo.DIGEST_RE.fullmatch(item["content_sha256"])):
             raise UploadError("上传回执条目异常，请先检查。")
@@ -372,7 +381,39 @@ def load_receipt(path):
             identifier(item["card_id"])
         if item.get("status") == "rejected" and (item.get("card_id") is not None or item.get("http_status") != 400):
             raise UploadError("已拒绝回执必须记录 HTTP 400 且没有成功创建的 ID。")
+        if item.get("status") == "updating" and (
+                item.get("card_id") is None or not isinstance(item.get("previous_content_sha256"), str)
+                or not memo.DIGEST_RE.fullmatch(item["previous_content_sha256"])
+                or type(item.get("previous_grammar_version")) is not int):
+            raise UploadError("更新中的回执必须记录原卡 ID 与更新前的内容摘要。")
+        if item.get("update_rejected") not in (None, 400):
+            raise UploadError("被拒绝的更新只能记录 HTTP 400。")
     return value
+
+
+def plan_update(card, prior, remote, matches):
+    """Plan replacing a card this tool uploaded whose local content has since changed."""
+    if prior.get("status") not in {"verified", "updating"} or not prior.get("card_id"):
+        raise UploadError("同一逻辑卡片的上次上传尚未核验完成，且内容已改变；先核对回执与远端。")
+    # An update may answer with a new card ID for the same root card, so locate the card by
+    # either ID; ambiguity stops rather than guessing.
+    holders = [item for item in remote if item.get("status") == "NORMAL" and (
+        item["id"] == prior["card_id"] or (prior.get("root_id") and item.get("root_id") == prior["root_id"]))]
+    if len(holders) != 1:
+        raise UploadError("内容已改变的卡片在目标章节中找不到唯一的原卡；可能已被移动或删除，停止更新。")
+    current = holders[0]
+    if matches:
+        if matches[0]["id"] != current["id"]:
+            raise UploadError("新内容已存在于另一张远端卡片；先核对重复项，不更新。")
+        # An earlier update landed but its result was not recorded; recover by read-back.
+        return {**card, "operation": "skip", "card_id": current["id"], "root_id": current.get("root_id")}
+    known = {(prior["content_sha256"], prior["grammar_version"])}
+    if prior["status"] == "updating":
+        known.add((prior["previous_content_sha256"], prior["previous_grammar_version"]))
+    if (digest(current["content"]), current["grammar_version"]) not in known:
+        raise UploadError("远端卡片内容与上传记录不一致，可能已被人工修改；不覆盖。")
+    return {**card, "operation": "update", "card_id": current["id"], "root_id": current.get("root_id"),
+            "previous_content": current["content"], "previous_grammar_version": current["grammar_version"]}
 
 
 def prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version, client, *, logical_ids=None):
@@ -385,12 +426,17 @@ def prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version,
     actions = []
     for card in bundle["cards"]:
         prior = receipt["cards"].get(card["logical_id"])
-        if prior and prior["content_sha256"] != card["content_sha256"]:
-            raise UploadError("同一逻辑卡片已有上传记录且内容已改变；当前追加工具不会覆盖或创建其重复版本。")
         matches = [item for item in remote if item.get("status") == "NORMAL"
                    and item["content"] == card["content"] and item["grammar_version"] == grammar_version]
         if len(matches) > 1:
             raise UploadError("目标章节中有多张相同内容卡片，请先核对重复项。")
+        if prior and prior["status"] == "rejected":
+            if prior["content_sha256"] != card["content_sha256"]:
+                raise UploadError("该卡片上次创建被拒绝，且内容已改变；先核对拒绝原因与远端。")
+        elif prior and (prior["content_sha256"] != card["content_sha256"]
+                        or prior["grammar_version"] != grammar_version or prior["status"] == "updating"):
+            actions.append(plan_update(card, prior, remote, matches))
+            continue
         if prior and not matches and prior.get("status") != "rejected":
             raise UploadError("已有上传记录但远端未找到唯一匹配；可能发生中断、移动或人工修改，停止重发。")
         if (prior and not matches and prior.get("status") == "rejected"
@@ -409,7 +455,9 @@ def prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version,
     plan = {"schema": PLAN_SCHEMA, "origin": ORIGIN, "local": {k: v for k, v in bundle.items() if k != "cards"},
             "deck": deck, "chapter": chapter, "grammar_version": grammar_version,
             "remote_sha256": digest(remote_snapshot), "receipt_sha256": digest(receipt),
-            "receipt_path": str(path), "actions": actions}
+            "receipt_path": str(path), "actions": actions,
+            # Overwriting remote cards is riskier than appending, so it needs explicit confirmation.
+            "required_authorization": "confirmed" if any(a["operation"] == "update" for a in actions) else "request"}
     plan["preview_digest"] = digest(plan)
     return plan
 
@@ -442,6 +490,8 @@ def upload(repo, context, request, deck_id, chapter_id, grammar_version, client,
         plan = prepare_upload(repo, context, request, deck_id, chapter_id, grammar_version, client, logical_ids=logical_ids)
         if plan["preview_digest"] != preview_digest:
             raise UploadError("来源、本地产物、目标章节或回执已变化，请重新展示上传预览。")
+        if plan["required_authorization"] == "confirmed" and authorization != "confirmed":
+            raise UploadError("本批包含覆盖远端卡片的更新，需要用户看过新旧内容后以 confirmed 授权。")
         receipt = load_receipt(path)
         results = []
         for action in plan["actions"]:
@@ -469,11 +519,39 @@ def upload(repo, context, request, deck_id, chapter_id, grammar_version, client,
                     raise UploadError("创建响应缺少卡片；已保留 pending 回执，请先核对远端。")
                 entry.update(status="created", card_id=identifier(created.get("id")), root_id=created.get("root_id"))
                 atomic_private_json(path, receipt)
+            elif action["operation"] == "update":
+                if local_bundle(repo, context, request, logical_ids=logical_ids) != bundle:
+                    raise UploadError("上传期间本地产物或来源发生变化，已停止后续写入。")
+                prior = receipt["cards"][logical_id]
+                # Durable write BEFORE POST: keep what the remote held so recovery can tell whether
+                # the update landed. An unknown result is never re-sent in the same call.
+                entry.update(status="updating", previous_content_sha256=digest(action["previous_content"]),
+                             previous_grammar_version=action["previous_grammar_version"])
+                receipt["cards"][logical_id] = entry
+                atomic_private_json(path, receipt)
+                try:
+                    data = client.request("POST", f"/decks/{deck_id}/cards/{action['card_id']}",
+                        {"deck_id": deck_id, "card_id": action["card_id"],
+                         "card": {"content": action["content"], "grammar_version": grammar_version}})
+                except UploadError as error:
+                    if error.http_status == 400:
+                        # The remote card is unchanged; restore its record, but mark the rejection
+                        # so that this preview cannot be replayed.
+                        receipt["cards"][logical_id] = {**prior, "update_rejected": 400}
+                        atomic_private_json(path, receipt)
+                    raise
+                updated = data.get("card")
+                if not isinstance(updated, dict):
+                    raise UploadError("更新响应缺少卡片；已保留 updating 回执，请先核对远端。")
+                entry = {"content_sha256": action["content_sha256"], "grammar_version": grammar_version,
+                         "status": "updated", "card_id": identifier(updated.get("id")), "root_id": updated.get("root_id")}
+                receipt["cards"][logical_id] = entry
+                atomic_private_json(path, receipt)
             card = client.request("GET", f"/decks/{deck_id}/cards/{identifier(entry['card_id'])}").get("card")
             if (not isinstance(card, dict) or card.get("id") != entry["card_id"] or card.get("deck_id") != deck_id
                     or card.get("status") != "NORMAL" or card.get("content") != action["content"]
                     or card.get("grammar_version") != grammar_version):
-                raise UploadError("上传后读回校验不一致；保留回执并停止后续创建。")
+                raise UploadError("上传后读回校验不一致；保留回执并停止后续写入。")
             entry.update(status="verified", root_id=card.get("root_id"))
             receipt["cards"][logical_id] = entry
             atomic_private_json(path, receipt)
@@ -483,12 +561,13 @@ def upload(repo, context, request, deck_id, chapter_id, grammar_version, client,
         if not {item["card_id"] for item in results} <= set(chapter["card_ids"]):
             raise UploadError("最终章节归属核验失败；已保留回执，停止重发。")
         return {"verified": True, "created": sum(item["operation"] == "create" for item in results),
+                "updated": sum(item["operation"] == "update" for item in results),
                 "skipped": sum(item["operation"] == "skip" for item in results),
                 "receipt_path": str(path), "cards": results}
 
 
 def main(argv=None):
-    parser = SafeParser(description="墨墨官方 API：本地凭据、只读预览和可恢复的卡片追加")
+    parser = SafeParser(description="墨墨官方 API：本地凭据、只读预览和可恢复的卡片追加与更新")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("auth-set")
     sub.add_parser("auth-status")

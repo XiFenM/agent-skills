@@ -2,13 +2,14 @@
 
 ## 来源与适配范围
 
-核验日期：2026-09-08。[官方文档](https://open.maimemo.com/#/)页面通过
+核验日期：2026-09-08，更新接口于 2026-10-21 按同一规范补核。[官方文档](https://open.maimemo.com/#/)页面通过
 [OpenAPI 规范](https://open.maimemo.com/api_bundle.yaml)加载接口定义；[Markji 网站](https://www.markji.com/)
 用于查看牌组、章节和实际卡片渲染。内容规则见[兼容面](markji-3.8-compatibility.md)。
 
-本工具实现向**已有自建牌组的已有章节追加卡片**，保留本地 Markdown／XLSX 工作流。
-牌组和章节由用户在 Markji 中建立；当前官方规范未提供其创建接口，不能猜测接口。
-卡片更新和文件上传虽然有官方接口，本工具尚未实现，不能用临时脚本绕过其预览和恢复边界。
+本工具实现向**已有自建牌组的已有章节追加卡片**，以及**更新本工具上传过、内容已改变的卡片**，
+保留本地 Markdown／XLSX 工作流。牌组和章节由用户在 Markji 中建立。官方规范没有删除卡片的接口，
+删除只能由用户在 Markji 中操作。文件上传虽然有官方接口，本工具尚未实现；章节创建、改名、排序和
+卡片移动也不在本工具范围内。不能用临时脚本绕过本工具的预览和恢复边界。
 
 | 项目 | 已核验合同 |
 |---|---|
@@ -20,6 +21,7 @@
 | 章节及卡片 | `GET /decks/{deck}/chapters/{chapter}?with_cards=true` → `chapter`、`cards` |
 | 创建 | `POST /decks/{deck}/chapters/{chapter}/cards` → `card`、`chapter` |
 | 单卡读回 | `GET /decks/{deck}/cards/{card}` → `card` |
+| 更新 | `POST /decks/{deck_id}/cards/{card_id}`（UpdateCard）→ `card` |
 
 创建请求在路径中指定 deck 和 chapter，线上 JSON 是
 `{"card":{"content":"…","grammar_version":…},"order":…}`。
@@ -31,6 +33,14 @@
 长度显式设置追加位置 `order`，空章节为 0。`content` 是完整 Markji 文本，包含
 真实换行、题面、答案线和答案。不能发送字段字典、Markdown manifest 或 XLSX 文件来代替它。
 JSON 序列化负责转义换行和反斜杠；解码后必须恢复原始文本，不手工双重转义。
+
+更新请求的规范正文是 `{"deck_id":…,"card_id":…,"card":{"content":…,"grammar_version":…}}`。
+客户端同样在内存中核对路径与正文的 ID 一致，再从线上 JSON 排除这两个 ID。这一点是按创建接口的
+实测类推的，首次实调时以响应为准：返回 HTTP 400 时远端不变，回执记下这次拒绝，需要新预览。
+`MarkjiCard` 带 `parent_id`、`root_id` 和 `revision`，所以更新后的卡片 ID 可能改变。工具以响应中的
+ID 读回核验，恢复时按回执里的原 ID 或 `root_id` 在章节中唯一定位。规范没有说明更新是否保留复习
+记录；在一个账号上第一次更新时，只更新一张代表卡，请用户在 Markji 中确认显示与复习记录，
+再更新其余卡片。
 
 `deck.id`、`chapter.id`、`card.id` 是 API 操作 ID；API 返回的 `card.root_id` 也可能是 `mkjr_…` 形式的
 不透明 OpenAPI ID。回执记录它用于定位；不要把它直接当作编辑器内容语法所用的短 root ID，后者需要另行核实。
@@ -85,7 +95,9 @@ Windows 使用凭据管理器注入环境变量；文件权限模式暂不支持
 python3 scripts/markji_api.py prepare --repo <repo> --context <context> --request <request.json> --deck <deck_id> --chapter <chapter_id> --grammar-version <verified_integer>
 ```
 
-展示牌组／章节名称与 ID、`is_private`、完整卡片文本、create／skip 项和 `preview_digest`。
+展示牌组／章节名称与 ID、`is_private`、完整卡片文本、create／update／skip 项和 `preview_digest`。
+update 项附有远端旧文（`previous_content`），逐张展示新旧差异；预览的 `required_authorization`
+为 `confirmed`，上传时必须用 `--authorization confirmed`。
 上传到非私有牌组意味着内容将按该牌组现有可见性展示，应让用户在预览中明确看见这一事实。
 用户已经明确授权准确目标和内容时无需重复确认；仍缺少目标或上传授权时，只补足缺失信息。
 
@@ -107,13 +119,20 @@ python3 scripts/markji_api.py upload --repo <repo> --context <context> --request
 ## 去重、恢复与结果
 
 完全相同内容且语法版本相同的唯一正常远端卡片会被跳过；这不是语义去重。
-语义身份已经上传而内容发生改变时，本工具停止，保留给显式远端更新流程处理。
+语义身份已经上传、回执为 `verified`，而本地内容或语法版本改变时，预览列为 update。更新的前提是：
+按回执的原 ID 或 `root_id` 在章节中找到唯一的原卡，它的内容与语法版本仍是回执记录的上次上传结果；
+新内容也不在另一张远端卡片上。任一条件不满足都停止：远端被人工修改过时不覆盖，原卡被移走或删除时
+不新建替代卡。回执未核验完成（`pending`、`created`、`updated`）或创建曾被拒绝的卡，内容改变时同样停止。
 
 上传回执默认位于 `~/.local/state/memo-cards/`，或 `XDG_STATE_HOME` 下的同名目录，位于仓库之外。
 它绑定消费仓库、目标文件、牌组和章节，记录逻辑 ID、内容摘要、语法版本、远端 `card.id` 与 `root_id`，
 不保存 token 或卡片全文。授权上传包含生成必要恢复回执；不得把回执当作可随意删除的临时文件。
 
 每次 POST 前持久记录 `pending`，得到 ID 后记录 `created`，独立 GET 核对后记录 `verified`。
+更新前持久记录 `updating`，同时保存远端原文的摘要与语法版本；得到响应后记录 `updated` 与响应中的 ID，
+读回核对后记录 `verified`。更新结果不确定时不在同一次调用里重发；重新预览时，远端已是新内容就读回
+恢复为 skip，仍是记录的原文就重新列为 update，二者都不是就停止。更新收到 HTTP 400 时，回执恢复为
+原记录并加上 `update_rejected`，旧预览随之失效。
 遇到超时、错误或进程中断时保留状态，不自动重试 POST。明确收到 HTTP 400 时保存 `rejected` 与状态码；
 该次调用仍停止，核对错误及远端后，需要新预览才能重新提交。超时／5xx 等未知结果继续保留 `pending`，
 不能通过改状态或删除回执绕过不确定结果。同一原请求恢复时重新预览：唯一远端内容匹配
