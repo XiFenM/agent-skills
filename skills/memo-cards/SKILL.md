@@ -28,7 +28,7 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    （包括本次对话中 study-log 刚生成的记录），并位于受管 context 声明的输入 collection 内；不要扫描
    collection 自行挑选素材。来源是否已被 Git 跟踪或提交不影响可用性，不要为了让来源可用而执行
    `git add` 或重新 materialize；来源尚未提交时，在预览中提醒一句，是否提交由用户决定。
-2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。制卡是为了理解与面试：优先"为什么这样设计""怎样取舍""怎样诊断"和口述类卡片；学习者已熟练或一眼即知的内容（首答即对且没有迁移价值的计数、查表、定义复述）评为 C，不制卡。A 级只给能防止高代价错误、或能回答一道可能面试题的卡，并为每张 A 卡写一句理由。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
+2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。制卡是为了理解与面试：优先"为什么这样设计""怎样取舍""怎样诊断"和口述类卡片；学习者已熟练或一眼即知的内容（首答即对且没有迁移价值的计数、查表、定义复述）评为 C，不制卡。A 级只给能防止高代价错误、或能回答一道可能面试题的卡，并为每张 A 卡写一句理由。选材前先从来源列出学习目标与核心结论作为覆盖清单；纠错卡只收来源确认判错的回答；未实测或只是推断的行为不写成确定事实。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
 3. 由 Agent 完成语义工作：先确定单一回忆目标，再按[卡片内容与版式](references/card-content-layout.md)
    撰写可独立理解的题面与答案。聚焦的是知识点，不是字数：题面交代必要场景、对象、条件和作答目标，
    答案补足理解结论所需的解释与边界；不以极短题面或提示词替代完整表达。按单张、乱序复习的情境
@@ -36,11 +36,12 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    A／B／C、常青／版本快照、原子／机制／综合口述层级。机制卡若声明子卡依赖，必须引用同一 request
    内 eligible、已核验且 active 的原子／机制卡；综合口述卡引用其中 2–5 张。不要手写 Markji 语法、
    逻辑 ID、XLSX、hash 或 manifest。结论与边界标签可按卡片语言覆盖，但必须短促，并在同一
-   collection 中保持一致。
+   collection 中保持一致。写完后按[制卡自检清单](references/card-review-checklist.md)逐张自检并做批次
+   检查，没通过的卡先改再 prepare。
 4. 按 [受管 Markdown 与 XLSX 合同](references/markdown-xlsx-staging.md) 形成严格 request JSON，调用 `scripts/memo_cards.py prepare`。工具负责模板、身份、inventory、软目标、XLSX、差异和预览摘要。
    request 保存在目标同目录的 `.requests/<目标文件名>.json`，供之后的 verify 与 API 上传复用；prepare、
    publish 和 verify 的输出只在对话中展示摘要，不另存为文件，除非用户要求。
-5. 向用户展示 included 卡片的完整题面、答案与内容层级，A 卡附上它的一句理由；可另附简短目录，但目录摘要
+5. 向用户展示 included 卡片的完整题面、答案与内容层级，A 卡附上它的一句理由，并附覆盖清单与 A 卡占比；可另附简短目录，但目录摘要
    不能代替完整题答。列出 deferred（软目标以外的卡按等级和排序延后，用户可以要求完整转换）、blocked、
    duplicate／conflict、完整 Markdown diff、逐 XLSX 的行级与哈希变化、风险原因和 `preview_digest`；不能只
    报告卡数或样式名。

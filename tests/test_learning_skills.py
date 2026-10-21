@@ -246,6 +246,20 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
     assert slash_command.search(without_urls) is None
 
 
+def test_memo_cards_links_the_self_review_checklist() -> None:
+    memo_root = ROOT / "skills" / "memo-cards"
+    main = (memo_root / "SKILL.md").read_text(encoding="utf-8")
+    assert "(references/card-review-checklist.md)" in main
+    checklist = (memo_root / "references" / "card-review-checklist.md").read_text(encoding="utf-8")
+    assert len(checklist.splitlines()) <= 100
+    headings = [line for line in checklist.splitlines() if line.startswith("## ")]
+    for keyword in ("遮住答案", "揭晓答案", "纠错卡", "综合口述卡", "批次检查"):
+        assert any(keyword in heading for heading in headings), keyword
+    for name in ("card-quality-and-identity.md", "card-content-layout.md"):
+        rule = (memo_root / "references" / name).read_text(encoding="utf-8")
+        assert "(card-review-checklist.md)" in rule, name
+
+
 def test_learning_skills_announce_user_guides_once_per_conversation() -> None:
     combined_guide = ROOT / "docs" / "learning-skills-user-guide.md"
     assert combined_guide.is_file()
