@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lesson Pages / 课程网页"
+  short_description: "把 guide-learning 的讲解写进逐段生长的离线课程网页，对话只留指路、题目与反馈"
+  default_prompt: "使用 $lesson-pages 和 $guide-learning 带我学这一课：讲解写进课程网页，对话里只给我指路和检查题。"

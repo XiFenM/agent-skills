@@ -7,5 +7,9 @@
 *.py text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+*.html text eol=lf
+*.cjs text eol=lf
+*.woff2 binary
+skills/lesson-pages/assets/vendor/** -text -diff linguist-vendored
 *.pdf binary
 *.xlsx binary

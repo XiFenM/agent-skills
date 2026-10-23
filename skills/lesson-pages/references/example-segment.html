@@ -1,0 +1,268 @@
+<!-- 一段讲解的片段示例：add --fragment 用。两个节点连同这一段的检查题，附符号表条目、页面专用样式和部件计算。内容取自 guide-learning 的 teaching-exemplars.md 示例二。 -->
+<section class="lp-node" id="node-1" data-stages="st-split,st-loop">
+  <h2><span class="lp-no">1</span>分块：让 S 和 P 只活在片上</h2>
+  <p class="lp-spine">FlashAttention-2 论文第 3.2 节，建议讲完再读</p>
+  <p class="lp-lead"><b>结论</b>把 Q 按行切成块分给不同的线程块，每个线程块沿 K、V 的列块循环；S 和 P 每次只算出 B<sub>r</sub>×B<sub>c</sub> 的一小块，用完即弃，显存里从不出现 N×N 的矩阵。</p>
+  <p><b class="lp-layer">机制</b>一个线程块负责 Q 的一个行块 <span class="tex">Q_i</span>（<span class="tex">B_r</span> 行）。它把 <span class="tex">Q_i</span> 留在片上，依次读入 K、V 的每个列块 <span class="tex">K_j</span>、<span class="tex">V_j</span>（<span class="tex">B_c</span> 列），算出局部分数 <span class="tex">S_{ij} = Q_i K_j^{\top}/\sqrt{d}</span>，立刻用它更新这些行的输出累加，再丢掉 <span class="tex">S_{ij}</span>。不同行块之间互不依赖，可以并行。</p>
+  <figure class="lp-figure lp-toggle" id="fig-1-1">
+    <div class="lp-controls"><div class="lp-seg"><button type="button" data-view="naive" aria-pressed="true">朴素实现</button><button type="button" data-view="tiled" aria-pressed="false">分块实现</button></div></div>
+    <div data-panel="naive" data-label="朴素实现"><svg class="fa-mem" viewBox="0 0 400 214" role="img" aria-label="朴素实现：N×N 的 S 和 P 都写回显存，各写一遍、读一遍；片上存储只做中转">
+      <text class="fa-label" x="6" y="16">显存（HBM）</text>
+      <rect class="fa-region" x="2" y="26" width="262" height="184" rx="4"/>
+      <text class="fa-label" x="282" y="16">片上存储</text>
+      <rect class="fa-region fa-chip" x="278" y="26" width="120" height="112" rx="4"/>
+      <g class="fa-io">
+        <rect x="16" y="42" width="14" height="124"/><text x="23" y="188">Q</text>
+        <rect x="38" y="42" width="14" height="124"/><text x="45" y="188">K</text>
+        <rect x="60" y="42" width="14" height="124"/><text x="67" y="188">V</text>
+        <rect x="82" y="42" width="14" height="124"/><text x="89" y="188">O</text>
+      </g>
+      <rect class="fa-hot" x="122" y="42" width="62" height="62"/><text x="153" y="78">S</text>
+      <rect class="fa-hot" x="192" y="42" width="62" height="62"/><text x="223" y="78">P</text>
+      <text class="fa-note" x="188" y="132">各 N×N</text>
+      <text class="fa-note" x="188" y="154">写一遍、读一遍</text>
+    </svg></div>
+    <div data-panel="tiled" data-label="分块实现"><svg class="fa-mem" viewBox="0 0 400 214" role="img" aria-label="分块实现：只把 Q 的一个行块和 K、V 的一个列块读进片上，算出一小块 S 和 P，用完即弃，再沿 K、V 移到下一列块；显存里只多出每行一个数的 L">
+      <defs><marker id="fa-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="fa-head" d="M0 0 L8 4 L0 8 z"/></marker></defs>
+      <text class="fa-label" x="6" y="16">显存（HBM）</text>
+      <rect class="fa-region" x="2" y="26" width="262" height="184" rx="4"/>
+      <text class="fa-label" x="282" y="16">片上存储</text>
+      <rect class="fa-region fa-chip" x="278" y="26" width="120" height="112" rx="4"/>
+      <g class="fa-io">
+        <rect x="16" y="42" width="14" height="124"/><text x="23" y="188">Q</text>
+        <rect x="38" y="42" width="14" height="124"/><text x="45" y="188">K</text>
+        <rect x="60" y="42" width="14" height="124"/><text x="67" y="188">V</text>
+        <rect x="82" y="42" width="14" height="124"/><text x="89" y="188">O</text>
+      </g>
+      <rect class="fa-lse" x="106" y="42" width="6" height="124"/><text x="109" y="188">L</text>
+      <rect class="fa-pick" x="16" y="62" width="14" height="22"/>
+      <rect class="fa-pick" x="38" y="96" width="14" height="22"/>
+      <rect class="fa-pick" x="60" y="96" width="14" height="22"/>
+      <path class="fa-flow" d="M31 73 C 150 73, 200 52, 290 52" marker-end="url(#fa-arrow)"/>
+      <path class="fa-flow" d="M75 107 C 170 107, 210 64, 290 64" marker-end="url(#fa-arrow)"/>
+      <path class="fa-move" d="M45 122 L45 150" marker-end="url(#fa-arrow)"/>
+      <text class="fa-note" x="194" y="150">Kⱼ、Vⱼ 沿循环下移</text>
+      <rect class="fa-hot fa-blink" x="294" y="42" width="26" height="26"/><text x="307" y="88">Sᵢⱼ</text>
+      <rect class="fa-hot fa-blink" x="346" y="42" width="26" height="26"/><text x="359" y="88">Pᵢⱼ</text>
+      <text class="fa-note" x="338" y="118">用完即弃</text>
+    </svg></div>
+    <figcaption><b>图 1.1</b>两种实现在显存里留下了什么。朴素实现把 N×N 的 S、P 写回显存；分块实现每次只把一个行块和一个列块读进片上，算出一小块 S、P 后丢掉，显存里只剩输入、输出和每行一个数的 L。</figcaption>
+  </figure>
+  <p><b class="lp-layer">为什么这样设计</b>Attention 的矩阵乘算力并不紧张，慢在搬运：N = 8192 时，单头一份 FP16 的 S 就有 8192 × 8192 × 2 字节 = 128 MiB，朴素实现要写一遍、读一遍，P 再来一遍。分块把这四趟 N² 级的显存读写换成片上运算，代价是 softmax 不能再一次看到整行，这正是节点 2 要解决的问题。</p>
+  <p><b class="lp-layer">真实系统</b>FlashAttention-2 把并行放在批、头和 Q 的行块三个维度上：一个线程块负责一个行块，所以长序列、小批量时仍有足够多的线程块占满 GPU。块大小 B<sub>r</sub>、B<sub>c</sub> 受片上存储和寄存器限制，头维 d 越大，每块能放的行越少。</p>
+  <aside class="lp-note" role="note">来源：FlashAttention-2 论文 arXiv:2307.08691 v1 第 3.2 节。128 MiB 按定义计算。</aside>
+  <p class="lp-aside"><b class="lp-layer">边界</b>分块只改变数据在哪里、按什么顺序算，不改变数学结果；浮点累加顺序不同，逐位结果可能有微小差异。</p>
+</section>
+<section class="lp-node" id="node-2" data-stages="st-online">
+  <h2><span class="lp-no">2</span>在线 softmax 为什么要保留两个统计量</h2>
+  <p class="lp-spine">FlashAttention-2 论文第 3.1 节的算法 1，建议先读</p>
+  <p class="lp-lead"><b>结论</b>分块处理一行时，只要保留当前最大值 <var class="lp-s1">m</var> 和指数和 <var class="lp-s2">ℓ</var>，就能在看到新块后<span class="lp-pen">把之前的结果换算到新的最大值基准上</span>，最终得到与整行 softmax 完全相同的结果。</p>
+  <p><b class="lp-layer">机制</b>处理新块 <span class="tex">S_j</span> 时，三样状态这样更新。旧的 <var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都以旧的 <var class="lp-s1">m</var> 为基准，先乘上缩放因子 <span class="tex">\alpha = \exp(\sA{m} - \sA{m}_{\text{new}})</span>，就换到了新基准。</p>
+  <div class="tex">\begin{aligned}
+\sA{m}_{\text{new}} &amp;= \max\bigl(\sA{m},\ \operatorname{rowmax}(S_j)\bigr) \\
+\alpha &amp;= \exp\bigl(\sA{m} - \sA{m}_{\text{new}}\bigr) \\
+\sB{\ell}_{\text{new}} &amp;= \alpha\,\sB{\ell} + \operatorname{rowsum}\bigl(\exp(S_j - \sA{m}_{\text{new}})\bigr) \\
+\sC{\mathrm{acc}}_{\text{new}} &amp;= \alpha\,\sC{\mathrm{acc}} + \exp(S_j - \sA{m}_{\text{new}})\,V_j
+\end{aligned}</div>
+  <p>下面用一行 12 个分数、每块 4 个走一遍；V 简化成每个位置一个标量，让 <var class="lp-s3">acc</var> 也是一个数。</p>
+  <figure class="lp-figure lp-stepper" id="fig-2-1">
+    <div class="lp-canvas">
+      <div class="fa-row" aria-hidden="true"></div>
+      <dl class="fa-state"></dl>
+      <div class="fa-scale" aria-hidden="true"></div>
+    </div>
+    <div class="lp-table fa-trace">
+      <table>
+        <thead><tr><th>读完</th><th class="num"><var class="lp-s1">m</var></th><th class="num">α</th><th class="num"><var class="lp-s2">ℓ</var></th><th class="num"><var class="lp-s3">acc</var></th></tr></thead>
+        <tbody>
+          <tr><td>第 1 块</td><td class="num">3.1</td><td class="num">—</td><td class="num">1.5496</td><td class="num">−0.6909</td></tr>
+          <tr><td>第 2 块</td><td class="num">4.5</td><td class="num">0.2466</td><td class="num">1.5373</td><td class="num">1.4432</td></tr>
+          <tr><td>第 3 块</td><td class="num">5.6</td><td class="num">0.3329</td><td class="num">1.7544</td><td class="num">1.1495</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ol class="lp-steps">
+      <li>开始之前：<var class="lp-s1">m</var> = −∞，<var class="lp-s2">ℓ</var> = 0，<var class="lp-s3">acc</var> = 0，还没有看到任何分数。</li>
+      <li>第 1 块：<var class="lp-s1">m</var> 就是块内最大值，<var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都以它为基准累加。</li>
+      <li>第 2 块出现了更大的分数：旧的 <var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 先乘上缩放因子 <var>α</var> 缩小，换到新基准，再加上本块的贡献。</li>
+      <li>第 3 块又刷新了 <var class="lp-s1">m</var>：同样先缩放、再累加。每行始终只带着 <var class="lp-s1">m</var>、<var class="lp-s2">ℓ</var>、<var class="lp-s3">acc</var> 三样状态。</li>
+      <li>循环结束：O = <var class="lp-s3">acc</var> ÷ <var class="lp-s2">ℓ</var>，与一次看完整行算出的结果相同；为反向保存 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>。</li>
+    </ol>
+    <figcaption><b>图 2.1</b>在线 softmax 逐块更新。下方的条表示 <var class="lp-s2">ℓ</var>：浅色是旧值乘 <var>α</var> 后剩下的部分，深色是本块加上的部分；最后一步把分块得到的 O = <var class="lp-s3">acc</var> ÷ <var class="lp-s2">ℓ</var> ≈ 0.6552 与一次看完整行的结果并排对照，两者相同。</figcaption>
+  </figure>
+  <p>把这四行写成代码，对一个 Q 行就是下面这个循环（V 同样简化成每个位置一个标量）。指向或点按一条说明，它讲的那几行会亮起来。</p>
+  <pre class="lp-code" data-lang="python" data-title="online_softmax.py" data-symbols="m=1 m_new=1 l=2 acc=3"><code>import math
+
+def attention_row(scores, values, block=4):
+    m, l, acc = -math.inf, 0.0, 0.0
+    for start in range(0, len(scores), block):
+        s = scores[start:start + block]
+        v = values[start:start + block]
+        m_new = max(m, max(s))
+        alpha = math.exp(m - m_new)  # 第一块时 m = −∞，alpha = 0
+        p = [math.exp(x - m_new) for x in s]
+        l = alpha * l + sum(p)
+        acc = alpha * acc + sum(pi * vi for pi, vi in zip(p, v))
+        m = m_new
+    return acc / l, m + math.log(l)  # 输出 O 与 logsumexp L</code></pre>
+  <p class="lp-code-src">为本课写的参考实现 · Python 3.12 标准库可运行</p>
+  <ol class="lp-code-notes">
+    <li data-lines="8-9">先求新的最大值，再算把旧状态换到新基准的缩放因子；第一块时 <var class="lp-s1">m</var> 是 −∞，α 自然是 0，不用特判。</li>
+    <li data-lines="11-12"><var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都先乘 α 换基准，再加上本块的贡献。</li>
+    <li data-lines="14">整行看完才归一化；同时返回 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，留给反向。用图 2.1 的 12 个分数调用，得到的 O 与最后一步的读数相同。</li>
+  </ol>
+  <p>小例子只是为了看清规则。真实规模下一行有几千个分数，按 B<sub>c</sub> = 64 或 128 分成几十个块，但每行随身带的状态始终只有 <var class="lp-s1">m</var>、<var class="lp-s2">ℓ</var> 两个 FP32 标量和长度为 d 的 <var class="lp-s3">acc</var>，与 N 无关。</p>
+  <p><b class="lp-layer">为什么这样设计</b>减去最大值是为了数值稳定：指数对较大的输入会迅速溢出（FP32 在输入约 88 时溢出，FP16 约 11 时就溢出），减去行最大值后所有指数都不超过 1。但最大值要看完整行才知道，所以需要“先用当前最大值，之后再修正”的在线规则。只保留 <var class="lp-s1">m</var> 不够，没有 <var class="lp-s2">ℓ</var> 就无法归一化；只保留 <var class="lp-s2">ℓ</var> 也不够，没有 <var class="lp-s1">m</var> 就无法把不同块的指数换到同一基准。</p>
+  <p><b class="lp-layer">真实系统</b>反向传播需要 P，但保存 N×N 的 P 正是前向想避免的。FlashAttention 只为每行保存 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，只占 O(N) 空间；反向按块重算 S，再用 P = exp(S − L) 恢复概率，用重算换显存和带宽。</p>
+  <aside class="lp-note" role="note">来源：FlashAttention 论文 arXiv:2205.14135 第 3.1 节；FlashAttention-2 论文 arXiv:2307.08691 v1 第 3.1 节。</aside>
+  <p class="lp-aside"><b class="lp-layer">边界</b>块大小受片上存储和寄存器限制；因果掩码下完全被遮住的块可以直接跳过。这些改变性能，不改变数学结果。</p>
+  <blockquote class="lp-oral">
+    <p class="lp-oral-label">面试怎么讲<span>约 60 秒</span></p>
+    <p>FlashAttention 不减少计算量，而是减少显存读写：它从不把 N×N 的注意力矩阵写回显存。做法是分块加在线 softmax，每行只维护最大值和指数和，看到新块时把旧结果缩放到新的最大值基准。反向时只保存每行的 logsumexp，按块重算注意力矩阵，用计算换带宽和显存。</p>
+  </blockquote>
+</section>
+<section class="lp-check" id="q-1" data-state="open">
+  <h3>检查 1<span class="lp-kind">迁移</span></h3>
+  <p class="lp-ask">把一条序列的 K、V 按位置切成两半放在两张卡上（上下文并行），每张卡用自己那一半算出同一组 Q 行的局部结果。两张卡的结果怎样合并，才能得到与单卡完全相同的输出？至少需要交换哪些量？</p>
+  <p class="lp-how">用自己的话回答，说清合并规则和理由即可，不需要算具体数字。</p>
+</section>
+<template data-lp-into="glossary-list">
+  <div id="g-br"><dt>B<sub>r</sub>、B<sub>c</sub></dt><dd>Q 行块的行数与 K、V 列块的列数；受片上存储和寄存器限制。</dd></div>
+  <div id="g-m"><dt><var class="lp-s1">m</var></dt><dd>每行当前见过的最大分数；标量，FP32。</dd></div>
+  <div id="g-l"><dt><var class="lp-s2">ℓ</var></dt><dd>每行以 <var class="lp-s1">m</var> 为基准的指数和；标量，FP32。</dd></div>
+  <div id="g-acc"><dt><var class="lp-s3">acc</var></dt><dd>每行未归一化的输出累加；长度 d 的向量，FP32。</dd></div>
+  <div id="g-alpha"><dt>α</dt><dd>缩放因子 <span class="tex">\exp(\sA{m} - \sA{m}_{\text{new}})</span>，把旧的 <var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 换到新的最大值基准；标量。</dd></div>
+  <div id="g-lse"><dt>L</dt><dd>每行的 logsumexp，L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>；前向写回，供反向恢复 P。</dd></div>
+</template>
+<style data-lp-style>
+/* 图 1.1：显存与片上存储 */
+.fa-mem { display: block; width: 100%; max-width: 560px; height: auto; margin: 14px auto 0; color: var(--ink); }
+.fa-mem text { font-size: 14px; text-anchor: middle; fill: currentColor; }
+.fa-mem .fa-label { text-anchor: start; fill: var(--ink-soft); }
+.fa-mem .fa-note { fill: var(--ink-soft); }
+.fa-region { fill: none; stroke: var(--ink-faint); }
+.fa-chip { stroke-dasharray: 4 3; }
+.fa-io rect, .fa-lse { fill: var(--raised); stroke: var(--ink-faint); }
+.fa-hot { fill: var(--accent-wash); stroke: var(--accent); }
+.fa-pick { fill: var(--accent); }
+.fa-flow, .fa-move { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.fa-move { stroke-dasharray: 3 3; }
+.fa-head { fill: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .fa-blink { animation: fa-blink 1.2s ease-in-out .3s 3; } }
+@keyframes fa-blink { 50% { fill: var(--accent); } }
+/* 图 2.1：一行分数、三样状态和 ℓ 的缩放 */
+.fa-row { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+.fa-cell { padding: 7px 0 6px; text-align: center; font: 13px/1.35 var(--font-mono); color: var(--ink-faint); border: 1px dashed var(--rule); border-radius: var(--radius); transition: background-color .3s ease-out, color .3s ease-out, border-color .3s ease-out; }
+.fa-cell small { display: block; margin-top: 3px; font-size: 12px; color: inherit; }
+.fa-cell.is-done { color: var(--ink); background: var(--paper); border: 1px solid var(--rule); }
+.fa-cell.is-current { color: var(--ink); background: var(--accent-wash); border: 1px solid var(--accent); }
+.fa-cell.is-max { box-shadow: inset 0 -3px 0 var(--s1); }
+.fa-cell.gap { margin-left: 8px; }
+.fa-state { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 18px 0 0 !important; }
+.fa-state > div { padding: 2px 0 2px 10px; border-left: 2px solid transparent; }
+.fa-state > div.is-pointed { border-left-color: var(--accent); }
+.fa-state > div.is-minor dd { font-size: 14px; color: var(--ink-soft); }
+.fa-state dt { font-size: 13px; color: var(--ink-faint); white-space: nowrap; }
+.fa-state dd { margin: 0; font: 600 16px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; }
+.fa-state dd small { display: block; min-height: 1.5em; font: 12.5px/1.5 var(--font-sans); font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
+.fa-scale { display: grid; grid-template-columns: 4.5em 1fr; gap: 6px 12px; align-items: center; margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
+.fa-bar { display: flex; height: 10px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--rule); border-radius: 3px; overflow: hidden; }
+.fa-bar i { display: block; height: 100%; transition: width .45s ease-out; }
+.fa-bar .fa-kept { background: color-mix(in srgb, var(--s2) 35%, var(--paper)); }
+.fa-bar .fa-added { background: var(--s2); }
+.fa-scale.is-final .fa-kept { background: var(--s3); }
+.fa-scale.is-final .fa-added { background: color-mix(in srgb, var(--s3) 55%, var(--paper)); }
+.fa-same { grid-column: 2; font-size: 13px; color: var(--s2); visibility: hidden; }
+.fa-scale.is-final .fa-same { visibility: visible; }
+.lp-stepper.is-ready .fa-trace { display: none; }
+html:not(.js) #fig-2-1 .lp-canvas { display: none; }
+@media print { #fig-2-1 .fa-trace { display: block !important; } #fig-2-1 .lp-canvas { display: none; } }
+@media (max-width: 639px) {
+  .fa-row { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 8px; }
+  .fa-cell.gap { margin-left: 0; }
+  .fa-state { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fa-state dd small { min-height: 3em; white-space: normal; }
+}
+</style>
+<script data-lp-hook>
+// 图 2.1：一行 12 个分数，每块 4 个；V 简化为每个位置一个标量。所有数字按公式实时计算。
+(function () {
+  var S = [1.2, 3.1, 0.4, 2.0, 4.5, 0.8, 2.2, 1.0, 3.9, 5.6, 0.3, 2.7];
+  var V = [0.5, -1.0, 2.0, 0.3, 1.5, -0.4, 0.9, 1.1, -0.7, 0.8, 1.6, -0.2];
+  var B = 4;
+  function after(blocks) {
+    var st = { m: -Infinity, l: 0, acc: 0, scale: null, oldM: null, oldL: 0, oldAcc: 0, addL: 0, addAcc: 0 };
+    for (var b = 0; b < blocks; b += 1) {
+      var part = S.slice(b * B, b * B + B), mNew = Math.max(st.m, Math.max.apply(null, part));
+      var scale = st.m === -Infinity ? null : Math.exp(st.m - mNew), addL = 0, addAcc = 0;
+      part.forEach(function (s, k) { var e = Math.exp(s - mNew); addL += e; addAcc += e * V[b * B + k]; });
+      st = { m: mNew, l: (scale === null ? 0 : scale * st.l) + addL, acc: (scale === null ? 0 : scale * st.acc) + addAcc,
+             scale: scale, oldM: st.m, oldL: st.l, oldAcc: st.acc, addL: addL, addAcc: addAcc };
+    }
+    return st;
+  }
+  function whole() {
+    var m = Math.max.apply(null, S), l = 0, acc = 0;
+    S.forEach(function (s, k) { var e = Math.exp(s - m); l += e; acc += e * V[k]; });
+    return acc / l;
+  }
+  var widest = 0;
+  for (var b = 1; b <= 3; b += 1) { var probe = after(b); widest = Math.max(widest, probe.l, probe.oldL); }
+  LessonPage.onStep["fig-2-1"] = function (step, figure) {
+    var f = function (x) { return LessonPage.fmt.num(x, 4); };
+    var row = figure.querySelector(".fa-row");
+    if (!row.children.length) {
+      S.forEach(function (s, k) {
+        var cell = document.createElement("div");
+        cell.className = "fa-cell" + (k % B === 0 && k ? " gap" : "");
+        cell.innerHTML = s.toFixed(1) + "<small>V " + V[k] + "</small>";
+        row.appendChild(cell);
+      });
+      figure.querySelector(".fa-scale").innerHTML =
+        '<span data-label="a">旧 ℓ</span><span class="fa-bar"><i class="fa-kept" data-bar="old"></i></span>' +
+        '<span data-label="b">新 ℓ</span><span class="fa-bar"><i class="fa-kept" data-bar="kept"></i><i class="fa-added" data-bar="added"></i></span>' +
+        '<span class="fa-same">两条一样长：分块与整行结果相同</span>';
+      // 表里的静态数字供无脚本和打印时阅读，这里按公式复核，不一致就报错。
+      Array.prototype.forEach.call(figure.querySelectorAll(".fa-trace tbody tr"), function (tr, b) {
+        var st = after(b + 1), want = [st.m, st.scale, st.l, st.acc];
+        Array.prototype.forEach.call(tr.querySelectorAll("td.num"), function (td, k) {
+          var shown = td.textContent.trim();
+          if (want[k] === null ? shown !== "—" : Math.abs(Number(shown.replace("−", "-")) - want[k]) > 5e-5) {
+            throw new Error("图 2.1 的表格第 " + (b + 1) + " 行与公式不符");
+          }
+        });
+      });
+    }
+    var blocks = Math.min(step - 1, 3), st = after(blocks);
+    Array.prototype.forEach.call(row.children, function (cell, k) {
+      var block = Math.floor(k / B);
+      cell.classList.toggle("is-done", step === 5 || block < blocks - 1);
+      cell.classList.toggle("is-current", step < 5 && block === blocks - 1);
+      cell.classList.toggle("is-max", block < blocks && S[k] === st.m);
+    });
+    var width = function (x) { return (100 * x / widest).toFixed(1) + "%"; };
+    var kept = st.scale === null ? 0 : st.scale * st.oldL, last = step === 5, scale = figure.querySelector(".fa-scale");
+    scale.classList.toggle("is-final", last);
+    scale.querySelector('[data-label="a"]').textContent = last ? "分块 O" : "旧 ℓ";
+    scale.querySelector('[data-label="b"]').textContent = last ? "整行 O" : "新 ℓ";
+    var share = (100 * (st.acc / st.l) / Math.max(st.acc / st.l, whole())).toFixed(1) + "%";
+    figure.querySelector('[data-bar="old"]').style.width = last ? share : width(st.oldL);
+    figure.querySelector('[data-bar="kept"]').style.width = last ? "0%" : width(kept);
+    figure.querySelector('[data-bar="added"]').style.width = last ? (100 * whole() / Math.max(st.acc / st.l, whole())).toFixed(1) + "%" : width(st.addL);
+    var cards;
+    if (step === 5) {
+      cards = [["O", "", f(st.acc / st.l), "acc ÷ ℓ", "is-pointed"], ["一次看完整行", "", f(whole()), "整行 softmax 加权和", "is-pointed"],
+               ["L", "", f(st.m + Math.log(st.l)), "m + log ℓ", "is-minor"], ["最大值 m", "lp-s1", f(st.m), "整行的最大分数", "is-minor"]];
+    } else if (st.scale === null) {
+      cards = [["最大值 m", "lp-s1", f(st.m), blocks ? "第 1 块的最大值" : "还没有分数"], ["缩放因子 α", "", "—", blocks ? "第 1 块不用缩放" : ""],
+               ["指数和 ℓ", "lp-s2", f(st.l), blocks ? "本块 " + f(st.addL) : ""], ["输出累加 acc", "lp-s3", f(st.acc), blocks ? "本块 " + f(st.addAcc) : ""]];
+    } else {
+      cards = [["最大值 m", "lp-s1", f(st.m), f(st.oldM) + " → " + f(st.m)], ["缩放因子 α", "", f(st.scale), "exp(" + f(st.oldM) + " − " + f(st.m) + ")"],
+               ["指数和 ℓ", "lp-s2", f(st.l), "α × " + f(st.oldL) + " + " + f(st.addL)], ["输出累加 acc", "lp-s3", f(st.acc), "α × " + f(st.oldAcc) + " + " + f(st.addAcc)]];
+    }
+    figure.querySelector(".fa-state").innerHTML = cards.map(function (card) {
+      return '<div class="' + (card[4] || "") + '"><dt>' + card[0] + '</dt><dd><span class="' + card[1] + '">' + card[2] + "</span><small>" + (card[3] || "&nbsp;") + "</small></dd></div>";
+    }).join("");
+  };
+})();
+</script>

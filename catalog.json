@@ -128,6 +128,56 @@
       }
     },
     {
+      "name": "lesson-pages",
+      "category": "learning/coaching",
+      "kind": "first-party",
+      "path": "skills/lesson-pages",
+      "lineage": [
+        {
+          "repository": "oil-oil/oil-ui",
+          "path": "references/motion.md",
+          "commit": "7002e1a3b3e3bc19d4159e2a37917456dafd5ad4"
+        },
+        {
+          "repository": "oil-oil/oil-ui",
+          "path": "references/reviewer-manual.md",
+          "commit": "7002e1a3b3e3bc19d4159e2a37917456dafd5ad4"
+        },
+        {
+          "repository": "oil-oil/oil-ui",
+          "path": "references/tools.md",
+          "commit": "7002e1a3b3e3bc19d4159e2a37917456dafd5ad4"
+        },
+        {
+          "repository": "oil-oil/oil-ui",
+          "path": "references/visual-language.md",
+          "commit": "7002e1a3b3e3bc19d4159e2a37917456dafd5ad4"
+        }
+      ],
+      "context": {
+        "validator": "scripts/context_config.py"
+      },
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
+      "consumers": [
+        "PlanA",
+        "programming-lab"
+      ],
+      "migration": "new-first-party",
+      "review": {
+        "state": "implemented",
+        "topics": [
+          "page-is-reading-surface-not-state",
+          "progressive-no-spoiler-pages",
+          "offline-self-contained-html",
+          "attributed-mit-adaptation",
+          "vendored-render-libraries"
+        ]
+      }
+    },
+    {
       "name": "memo-cards",
       "category": "learning/knowledge-management",
       "kind": "first-party",

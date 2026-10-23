@@ -13,6 +13,10 @@
       "codex",
       "claude"
     ],
+    "lesson-pages": [
+      "codex",
+      "claude"
+    ],
     "memo-cards": [
       "codex",
       "claude"
@@ -32,6 +36,7 @@
       "creator-workflow": ".agent-skills-config/creator-workflow.json",
       "english-coach": ".agent-skills-config/english-coach.json",
       "guide-learning": ".agent-skills-config/guide-learning.json",
+      "lesson-pages": ".agent-skills-config/lesson-pages.json",
       "memo-cards": ".agent-skills-config/memo-cards.json",
       "resource-planning": ".agent-skills-config/resource-planning.json",
       "study-log": ".agent-skills-config/study-log.json"

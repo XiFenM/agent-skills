@@ -82,6 +82,8 @@ Guided Learning 帮助你真正理解一个主题：讲清机制和设计理由�
 
 ## 与其他 Skill 的关系
 
-`guide-learning` 不负责大范围搜索和治理资料、整理学习过程记录、保存原始对话、提供英语反馈或制卡；这些分别交给 `resource-planning`、`study-log`、`english-coach` 和 `memo-cards`，每次交接都由你确认。主题学完后，可以另外请求写一篇学习文章；文章需要确认素材、用途和目标文件，不改变课程状态。
+`guide-learning` 不负责大范围搜索和治理资料、整理学习过程记录、保存原始对话、提供英语反馈或制卡；这些分别交给 `resource-planning`、`study-log`、`english-coach` 和 `memo-cards`，每次交接都由你确认。
+
+不想在对话里读大段讲解时，可以同时使用 [`lesson-pages`](lesson-pages.md)：讲解写进逐段生长的课程网页，对话只留指路、检查题和反馈；讲什么、怎样提问不变，页面也不是学习状态。学习者画像的“讲解偏好”里可以写下是否默认用课程网页。主题学完后，可以另外请求写一篇学习文章；文章需要确认素材、用途和目标文件，不改变课程状态。
 
 完整的组合方法见[学习类 Skill 组合使用指南](../learning-skills-user-guide.md)。

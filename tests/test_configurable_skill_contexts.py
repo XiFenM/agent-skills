@@ -15,6 +15,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CONFIGURABLE_SKILLS = (
     "english-coach",
     "guide-learning",
+    "lesson-pages",
     "memo-cards",
     "resource-planning",
     "study-log",
@@ -193,6 +194,14 @@ def _guide_config() -> dict[str, Any]:
     }
 
 
+def _lesson_pages_config() -> dict[str, Any]:
+    return {
+        "schema": "agent-skills.lesson-pages/v1",
+        "skill": "lesson-pages",
+        "page_targets": [{"id": "lesson-pages", "collection": "learning/pages"}],
+    }
+
+
 def _study_log_config() -> dict[str, Any]:
     return {
         "schema": "agent-skills.study-log/v1",
@@ -257,6 +266,7 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
     skill_configs = {
         "english-coach": _english_config(),
         "guide-learning": _guide_config(),
+        "lesson-pages": _lesson_pages_config(),
         "memo-cards": _memo_config(),
         "resource-planning": _resource_config(),
         "study-log": _study_log_config(),
@@ -264,6 +274,7 @@ def _prepare_consumer(consumer: Path) -> tuple[Path, dict[str, Any], dict[str, d
     paths = {
         "english-coach": ".agent-skills-config/english-coach.json",
         "guide-learning": ".agent-skills-config/guide-learning.json",
+        "lesson-pages": ".agent-skills-config/lesson-pages.json",
         "memo-cards": ".agent-skills-config/memo-cards.json",
         "resource-planning": ".agent-skills-config/resource-planning.json",
         "study-log": ".agent-skills-config/study-log.json",
@@ -377,7 +388,7 @@ def _assert_canonical_wrapper(
     return wrapper
 
 
-def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path: Path) -> None:
+def test_configurable_skills_materialize_shared_canonical_contexts(tmp_path: Path) -> None:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     central = consumer / ".agent-skills"
@@ -387,6 +398,7 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
     messages = materialize_skills.synchronize(consumer, central, config_path)
     assert any("english-coach" in message for message in messages)
     assert any("guide-learning" in message for message in messages)
+    assert any("lesson-pages" in message for message in messages)
     assert any("memo-cards" in message for message in messages)
     assert any("resource-planning" in message for message in messages)
     assert any("study-log" in message for message in messages)
@@ -401,6 +413,7 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
         script_name = {
             "english-coach": "context_config.py",
             "guide-learning": "context_config.py",
+            "lesson-pages": "context_config.py",
             "memo-cards": "memo_cards.py",
             "resource-planning": "resource_planning.py",
             "study-log": "context_config.py",
@@ -441,6 +454,12 @@ def test_five_configurable_skills_materialize_shared_canonical_contexts(tmp_path
         "learning/state.md",
     ]
     assert not (consumer / "learning" / "practice").exists()
+    assert wrappers["lesson-pages"]["allowlist"] == {
+        "tracked_files": [],
+        "tracked_collections": [],
+        "write_paths": ["learning/pages"],
+    }
+    assert not (consumer / "learning" / "pages").exists()
 
     study_wrapper = wrappers["study-log"]
     assert study_wrapper["allowlist"] == {
@@ -491,3 +510,47 @@ def test_guide_learning_mixed_materials_are_located_without_content_reads(
     serialized = json.dumps(context)
     assert "not a valid image" not in serialized
     assert "not valid XML" not in serialized
+
+
+def _rewrite_consumer_config(consumer: Path, relative: str, value: dict[str, Any]) -> None:
+    _write_json(consumer / relative, value)
+    _git(consumer, "add", relative)
+    _git(consumer, "commit", "-q", "-m", "update config")
+
+
+def test_lesson_pages_cannot_write_inside_guide_learning_records(tmp_path: Path) -> None:
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    central = consumer / ".agent-skills"
+    _copy_clean_central(central)
+    config_path, _, _ = _prepare_consumer(consumer)
+    config = _lesson_pages_config()
+    config["page_targets"] = [{"id": "lesson-pages", "collection": "learning/practice/pages"}]
+    _rewrite_consumer_config(consumer, ".agent-skills-config/lesson-pages.json", config)
+
+    try:
+        materialize_skills.synchronize(consumer, central, config_path)
+    except materialize_skills.SyncError as exc:
+        assert "lesson-pages write path" in str(exc) and "guide-learning" in str(exc)
+    else:  # pragma: no cover - the assertion below explains the failure
+        raise AssertionError("overlapping page target was accepted")
+    assert not (consumer / ".agents" / "skills" / "lesson-pages").exists()
+
+
+def test_lesson_pages_requires_guide_learning_on_the_same_hosts(tmp_path: Path) -> None:
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    central = consumer / ".agent-skills"
+    _copy_clean_central(central)
+    config_path, _, _ = _prepare_consumer(consumer)
+    index = json.loads(config_path.read_text(encoding="utf-8"))
+    index["skills"]["lesson-pages"] = ["codex", "claude"]
+    index["skills"]["guide-learning"] = ["codex"]
+    _rewrite_consumer_config(consumer, ".agent-skills.json", index)
+
+    try:
+        materialize_skills.synchronize(consumer, central, config_path)
+    except materialize_skills.SyncError as exc:
+        assert "lesson-pages context requires guide-learning on hosts: claude" in str(exc)
+    else:  # pragma: no cover - the assertion below explains the failure
+        raise AssertionError("lesson-pages was configured without guide-learning")

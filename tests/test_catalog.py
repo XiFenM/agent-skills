@@ -137,6 +137,7 @@ class CatalogTests(unittest.TestCase):
             "creator-workflow": "scripts/context_config.py",
             "english-coach": "scripts/context_config.py",
             "guide-learning": "scripts/context_config.py",
+            "lesson-pages": "scripts/context_config.py",
             "memo-cards": "scripts/memo_cards.py",
             "resource-planning": "scripts/resource_planning.py",
             "study-log": "scripts/context_config.py",
@@ -170,6 +171,31 @@ class CatalogTests(unittest.TestCase):
         for name in ("guide-learning", "study-log"):
             self.assertEqual(by_name[name]["migration"], "merged-upgrade")
 
+    def test_lesson_pages_records_its_adapted_sources_and_intended_consumers(self) -> None:
+        catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
+        by_name = {item["name"]: item for item in catalog["skills"]}
+        pages = by_name["lesson-pages"]
+        self.assertEqual(pages["category"], "learning/coaching")
+        self.assertEqual(pages["groups"], [])
+        self.assertEqual(pages["migration"], "new-first-party")
+        # Intended consumers; each repository adopts it in its own authorized step.
+        self.assertEqual(pages["consumers"], ["PlanA", "programming-lab"])
+        # Lineage names only the oil-ui files whose text was adapted (see NOTICE.md),
+        # never guide-learning: the teaching contract is checked by tests instead.
+        self.assertEqual(
+            pages["lineage"],
+            [
+                {
+                    "repository": "oil-oil/oil-ui",
+                    "path": f"references/{name}",
+                    "commit": "7002e1a3b3e3bc19d4159e2a37917456dafd5ad4",
+                }
+                for name in ("motion.md", "reviewer-manual.md", "tools.md", "visual-language.md")
+            ],
+        )
+        self.assertIn("progressive-no-spoiler-pages", pages["review"]["topics"])
+        self.assertIn("attributed-mit-adaptation", pages["review"]["topics"])
+
     def test_expected_migration_boundary(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
         first_party = {
@@ -184,6 +210,7 @@ class CatalogTests(unittest.TestCase):
                 "creator-workflow",
                 "english-coach",
                 "guide-learning",
+                "lesson-pages",
                 "memo-cards",
                 "resource-planning",
                 "study-log",

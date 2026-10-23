@@ -1,12 +1,12 @@
 # Agent Skills
 
-这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成五个学习核心及 `creator-workflow` 的评审、通用化升级与校验，并发布既有学习批次到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)。六个 first-party Skill 均采用中央通用核心、严格消费配置和受管上下文；`daily-work` 的 version 2 消费适配、旧副本退役与历史保护验证也已完成候选，等待独立提交与发布。
+这是三个学习／工作主仓库的 Skill 规范源。中央仓库已经完成五个学习核心及 `creator-workflow` 的评审、通用化升级与校验，并发布既有学习批次到公开远端 [`XiFenM/agent-skills`](https://github.com/XiFenM/agent-skills)。七个 first-party Skill 均采用中央通用核心、严格消费配置和受管上下文；2026-10-23 新增的 `lesson-pages` 把 `guide-learning` 的讲解写进离线课程网页；`daily-work` 的 version 2 消费适配、旧副本退役与历史保护验证也已完成候选，等待独立提交与发布。
 
 ## 当前范围
 
-- [`skills/`](skills/) 中保留 6 个 active first-party Skill：`guide-learning`、`study-log`、`english-coach`、`memo-cards`、`resource-planning`、`creator-workflow`。
+- [`skills/`](skills/) 中保留 7 个 active first-party Skill：`guide-learning`、`lesson-pages`、`study-log`、`english-coach`、`memo-cards`、`resource-planning`、`creator-workflow`。
 - `study-companion` 与 `learn-by-practice` 已从中央源码树删除并登记为 retired name，统一替代项为 `guide-learning`；兼容源码仍可从 `learning-core-v1` 标签恢复，但不再提供可发现入口。
-- 5 个 external Skill 从 3 个官方 Git 子模块读取；不在本仓库复制第三方源码。
+- 5 个 external Skill 从 3 个官方 Git 子模块读取；不在本仓库复制第三方源码。例外只在 `lesson-pages`：改编自 oil-ui 的少量 MIT 许可文本（见 D55），以及原样附带、只在写入页面时于本机运行的 KaTeX 与 highlight.js 发布文件（见 D56）；来源、版本、校验值和许可全文见它的 [`NOTICE.md`](skills/lesson-pages/NOTICE.md)。
 - PlanA 的 PyTorch、SGLang、vLLM 源码子模块自带 Skill 不迁移、不登记。
 - Remotion 只暴露官方聚合入口 `remotion-best-practices`，不再保留功能重复的独立入口。
 
@@ -17,12 +17,13 @@
 面向学习者的整体分工和组合流程见[学习类 Skill 组合使用指南](docs/learning-skills-user-guide.md)。也可以直接阅读各 Skill 的独立说明：
 
 - [`guide-learning`](docs/user-guides/guide-learning.md)
+- [`lesson-pages`](docs/user-guides/lesson-pages.md)
 - [`english-coach`](docs/user-guides/english-coach.md)
 - [`study-log`](docs/user-guides/study-log.md)
 - [`memo-cards`](docs/user-guides/memo-cards.md)
 - [`resource-planning`](docs/user-guides/resource-planning.md)
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D54 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态，D50 让 guide-learning 的记录映射支持并行计划，D51 让有参考资料的课程先向学习者指明资料位置与阅读范围，D52 把学习者画像定为必备输入并在缺失时主动访谈建立，D53 让 memo-cards 首次制卡就核对覆盖、事实与回忆质量，D54 让 memo-cards 的上传器在确认后更新它上传过的卡片。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D55 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态，D50 让 guide-learning 的记录映射支持并行计划，D51 让有参考资料的课程先向学习者指明资料位置与阅读范围，D52 把学习者画像定为必备输入并在缺失时主动访谈建立，D53 让 memo-cards 首次制卡就核对覆盖、事实与回忆质量，D54 让 memo-cards 的上传器在确认后更新它上传过的卡片，D55 新增 `lesson-pages`，把课程讲解写进逐段生长的离线单文件网页，对话只留指路、检查题和反馈。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
 
 ## 目录
 
@@ -52,6 +53,7 @@ agent-skills/
     "creator-workflow": ["codex"],
     "english-coach": ["codex", "claude"],
     "guide-learning": ["codex", "claude"],
+    "lesson-pages": ["codex", "claude"],
     "memo-cards": ["codex", "claude"],
     "resource-planning": ["codex", "claude"],
     "study-log": ["codex", "claude"]
@@ -62,6 +64,7 @@ agent-skills/
       "creator-workflow": ".agent-skills-config/creator-workflow.json",
       "english-coach": ".agent-skills-config/english-coach.json",
       "guide-learning": ".agent-skills-config/guide-learning.json",
+      "lesson-pages": ".agent-skills-config/lesson-pages.json",
       "memo-cards": ".agent-skills-config/memo-cards.json",
       "resource-planning": ".agent-skills-config/resource-planning.json",
       "study-log": ".agent-skills-config/study-log.json"
@@ -70,7 +73,7 @@ agent-skills/
 }
 ```
 
-公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置列结构化目录，验证器派生同级 `-raw` 配对目录；两类产物均在仓库内，会话来源、消息边界与授权不进入公共配置。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
+公共仓库配置使用 `agent-skills.repository/v1`，只声明 `repository_id`、可选语言／时区和带稳定 ID 的仓库事实；各 Skill 配置使用 `agent-skills.<skill>/v1`。这里的 version 2 指消费索引及其受管配置能力，不会改写既有学习记录、CLI envelope、原始对话存档或创作项目业务 manifest 的格式版本。配置只能声明环境事实、能力路由和合法候选位置，不能预授权保存、覆盖、制卡、付费、发布、提交或推送。`creator-workflow` 只允许严格的 profile、package-script／selected-Skill 路由、受管根和保护根；密钥、远端任务、当前状态、任意命令与授权文本不得进入公共配置。`lesson-pages` 只声明页面目录，并要求同一宿主上也选择 `guide-learning`；页面目录不能与任何学习记录目录重叠。`guide-learning` 的映射不保存 Program、Lesson、Checkpoint 或 mastery 状态值；D41 的可选 `article_profile` 也只约束语言、语气、章节、领域视角与候选目标，不能代替起草范围确认或精确写入授权，文章也不拥有学习状态和日志。`study-log` 的公共配置列结构化目录，验证器派生同级 `-raw` 配对目录；两类产物均在仓库内，会话来源、消息边界与授权不进入公共配置。完整索引形状见 [`.agent-skills.example.json`](.agent-skills.example.json)，各 Skill 的字段由其登记的严格 validator 校验。
 
 materializer 只负责更新时的 Skill 本体、配置结构、路径安全与必要引用有效性校验。配置仍须是 Git 已
 跟踪的 UTF-8 JSON；显式资料引用、collection 成员及已有写目标只检查 Git 跟踪、路径与普通文件等

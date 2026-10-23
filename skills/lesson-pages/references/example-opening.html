@@ -1,0 +1,36 @@
+<!-- 开课片段示例：new --fragment 用。内容取自 guide-learning 的 teaching-exemplars.md 示例二；数字与来源只演示写法，实际教学按所用版本重新核验。 -->
+<section class="lp-narrative" id="intro">
+  <h2>这一课要解决什么</h2>
+  <p>Attention 的数学只有三行：<span class="tex">S = QK^{\top}/\sqrt{d}</span>，<span class="tex">P = \operatorname{softmax}_{\text{行}}(S)</span>，<span class="tex">O = PV</span>。但朴素实现要把 N×N 的 S 和 P 写回显存再读出来，序列一长，这部分读写按 N² 增长，成了瓶颈，而矩阵乘本身的算力并不紧张。FlashAttention 要解决的矛盾是：<span class="lp-pen">softmax 需要整行信息才能算分母，片上存储却放不下整行</span>。</p>
+  <figure class="lp-figure is-wide" id="fig-0">
+    <ol class="lp-stages lp-flow">
+      <li id="st-split" data-label="按 Q 行块分工"><b>按 Q 行块分工</b><span>每个线程块负责 B<sub>r</sub> 行输出</span></li>
+      <li id="st-loop" data-label="沿 K、V 列块循环"><b>沿 K、V 列块循环</b><span>每次读入 B<sub>c</sub> 列的 K<sub>j</sub>、V<sub>j</sub></span></li>
+      <li id="st-online" data-label="在线 softmax 更新"><b>在线 softmax 更新</b><span>每行维护 <var class="lp-s1">m</var>、<var class="lp-s2">ℓ</var>、<var class="lp-s3">acc</var></span></li>
+      <li id="st-final" data-label="归一化并写回"><b>归一化并写回</b><span>O = <var class="lp-s3">acc</var> ÷ <var class="lp-s2">ℓ</var>，为反向存 L</span></li>
+    </ol>
+    <figcaption><b>图 0</b>全流程骨架（单头，Q、K、V、O 的形状都是 <span class="nb">[N, d]</span>）。S 和 P 只在片上按块出现；Q、K、V 以 BF16 或 FP16 存储，<var class="lp-s1">m</var>、<var class="lp-s2">ℓ</var>、<var class="lp-s3">acc</var> 在 FP32 中累加。</figcaption>
+  </figure>
+  <p>学完这一课，你应该能对着这条主线讲清：为什么分块之后仍能得到与整行 softmax 完全相同的结果，每个线程块要随身带哪几样状态、它们由谁产生、给谁用；能判断改动块大小或精度会影响什么，并在面试中用一分钟讲清 FlashAttention 为什么快、又为什么不减少计算量。</p>
+</section>
+<section id="spine">
+  <h2>资料怎么配合着读</h2>
+  <div class="lp-table">
+    <table>
+      <thead><tr><th>资料</th><th>本课对应</th><th>什么时候读</th></tr></thead>
+      <tbody>
+        <tr><td><a href="https://arxiv.org/abs/2307.08691v1">FlashAttention-2 论文 v1</a>（主线）</td><td>第 3.1 节“算法”的前向部分；第 3.2 节“并行”</td><td>3.1 节课前读，符号看不懂可以先放着；3.2 节讲完节点 1 再读</td></tr>
+        <tr><td><a href="https://arxiv.org/abs/2205.14135">FlashAttention 论文</a>（补充）</td><td>第 3.1 节的分块与在线 softmax 推导</td><td>节点 2 之后按需读</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>第 3.3 节的 warp 级分工留到下一课。</p>
+</section>
+<template data-lp-into="sources-list">
+  <li>Tri Dao 等，FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness，arXiv:2205.14135。</li>
+  <li>Tri Dao，FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning，arXiv:2307.08691 v1（本课主线）。</li>
+</template>
+<template data-lp-into="glossary-list">
+  <div id="g-n"><dt>N、d</dt><dd>序列长度与头维。Q、K、V、O 的形状都是 [N, d]。</dd></div>
+  <div id="g-s"><dt>S、P</dt><dd>分数矩阵 <span class="tex">QK^{\top}/\sqrt{d}</span> 与按行 softmax 后的概率，形状 [N, N]；分块实现里只以小块出现在片上。</dd></div>
+</template>

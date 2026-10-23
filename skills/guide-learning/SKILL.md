@@ -146,6 +146,10 @@ description: "Guide human learners to deep, transferable understanding: explain 
 `memo-cards`，英语反馈交给 `english-coach`。它们只在用户明确请求后交接，本 Skill 不直接写它们的文件。
 没有学习意图的普通实现、修复或代码审查不使用本 Skill。
 
+装有 `lesson-pages` 时，学习者要求、画像选择用课程网页讲解或本课已有课程网页，就同时按它呈现：长讲解写进页面，
+对话只留指路、题目和反馈；没装时照常在对话里讲。这是随行呈现，不是交接；讲什么、问什么、何时推进仍按本 Skill，
+页面不是状态或证据。
+
 "暂停一下""继续刚才的""讲快点""我卡住了"等自然表达直接映射到相应流程，不要求固定命令。主题完整、
 值得沉淀时可以提议写学习文章；确认素材与用途后才起草，获得目标文件授权后才写入，见
 [article-artifacts.md](references/article-artifacts.md)。

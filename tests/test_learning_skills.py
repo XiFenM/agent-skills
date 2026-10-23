@@ -5,10 +5,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE_ROOT = ROOT / "skills" / "guide-learning"
+PAGES_ROOT = ROOT / "skills" / "lesson-pages"
 RETIRED_SKILL_NAMES = {"learn-by-practice", "study-companion"}
 LEARNING_USER_GUIDES = {
     "english-coach": "english-coach.md",
     "guide-learning": "guide-learning.md",
+    "lesson-pages": "lesson-pages.md",
     "memo-cards": "memo-cards.md",
     "resource-planning": "resource-planning.md",
     "study-log": "study-log.md",
@@ -39,6 +41,48 @@ EXPECTED_GUIDE_FILES = {
 GUIDE_MAIN_MAX_LINES = 170
 GUIDE_TOTAL_MAX_BYTES = 85_000
 FIRST_USE_SECTION_MAX_LINES = 8
+
+PAGES_REFERENCE_FILES = {
+    "example-opening.html",
+    "example-segment.html",
+    "files-and-viewing.md",
+    "interactive-widgets.md",
+    "page-design.md",
+    "page-structure.md",
+}
+PAGES_VENDOR_FILES = {
+    "highlight/LICENSE",
+    "highlight/highlight.min.js",
+    "katex/LICENSE",
+    "katex/fonts/OFL.txt",
+    "katex/katex.min.css",
+    "katex/katex.min.js",
+    *(
+        f"katex/fonts/KaTeX_{face}.woff2"
+        for face in (
+            "AMS-Regular", "Caligraphic-Bold", "Caligraphic-Regular", "Fraktur-Bold", "Fraktur-Regular",
+            "Main-Bold", "Main-BoldItalic", "Main-Italic", "Main-Regular", "Math-BoldItalic", "Math-Italic",
+            "SansSerif-Bold", "SansSerif-Italic", "SansSerif-Regular", "Script-Regular",
+            "Size1-Regular", "Size2-Regular", "Size3-Regular", "Size4-Regular", "Typewriter-Regular",
+        )
+    ),
+}
+EXPECTED_PAGES_FILES = {
+    "NOTICE.md",
+    "SKILL.md",
+    "agents/openai.yaml",
+    "assets/lesson-template.html",
+    *(f"assets/vendor/{name}" for name in PAGES_VENDOR_FILES),
+    "scripts/context_config.py",
+    "scripts/lesson_pages.py",
+    "scripts/render.cjs",
+    "tests/test_lesson_pages.py",
+    "tests/test_lesson_pages_context.py",
+    *(f"references/{name}" for name in PAGES_REFERENCE_FILES),
+}
+PAGES_MAIN_MAX_LINES = 150
+PAGES_TEXT_MAX_BYTES = 50_000
+PAGES_TEMPLATE_MAX_BYTES = 110_000
 
 
 def _relative_files(root: Path) -> set[str]:
@@ -292,3 +336,100 @@ def test_retired_learning_skills_leave_no_runtime_entry_or_route() -> None:
     )
     for name in RETIRED_SKILL_NAMES:
         assert name not in active_text
+
+
+def _bold_items(text: str, heading_prefix: str) -> list[str]:
+    return re.findall(r"(?m)^\d\. \*\*(.+?)\*\*", _section(text, heading_prefix))
+
+
+def test_lesson_pages_has_the_exact_progressive_disclosure_tree() -> None:
+    assert _relative_files(PAGES_ROOT) == EXPECTED_PAGES_FILES
+
+
+def test_lesson_pages_frontmatter_main_and_budgets_stay_compact() -> None:
+    text = (PAGES_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    match = re.match(r"\A---\r?\n(?P<body>.*?)\r?\n---(?:\r?\n|\Z)", text, re.DOTALL)
+    assert match is not None
+    keys = {line.split(":", 1)[0].strip() for line in match.group("body").splitlines() if line.strip()}
+    assert keys == {"name", "description"}
+    assert len(text.splitlines()) <= PAGES_MAIN_MAX_LINES
+    documents = [PAGES_ROOT / "SKILL.md", *sorted((PAGES_ROOT / "references").glob("*.md"))]
+    assert sum(len(path.read_bytes()) for path in documents) <= PAGES_TEXT_MAX_BYTES
+    assert len((PAGES_ROOT / "assets" / "lesson-template.html").read_bytes()) <= PAGES_TEMPLATE_MAX_BYTES
+
+
+def test_lesson_pages_links_every_reference_and_long_references_have_contents() -> None:
+    main = (PAGES_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert set(re.findall(r"\(references/([^/)]+\.(?:md|html))\)", main)) == PAGES_REFERENCE_FILES
+    for name in PAGES_REFERENCE_FILES:
+        if name.endswith(".md"):
+            text = (PAGES_ROOT / "references" / name).read_text(encoding="utf-8")
+            if len(text.splitlines()) > 100:
+                assert "## Contents" in text, name
+
+
+def test_lesson_pages_openai_metadata_routes_to_both_skills() -> None:
+    metadata = (PAGES_ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    interface = dict(re.findall(r'(?m)^\s{2}([a-z_]+):\s*"([^"]*)"\s*$', metadata))
+    assert set(interface) == {"display_name", "short_description", "default_prompt"}
+    assert 25 <= len(interface["short_description"]) <= 64
+    assert "$lesson-pages" in interface["default_prompt"]
+    assert "$guide-learning" in interface["default_prompt"]
+
+
+def test_lesson_pages_maps_every_guide_learning_step_and_layer() -> None:
+    guide = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    steps = _bold_items(guide, "一堂课的结构")
+    layers = _bold_items(guide, "讲解标准")
+    assert len(steps) == 6 and len(layers) == 5
+    structure = (PAGES_ROOT / "references" / "page-structure.md").read_text(encoding="utf-8")
+    step_table = _section(structure, "1. 课程结构到页面的映射")
+    layer_table = _section(structure, "2. 讲解层次到节点块的映射")
+    for step in steps:
+        assert re.search(rf"(?m)^\| {re.escape(step)} \|", step_table), step
+    for layer in layers:
+        assert re.search(rf"(?m)^\| {re.escape(layer)} \|", layer_table), layer
+
+
+def test_lesson_pages_defers_teaching_rules_to_guide_learning() -> None:
+    texts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [PAGES_ROOT / "SKILL.md", *(PAGES_ROOT / "references").glob("*.md")]
+    )
+    main = (PAGES_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "完全按 `guide-learning`" in main
+    # Pacing, question-count and self-check rules live only in guide-learning.
+    for restated in ("2–3 个节点", "2–4 题", "60–90 秒", "四项自检", "出题前自检"):
+        assert restated not in texts, restated
+
+
+def test_guide_learning_and_lesson_pages_name_each_other() -> None:
+    guide = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    split = _section(guide, "与其他 Skill 的分工")
+    assert "`lesson-pages`" in split and "不是交接" in split and "页面不是状态或证据" in split
+    records = (GUIDE_ROOT / "references" / "state-records.md").read_text(encoding="utf-8")
+    assert "课程网页" in _section(records, "1. 三个对象")
+    assert "课程网页" in _section(records, "9. 边界速查")
+    adaptation = (GUIDE_ROOT / "references" / "repository-adaptation.md").read_text(encoding="utf-8")
+    assert "lesson-pages" in _section(adaptation, "6. 学习者画像")
+
+
+def test_lesson_pages_ships_its_notice_and_no_oil_ui_runtime() -> None:
+    notice = (PAGES_ROOT / "NOTICE.md").read_text(encoding="utf-8")
+    assert "Copyright (c) 2026 oil-oil" in notice
+    assert "https://github.com/oil-oil/oil-ui" in notice
+    assert "7002e1a3b3e3bc19d4159e2a37917456dafd5ad4" in notice
+    # The render libraries ship unmodified with their licenses and run only at write time.
+    for name in ("KaTeX 0.19.0", "highlight.js 11.12.0", "Khan Academy", "Ivan Sagalaev"):
+        assert name in notice, name
+    assert "Permission is hereby granted" in (PAGES_ROOT / "assets/vendor/katex/LICENSE").read_text(encoding="utf-8")
+    assert "SIL Open Font License, Version 1.1" in notice
+    assert "SIL OPEN FONT LICENSE" in (PAGES_ROOT / "assets/vendor/katex/fonts/OFL.txt").read_text(encoding="utf-8")
+    assert "BSD 3-Clause" in (PAGES_ROOT / "assets/vendor/highlight/LICENSE").read_text(encoding="utf-8")
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in PAGES_ROOT.rglob("*")
+        if path.is_file() and path.suffix in {".md", ".py", ".yaml", ".html"} and path.name != "NOTICE.md"
+    )
+    for forbidden in ("oiloil.org", "oil-ui-pro", "check_update", "recommend_once", "oil-ui/", "PlanA", "TODO"):
+        assert forbidden not in combined, forbidden
