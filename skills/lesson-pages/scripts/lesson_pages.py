@@ -81,7 +81,7 @@ EXPLICIT_END_TAGS = frozenset(
 )
 FORBIDDEN_TAGS = frozenset("base embed frame frameset iframe object".split())
 FRAGMENT_FORBIDDEN_TAGS = FORBIDDEN_TAGS | frozenset("html head body meta link title".split())
-WIDGET_CLASSES = frozenset({"lp-stepper", "lp-explorer", "lp-toggle", "lp-timer"})
+WIDGET_CLASSES = frozenset({"lp-stepper", "lp-explorer", "lp-toggle", "lp-timer", "lp-live"})
 CONTROL_TAGS = frozenset({"input", "select", "textarea", "button"})
 EMOJI_PATTERN = re.compile(
     "[\U0001F300-\U0001FAFF\U00002600-\U000026FF\U00002700-\U000027BF\U0001F000-\U0001F2FF]"
@@ -99,6 +99,11 @@ RENDERER = SKILL_ROOT / "scripts" / "render.cjs"
 KATEX_DIR = SKILL_ROOT / "assets" / "vendor" / "katex"
 KATEX_STYLE_ID = "lp-katex"
 KATEX_VERSION = "0.19.0"
+LOOKS_DIR = SKILL_ROOT / "assets" / "looks"
+LOOK_STYLE_ID = "lp-look"
+# The handout look is the template's own; the others carry their stylesheet in #lp-look.
+LOOKS = ("handout", "blueprint", "vermilion")
+KNOB_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 SCOPE_BOUNDARIES = frozenset("applet button caption html marquee object table td template th".split())
 TEX_EXCLUDED_CONTEXTS = frozenset({"svg", "math", "pre", "code", "script", "style"})
 SYMBOL_MAP = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=[1-4](?:\s+[A-Za-z_][A-Za-z0-9_]*=[1-4])*")
@@ -546,6 +551,16 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
         actual = _block(source, tag, element_id)
         if actual is not None and element_id in expected and actual.replace("\r\n", "\n") != expected[element_id]:
             report.warn("runtime.drift", f"#{element_id} differs from the current template; do not hand-edit it")
+    look = html_elements[0].attrs.get("data-look") if html_elements else None
+    look_styles = [node for node in page.by_id.get(LOOK_STYLE_ID, []) if node.tag == "style"]
+    if look is not None and look not in LOOKS[1:]:
+        report.error("look.unknown", f"data-look={look!r} is not a look; use {' or '.join(LOOKS[1:])}, or leave it out for the handout look")
+    elif look is not None and len(look_styles) != 1:
+        report.error("look.css", f"data-look=\"{look}\" needs exactly one <style id=\"{LOOK_STYLE_ID}\">; set looks with new --look or the look command")
+    elif look is None and look_styles:
+        report.error("look.css", f"<style id=\"{LOOK_STYLE_ID}\"> belongs to a look, but <html> has no data-look; set looks with the look command")
+    elif look is not None and look_styles[0].text().replace("\r\n", "\n").strip("\n") != _look_style(look):
+        report.warn("runtime.drift", f"#{LOOK_STYLE_ID} differs from the {look} look; refresh it with look --to {look}", look_styles[0].line)
 
     # Resources and scripts.
     for element in page.elements:
@@ -724,7 +739,7 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
                     report.warn("svg.label-size", f"SVG label renders below 11px at phone width (font-size {size.group(1)} in a {numbers[2]:g}-wide viewBox)", text_node.line)
                     break
     for element in page.elements:
-        if element.tag == "style" and element.attrs.get("id") in {"lp-base", KATEX_STYLE_ID}:
+        if element.tag == "style" and element.attrs.get("id") in {"lp-base", KATEX_STYLE_ID, LOOK_STYLE_ID}:
             continue
         css = element.text() if element.tag == "style" else element.attrs.get("style", "") if not any(a.tag == "svg" for a in [element, *element.ancestors()]) else ""
         css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
@@ -797,10 +812,29 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
 
     # Widgets.
     scripts = "\n".join(node.text() for node in page.find("script"))
-    for figure in page.find(cls="lp-explorer"):
+    for figure in [*page.find(cls="lp-explorer"), *page.find(cls="lp-live")]:
         figure_id = figure.attrs.get("id", "")
         if not figure_id or not re.search(rf"explorers\s*(?:\[\s*['\"]{re.escape(figure_id)}['\"]\s*\]|\.{re.escape(figure_id)}\b)", scripts):
-            report.warn("widget.hook", f"explorer {figure_id or '(no id)'} has no registered compute function", figure.line)
+            kind = "explorer" if "lp-explorer" in figure.classes else "live paragraph"
+            report.warn("widget.hook", f"{kind} {figure_id or '(no id)'} has no registered compute function", figure.line)
+    # Live paragraphs: each knob lists its values and shows one of them; results are [data-out].
+    for box in page.find(cls="lp-live"):
+        knobs = [node for node in box.iter() if "data-knob" in node.attrs]
+        if not knobs or not any("data-out" in node.attrs for node in box.iter()):
+            report.error("live.parts", f"live paragraph {box.attrs.get('id', '(no id)')} needs at least one [data-knob] and one [data-out]", box.line)
+        for knob in knobs:
+            name = knob.attrs["data-knob"]
+            values = [value.strip() for value in knob.attrs.get("data-values", "").split(",") if value.strip()]
+            labels = [value.strip() for value in knob.attrs["data-labels"].split(",")] if "data-labels" in knob.attrs else values
+            if not KNOB_NAME.fullmatch(name):
+                report.error("live.knob", f"data-knob={name!r} must be an identifier such as n or bytes", knob.line)
+            elif len(values) < 2 or len(labels) != len(values):
+                report.error("live.knob", f"knob {name} needs data-values with at least two values, and as many data-labels if it has them", knob.line)
+            elif knob.children or knob.text().strip() not in labels:
+                report.error("live.knob", f"knob {name} must show one of its {'labels' if 'data-labels' in knob.attrs else 'values'} as plain text", knob.line)
+    for element in page.elements:
+        if "data-knob" in element.attrs and not any("lp-live" in node.classes for node in element.ancestors()):
+            report.error("live.knob", "[data-knob] works only inside a .lp-live paragraph", element.line)
     for figure in page.find("figure"):
         if not any(child.tag == "figcaption" for child in figure.children):
             report.warn("figure.caption", f"figure {figure.attrs.get('id', '')} has no <figcaption>", figure.line)
@@ -1226,6 +1260,49 @@ def _ensure_katex(text: str, *, redrawn: bool = False) -> str:
     return text[:heads[0].end_start] + block + newline + text[heads[0].end_start:]
 
 
+@functools.lru_cache(maxsize=None)
+def _look_style(look: str) -> str:
+    return (LOOKS_DIR / f"{look}.css").read_text(encoding="utf-8").replace("\r\n", "\n").strip("\n")
+
+
+def _remove_attribute(start_tag: str, name: str) -> str:
+    head = re.match(r"<[A-Za-z][A-Za-z0-9-]*", start_tag)
+    assert head is not None
+    position = head.end()
+    end = len(start_tag) - (2 if start_tag.endswith("/>") else 1)
+    while position < end:
+        match = ATTRIBUTE_TOKEN.match(start_tag, position, end)
+        if match is None or match.end() == position:
+            break
+        if match.group(1).lower() == name.lower():
+            return start_tag[:match.start()] + start_tag[match.end():]
+        position = match.end()
+    return start_tag
+
+
+def _apply_look(text: str, look: str) -> str:
+    """Point <html data-look> at a look and put its stylesheet in #lp-look; the handout look needs neither."""
+    page = Page(text)
+    roots = page.find("html")
+    bases = [node for node in page.by_id.get("lp-base", []) if node.tag == "style"]
+    if not roots or not bases or bases[0].end is None:
+        raise UsageError("page has no <html> or #lp-base to attach a look to")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    blocks = [node for node in page.by_id.get(LOOK_STYLE_ID, []) if node.tag == "style"]
+    block = "" if look == "handout" else f'<style id="{LOOK_STYLE_ID}">{newline}{_look_style(look).replace(chr(10), newline)}{newline}</style>'
+    if blocks:
+        assert blocks[0].end is not None
+        start, end = blocks[0].start, blocks[0].end
+        if not block and text.startswith(newline, end):
+            end += len(newline)
+        text = text[:start] + block + text[end:]
+    elif block:
+        text = text[:bases[0].end] + newline + block + text[bases[0].end:]
+    tag = text[roots[0].start:roots[0].start_end]
+    edited = _remove_attribute(tag, "data-look") if look == "handout" else _set_attribute(tag, "data-look", look)
+    return text[:roots[0].start] + edited + text[roots[0].start_end:]
+
+
 def _prepare_fragment(fragment: str, page: Page, rev: int) -> tuple[str, list[tuple[str, str]], list[str], dict[str, Any]]:
     """Validate a fragment, render its formulas and code, and stamp its blocks with ``rev``.
 
@@ -1418,13 +1495,13 @@ def full_check(text: str, path: Path | None) -> tuple[Report, dict[str, Any]]:
 
 
 def _visible_text(element: Element) -> str:
-    """Text a reader sees: no scripts, styles or the MathML copy KaTeX keeps for screen readers."""
+    """Text a reader reads: no scripts, styles, ruby annotations or the MathML copy KaTeX keeps for screen readers."""
     parts: list[str] = []
     stack: list[str | Element] = list(reversed(element.chunks))
     while stack:
         chunk = stack.pop()
         if isinstance(chunk, Element):
-            if chunk.tag not in {"script", "style", "template"} and "katex-mathml" not in chunk.classes:
+            if chunk.tag not in {"script", "style", "template", "rt", "rp"} and "katex-mathml" not in chunk.classes:
                 stack.extend(reversed(chunk.chunks))
         else:
             parts.append(chunk)
@@ -1488,8 +1565,9 @@ def outline_source(source: str) -> dict[str, Any]:
                 entry["state"] = element.attrs.get("data-state", "")
                 entry["has_reference_points"] = any("lp-answer" in node.classes for node in element.iter())
             figures = [
-                {"id": node.attrs.get("id", ""), **({"reveals": node.attrs["data-reveals"]} if "data-reveals" in node.attrs else {})}
-                for node in element.iter() if node.tag == "figure"
+                {"id": node.attrs.get("id", ""), **({"kind": "live"} if node.tag != "figure" else {}),
+                 **({"reveals": node.attrs["data-reveals"]} if "data-reveals" in node.attrs else {})}
+                for node in element.iter() if node.tag == "figure" or "lp-live" in node.classes
             ]
             if figures:
                 entry["figures"] = figures
@@ -1510,6 +1588,7 @@ def outline_source(source: str) -> dict[str, Any]:
         "rev": marker.attrs.get("data-rev", "") if marker else "",
         "updated": marker.attrs.get("data-updated", "") if marker else "",
         "bytes": len(source.encode("utf-8")),
+        "look": (page.find("html")[0].attrs.get("data-look") if page.find("html") else None) or "handout",
         "head_style_lines": lines(style[0]) if style else None,
         "page_code": page_code,
         "append_marker_line": line_of(source.index(APPEND_MARKER)) if APPEND_MARKER in source else None,
@@ -1566,6 +1645,7 @@ def command_new(args: argparse.Namespace) -> dict[str, Any]:
     else:
         rendered = {"tex": 0, "code": 0}
     text = text.replace(CONTENT_MARKER + "\n", "").replace(CONTENT_MARKER, "")
+    text = _apply_look(text, args.look)
     report, scripts = full_check(text, path)
     if report.errors:
         raise UsageError(
@@ -1576,6 +1656,7 @@ def command_new(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "page": path.relative_to(repo).as_posix(),
         "rev": 1,
+        "look": args.look,
         "inserted_ids": fragment_ids,
         "rendered": rendered,
         "reading_minutes": reading_minutes(text.split('<main', 1)[-1]),
@@ -1634,6 +1715,18 @@ def command_render(args: argparse.Namespace) -> dict[str, Any]:
                    extra={"rendered": rendered, "changed": True})
 
 
+def command_look(args: argparse.Namespace) -> dict[str, Any]:
+    repo = _repo(args.repo)
+    path, source, data, page, rev = _load_page(repo, args.page, args.id)
+    text = _apply_look(source, args.to)
+    if text == source:
+        return {"page": path.relative_to(repo).as_posix(), "rev": rev, "look": args.to, "changed": False}
+    new_rev = rev + 1
+    text = _bump(text, Page(text), new_rev, _today(args.date))
+    return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
+                   extra={"look": args.to, "changed": True})
+
+
 def command_check(args: argparse.Namespace) -> dict[str, Any]:
     repo = _repo(args.repo)
     path = _page_path(repo, args.page, must_exist=True)
@@ -1688,9 +1781,12 @@ def command_find(args: argparse.Namespace) -> dict[str, Any]:
                 except OSError as exc:
                     skipped.append({"page": candidate.relative_to(repo).as_posix(), "reason": type(exc).__name__})
                     continue
-                attributes = _marker_attributes(head)
-                if attributes is None:
+                head_page = Page(head)
+                marker = head_page.marker()
+                if marker is None:
                     continue
+                attributes = dict(marker.attrs)
+                roots = head_page.find("html")
                 if args.id and attributes.get("data-id") != args.id:
                     continue
                 title = re.search(r"<title>(.*?)</title>", head, re.S)
@@ -1700,6 +1796,7 @@ def command_find(args: argparse.Namespace) -> dict[str, Any]:
                     "rev": int(attributes["data-rev"]) if REV_PATTERN.fullmatch(attributes.get("data-rev", "")) else None,
                     "updated": attributes.get("data-updated", ""),
                     "title": html.unescape(title.group(1).strip()) if title else "",
+                    "look": (roots[0].attrs.get("data-look") if roots else None) or "handout",
                 })
     result: dict[str, Any] = {"pages": pages}
     if skipped:
@@ -1838,6 +1935,7 @@ def _parser() -> argparse.ArgumentParser:
     new.add_argument("--spine", default="", help="main teaching-spine material and version")
     new.add_argument("--source", action="append", default=[], help="initial source entry; repeatable")
     new.add_argument("--lang", default="zh-CN")
+    new.add_argument("--look", default="handout", choices=LOOKS, help="page look; keep one look per course (default: handout)")
     new.add_argument("--fragment", help="initial content file, or - for stdin")
     new.add_argument("--make-parents", action="store_true", help="create the confirmed collection directory")
     new.add_argument("--date", help=argparse.SUPPRESS)
@@ -1866,6 +1964,13 @@ def _parser() -> argparse.ArgumentParser:
     render.add_argument("--page", required=True)
     render.add_argument("--id", required=True, help="the page id; must match the page's marker")
     render.add_argument("--date", help=argparse.SUPPRESS)
+
+    look = sub.add_parser("look", help="switch a page to another look, or refresh its look stylesheet")
+    common(look)
+    look.add_argument("--page", required=True)
+    look.add_argument("--id", required=True, help="the page id; must match the page's marker")
+    look.add_argument("--to", required=True, choices=LOOKS)
+    look.add_argument("--date", help=argparse.SUPPRESS)
 
     check = sub.add_parser("check", help="validate one page")
     common(check)
@@ -1896,6 +2001,7 @@ COMMANDS = {
     "add": command_add,
     "state": command_state,
     "render": command_render,
+    "look": command_look,
     "check": command_check,
     "outline": command_outline,
     "find": command_find,

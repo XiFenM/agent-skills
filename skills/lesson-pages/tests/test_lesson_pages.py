@@ -1096,3 +1096,141 @@ def test_embedded_formula_styles_carry_both_licences(built: Path) -> None:
     block = re.search(r'<style id="lp-katex">(.*?)</style>', _source(built), re.S).group(1)
     assert "Permission is hereby granted" in block and "SIL OPEN FONT LICENSE" in block
 
+
+
+# ---------------------------------------------------------------- looks, live paragraphs, ruby
+
+
+def _stable(source: str) -> str:
+    """The page without what every write changes: revision, date and the visible update line."""
+    source = re.sub(r'data-rev="\d+" data-updated="[0-9-]+"', "", source, count=1)
+    return re.sub(r"更新于 [0-9-]+", "", source, count=1)
+
+
+def _look(capsys, page: Path, look: str) -> tuple[int, dict]:
+    return _run(capsys, "look", "--repo", str(page.parents[2]), "--page", PAGE, "--id", PAGE_ID,
+                "--to", look, "--date", "2026-10-24")
+
+
+def test_new_with_a_look_carries_its_stylesheet(repo: Path, capsys) -> None:
+    code, result = _new(capsys, repo, "--look", "blueprint")
+    assert code == 0 and result["look"] == "blueprint"
+    assert result["check"] == {"ok": True, "errors": [], "warnings": []}
+    source = _source(repo / PAGE)
+    assert '<html lang="zh-CN" data-look="blueprint">' in source
+    style = (ROOT / "assets" / "looks" / "blueprint.css").read_text(encoding="utf-8").strip("\n")
+    assert source.count('<style id="lp-look">') == 1 and f'<style id="lp-look">\n{style}\n</style>' in source
+    assert source.index('id="lp-base"') < source.index('id="lp-look"') < source.index('id="lp-page-style"')
+    with pytest.raises(SystemExit):
+        lp.main(["new", "--repo", str(repo), "--page", "learning/pages/x.html", "--id", "x", "--title", "t", "--look", "neon"])
+
+
+def test_look_command_switches_looks_and_back_without_residue(built: Path, capsys) -> None:
+    handout = _source(built)
+    code, result = _look(capsys, built, "vermilion")
+    assert code == 0 and result["changed"] and result["rev"] == 3 and result["check"]["ok"], result
+    assert result["check"]["warnings"] == []
+    source = _source(built)
+    assert 'data-look="vermilion"' in source and source.count('<style id="lp-look">') == 1
+    code, result = _look(capsys, built, "blueprint")
+    assert code == 0 and result["rev"] == 4
+    source = _source(built)
+    assert 'data-look="blueprint"' in source and source.count('<style id="lp-look">') == 1 and "--gold" not in source
+    code, result = _look(capsys, built, "blueprint")
+    assert code == 0 and result == {"page": PAGE, "rev": 4, "look": "blueprint", "changed": False}
+    code, result = _look(capsys, built, "handout")
+    assert code == 0 and result["rev"] == 5
+    assert _stable(_source(built)) == _stable(handout)
+
+
+def test_look_command_refreshes_a_hand_edited_look(built: Path, capsys) -> None:
+    _look(capsys, built, "blueprint")
+    edited = _with(_source(built), '<style id="lp-look">\n', '<style id="lp-look">\n.x { color: red; }\n')
+    built.write_text(edited, encoding="utf-8")
+    report = lp.check_source(edited, built)
+    assert [item["code"] for item in report.as_dict()["warnings"]] == ["runtime.drift"]
+    code, result = _look(capsys, built, "blueprint")
+    assert code == 0 and result["changed"] and result["check"]["warnings"] == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "code"),
+    [
+        ('<html lang="zh-CN">', '<html lang="zh-CN" data-look="neon">', "look.unknown"),
+        ('<html lang="zh-CN">', '<html lang="zh-CN" data-look="handout">', "look.unknown"),
+        ('<html lang="zh-CN">', '<html lang="zh-CN" data-look="blueprint">', "look.css"),
+        ('<style id="lp-page-style">', '<style id="lp-look">.lp-title { font-size: 9px; }</style>\n<style id="lp-page-style">', "look.css"),
+    ],
+)
+def test_check_requires_a_known_look_with_its_stylesheet(built: Path, old: str, new: str, code: str) -> None:
+    assert code in _error_codes(_with(_source(built), old, new), built)
+
+
+def test_find_and_outline_report_each_page_look(built: Path, capsys) -> None:
+    repo = built.parents[2]
+    code, result = _run(capsys, "find", "--repo", str(repo), "--in", "learning/pages")
+    assert result["pages"][0]["look"] == "handout"
+    assert lp.outline_source(_source(built))["look"] == "handout"
+    _look(capsys, built, "vermilion")
+    code, result = _run(capsys, "find", "--repo", str(repo), "--in", "learning/pages")
+    assert result["pages"][0]["look"] == "vermilion"
+    assert lp.outline_source(_source(built))["look"] == "vermilion"
+
+
+def test_example_live_paragraph_is_listed_with_the_node_figures(built: Path) -> None:
+    node = next(block for block in lp.outline_source(_source(built))["blocks"] if block["id"] == "node-1")
+    assert {"id": "live-1-1", "kind": "live"} in node["figures"]
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "code"),
+    [
+        ('data-values="2,4" data-labels="FP16,FP32">FP16</span>', 'data-values="2,4" data-labels="FP16">FP16</span>', "live.knob"),
+        ('data-values="2,4" data-labels="FP16,FP32">FP16</span>', 'data-values="2" data-labels="FP16">FP16</span>', "live.knob"),
+        ('data-values="2,4" data-labels="FP16,FP32">FP16</span>', 'data-values="2,4" data-labels="FP16,FP32">BF16</span>', "live.knob"),
+        ('data-values="2,4" data-labels="FP16,FP32">FP16</span>', 'data-values="2,4" data-labels="FP16,FP32"><b>FP16</b></span>', "live.knob"),
+        ('data-knob="bytes"', 'data-knob="2-bytes"', "live.knob"),
+        ("</main>", '<p>N = <span class="lp-knob" data-knob="n" data-values="1,2">1</span></p></main>', "live.knob"),
+        ("</main>", '<p class="lp-live" id="live-9">N = <span data-knob="n" data-values="1,2">1</span></p></main>', "live.parts"),
+        ('<p class="lp-how">', '<p class="lp-live" id="live-q"><span data-knob="n" data-values="1,2">1</span> <span data-out="x">1</span></p><p class="lp-how">', "check.leak"),
+    ],
+)
+def test_check_catches_broken_live_paragraphs(built: Path, old: str, new: str, code: str) -> None:
+    source = _source(built)
+    assert code not in _error_codes(source, built)
+    assert code in _error_codes(_with(source, old, new), built)
+
+
+def test_live_paragraph_without_a_compute_function_warns(built: Path) -> None:
+    source = _with(_source(built), 'LessonPage.explorers["live-1-1"]', 'LessonPage.explorers["live-other"]')
+    warnings = lp.check_source(source, built).as_dict()["warnings"]
+    assert [item["message"] for item in warnings if item["code"] == "widget.hook"] == ["live paragraph live-1-1 has no registered compute function"]
+
+
+def test_nothing_live_sits_right_after_an_open_question(built: Path, tmp_path: Path, capsys) -> None:
+    live = _fragment(tmp_path, "live.html", '<p class="lp-live" id="live-q">n = <span data-knob="n" data-values="1,2">1</span>, x = <span data-out="x">1</span></p>')
+    code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
+                        "--fragment", live, "--after", "q-1")
+    assert code == 2 and "check.leak" in result["error"]
+
+
+@needs_node
+def test_ruby_annotations_stay_out_of_reading_time_and_titles(built: Path, tmp_path: Path, capsys) -> None:
+    words = " ".join(["throughput"] * 40)
+    segment = ('<section class="lp-node" id="node-9" data-stages="st-online"><h2><span class="lp-no">9</span>'
+               '<ruby>显存<rt>HBM</rt></ruby>带宽</h2><p class="lp-spine">第 3 节</p>'
+               f'<p class="lp-lead"><b>结论</b><ruby>吞吐<rp>(</rp><rt>{words}</rt><rp>)</rp></ruby>受限于带宽。</p></section>')
+    code, result = _add(capsys, built, tmp_path, segment)
+    assert code == 0 and result["check"]["ok"], result
+    assert result["reading_minutes"] == 1
+    node = next(block for block in lp.outline_source(_source(built))["blocks"] if block["id"] == "node-9")
+    assert node["title"] == "9 显存带宽"
+
+
+def test_template_offers_strata_and_no_look_switcher() -> None:
+    template = (ROOT / "assets" / "lesson-template.html").read_text(encoding="utf-8")
+    assert '<button type="button" data-lp-strata aria-pressed="false">地层</button>' in template
+    assert "data-lp-look" not in template and 'id="lp-look"' not in template
+    for look in lp.LOOKS[1:]:
+        style = (ROOT / "assets" / "looks" / f"{look}.css").read_text(encoding="utf-8")
+        assert f':root[data-look="{look}"]' in style and not re.search(r"https?://|@import|url\(", style)

@@ -72,6 +72,8 @@ EXPECTED_PAGES_FILES = {
     "SKILL.md",
     "agents/openai.yaml",
     "assets/lesson-template.html",
+    "assets/looks/blueprint.css",
+    "assets/looks/vermilion.css",
     *(f"assets/vendor/{name}" for name in PAGES_VENDOR_FILES),
     "scripts/context_config.py",
     "scripts/lesson_pages.py",
@@ -81,8 +83,9 @@ EXPECTED_PAGES_FILES = {
     *(f"references/{name}" for name in PAGES_REFERENCE_FILES),
 }
 PAGES_MAIN_MAX_LINES = 150
-PAGES_TEXT_MAX_BYTES = 50_000
-PAGES_TEMPLATE_MAX_BYTES = 110_000
+PAGES_TEXT_MAX_BYTES = 55_000
+PAGES_TEMPLATE_MAX_BYTES = 145_000
+PAGES_LOOK_MAX_BYTES = 16_000
 
 
 def _relative_files(root: Path) -> set[str]:
@@ -356,6 +359,8 @@ def test_lesson_pages_frontmatter_main_and_budgets_stay_compact() -> None:
     documents = [PAGES_ROOT / "SKILL.md", *sorted((PAGES_ROOT / "references").glob("*.md"))]
     assert sum(len(path.read_bytes()) for path in documents) <= PAGES_TEXT_MAX_BYTES
     assert len((PAGES_ROOT / "assets" / "lesson-template.html").read_bytes()) <= PAGES_TEMPLATE_MAX_BYTES
+    for look in (PAGES_ROOT / "assets" / "looks").glob("*.css"):
+        assert len(look.read_bytes()) <= PAGES_LOOK_MAX_BYTES, look.name
 
 
 def test_lesson_pages_links_every_reference_and_long_references_have_contents() -> None:

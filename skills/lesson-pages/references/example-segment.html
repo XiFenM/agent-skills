@@ -2,8 +2,8 @@
 <section class="lp-node" id="node-1" data-stages="st-split,st-loop">
   <h2><span class="lp-no">1</span>分块：让 S 和 P 只活在片上</h2>
   <p class="lp-spine">FlashAttention-2 论文第 3.2 节，建议讲完再读</p>
-  <p class="lp-lead"><b>结论</b>把 Q 按行切成块分给不同的线程块，每个线程块沿 K、V 的列块循环；S 和 P 每次只算出 B<sub>r</sub>×B<sub>c</sub> 的一小块，用完即弃，显存里从不出现 N×N 的矩阵。</p>
-  <p><b class="lp-layer">机制</b>一个线程块负责 Q 的一个行块 <span class="tex">Q_i</span>（<span class="tex">B_r</span> 行）。它把 <span class="tex">Q_i</span> 留在片上，依次读入 K、V 的每个列块 <span class="tex">K_j</span>、<span class="tex">V_j</span>（<span class="tex">B_c</span> 列），算出局部分数 <span class="tex">S_{ij} = Q_i K_j^{\top}/\sqrt{d}</span>，立刻用它更新这些行的输出累加，再丢掉 <span class="tex">S_{ij}</span>。不同行块之间互不依赖，可以并行。</p>
+  <p class="lp-lead"><b>结论</b>把 Q 按行切成块分给不同的<ruby>线程块<rt>thread block</rt></ruby>，每个线程块沿 K、V 的列块循环；S 和 P 每次只算出 B<sub>r</sub>×B<sub>c</sub> 的一小块，用完即弃，显存里从不出现 N×N 的矩阵。</p>
+  <p><b class="lp-layer">机制</b>一个线程块负责 Q 的一个行块 <span class="tex">Q_i</span>（<span class="tex">B_r</span> 行）。它把 <span class="tex">Q_i</span> 留在<ruby>片上<rt>on-chip</rt></ruby>，依次读入 K、V 的每个列块 <span class="tex">K_j</span>、<span class="tex">V_j</span>（<span class="tex">B_c</span> 列），算出局部分数 <span class="tex">S_{ij} = Q_i K_j^{\top}/\sqrt{d}</span>，立刻用它更新这些行的输出累加，再丢掉 <span class="tex">S_{ij}</span>。不同行块之间互不依赖，可以并行。</p>
   <figure class="lp-figure lp-toggle" id="fig-1-1">
     <div class="lp-controls"><div class="lp-seg"><button type="button" data-view="naive" aria-pressed="true">朴素实现</button><button type="button" data-view="tiled" aria-pressed="false">分块实现</button></div></div>
     <div data-panel="naive" data-label="朴素实现"><svg class="fa-mem" viewBox="0 0 400 214" role="img" aria-label="朴素实现：N×N 的 S 和 P 都写回显存，各写一遍、读一遍；片上存储只做中转">
@@ -48,16 +48,16 @@
     </svg></div>
     <figcaption><b>图 1.1</b>两种实现在显存里留下了什么。朴素实现把 N×N 的 S、P 写回显存；分块实现每次只把一个行块和一个列块读进片上，算出一小块 S、P 后丢掉，显存里只剩输入、输出和每行一个数的 L。</figcaption>
   </figure>
-  <p><b class="lp-layer">为什么这样设计</b>Attention 的矩阵乘算力并不紧张，慢在搬运：N = 8192 时，单头一份 FP16 的 S 就有 8192 × 8192 × 2 字节 = 128 MiB，朴素实现要写一遍、读一遍，P 再来一遍。分块把这四趟 N² 级的显存读写换成片上运算，代价是 softmax 不能再一次看到整行，这正是节点 2 要解决的问题。</p>
+  <p class="lp-live" id="live-1-1" data-cases='[{"in":{"n":8192,"bytes":2},"out":{"mib":128,"total_mib":512}},{"in":{"n":32768,"bytes":4},"out":{"mib":4096.0,"total_mib":16384.0}}]'><b class="lp-layer">为什么这样设计</b>Attention 的矩阵乘算力并不紧张，慢在搬运：N = <span class="lp-knob" data-knob="n" data-label="序列长度 N" data-values="1024,2048,4096,8192,16384,32768,65536">8192</span> 时，单头一份 <span class="lp-knob" data-knob="bytes" data-label="每个元素的精度" data-values="2,4" data-labels="FP16,FP32">FP16</span> 的 S 就有 <span data-out="n">8192</span> × <span data-out="n">8192</span> × <span data-out="bytes">2</span> 字节 = <span class="lp-ring"><span data-out="s">128 MiB</span></span>，朴素实现要写一遍、读一遍，P 再来一遍，四趟合计 <span data-out="total">512 MiB</span>。分块把这四趟 N² 级的显存读写换成片上运算，代价是 softmax 不能再一次看到整行，这正是节点 2 要解决的问题。</p>
   <p><b class="lp-layer">真实系统</b>FlashAttention-2 把并行放在批、头和 Q 的行块三个维度上：一个线程块负责一个行块，所以长序列、小批量时仍有足够多的线程块占满 GPU。块大小 B<sub>r</sub>、B<sub>c</sub> 受片上存储和寄存器限制，头维 d 越大，每块能放的行越少。</p>
   <aside class="lp-note" role="note">来源：FlashAttention-2 论文 arXiv:2307.08691 v1 第 3.2 节。128 MiB 按定义计算。</aside>
   <p class="lp-aside"><b class="lp-layer">边界</b>分块只改变数据在哪里、按什么顺序算，不改变数学结果；浮点累加顺序不同，逐位结果可能有微小差异。</p>
 </section>
-<section class="lp-node" id="node-2" data-stages="st-online">
+<section class="lp-node" id="node-2" data-stages="st-loop,st-online">
   <h2><span class="lp-no">2</span>在线 softmax 为什么要保留两个统计量</h2>
   <p class="lp-spine">FlashAttention-2 论文第 3.1 节的算法 1，建议先读</p>
   <p class="lp-lead"><b>结论</b>分块处理一行时，只要保留当前最大值 <var class="lp-s1">m</var> 和指数和 <var class="lp-s2">ℓ</var>，就能在看到新块后<span class="lp-pen">把之前的结果换算到新的最大值基准上</span>，最终得到与整行 softmax 完全相同的结果。</p>
-  <p><b class="lp-layer">机制</b>处理新块 <span class="tex">S_j</span> 时，三样状态这样更新。旧的 <var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都以旧的 <var class="lp-s1">m</var> 为基准，先乘上缩放因子 <span class="tex">\alpha = \exp(\sA{m} - \sA{m}_{\text{new}})</span>，就换到了新基准。</p>
+  <p><b class="lp-layer">机制</b>处理新块 <span class="tex">S_j</span> 时，三样状态这样更新。旧的 <var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都以旧的 <var class="lp-s1">m</var> 为基准，先乘上<ruby>缩放因子<rt>rescale factor</rt></ruby> <span class="tex">\alpha = \exp(\sA{m} - \sA{m}_{\text{new}})</span>，就换到了新基准。</p>
   <div class="tex">\begin{aligned}
 \sA{m}_{\text{new}} &amp;= \max\bigl(\sA{m},\ \operatorname{rowmax}(S_j)\bigr) \\
 \alpha &amp;= \exp\bigl(\sA{m} - \sA{m}_{\text{new}}\bigr) \\
@@ -112,8 +112,8 @@ def attention_row(scores, values, block=4):
     <li data-lines="14">整行看完才归一化；同时返回 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，留给反向。用图 2.1 的 12 个分数调用，得到的 O 与最后一步的读数相同。</li>
   </ol>
   <p>小例子只是为了看清规则。真实规模下一行有几千个分数，按 B<sub>c</sub> = 64 或 128 分成几十个块，但每行随身带的状态始终只有 <var class="lp-s1">m</var>、<var class="lp-s2">ℓ</var> 两个 FP32 标量和长度为 d 的 <var class="lp-s3">acc</var>，与 N 无关。</p>
-  <p><b class="lp-layer">为什么这样设计</b>减去最大值是为了数值稳定：指数对较大的输入会迅速溢出（FP32 在输入约 88 时溢出，FP16 约 11 时就溢出），减去行最大值后所有指数都不超过 1。但最大值要看完整行才知道，所以需要“先用当前最大值，之后再修正”的在线规则。只保留 <var class="lp-s1">m</var> 不够，没有 <var class="lp-s2">ℓ</var> 就无法归一化；只保留 <var class="lp-s2">ℓ</var> 也不够，没有 <var class="lp-s1">m</var> 就无法把不同块的指数换到同一基准。</p>
-  <p><b class="lp-layer">真实系统</b>反向传播需要 P，但保存 N×N 的 P 正是前向想避免的。FlashAttention 只为每行保存 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，只占 O(N) 空间；反向按块重算 S，再用 P = exp(S − L) 恢复概率，用重算换显存和带宽。</p>
+  <p><b class="lp-layer">为什么这样设计</b>减去最大值是为了<ruby>数值稳定<rt>numerical stability</rt></ruby>：指数对较大的输入会迅速溢出（FP32 在输入约 88 时溢出，FP16 约 11 时就溢出），减去行最大值后所有指数都不超过 1。但最大值要看完整行才知道，所以需要“先用当前最大值，之后再修正”的在线规则。只保留 <var class="lp-s1">m</var> 不够，没有 <var class="lp-s2">ℓ</var> 就无法归一化；只保留 <var class="lp-s2">ℓ</var> 也不够，没有 <var class="lp-s1">m</var> 就无法把不同块的指数换到同一基准。</p>
+  <p><b class="lp-layer">真实系统</b><ruby>反向传播<rt>backward pass</rt></ruby>需要 P，但保存 N×N 的 P 正是前向想避免的。FlashAttention 只为每行保存 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，只占 O(N) 空间；反向按块重算 S，再用 P = exp(S − L) 恢复概率，用重算换显存和带宽。</p>
   <aside class="lp-note" role="note">来源：FlashAttention 论文 arXiv:2205.14135 第 3.1 节；FlashAttention-2 论文 arXiv:2307.08691 v1 第 3.1 节。</aside>
   <p class="lp-aside"><b class="lp-layer">边界</b>块大小受片上存储和寄存器限制；因果掩码下完全被遮住的块可以直接跳过。这些改变性能，不改变数学结果。</p>
   <blockquote class="lp-oral">
@@ -185,6 +185,11 @@ html:not(.js) #fig-2-1 .lp-canvas { display: none; }
 }
 </style>
 <script data-lp-hook>
+// 节点 1 的可拖动段落：S 的大小按 N × N × 每元素字节数实时计算。
+LessonPage.explorers["live-1-1"] = function (v) {
+  var s = v.n * v.n * v.bytes;
+  return { n: String(v.n), bytes: String(v.bytes), s: LessonPage.fmt.bytes(s), total: LessonPage.fmt.bytes(4 * s), mib: s / 1048576, total_mib: 4 * s / 1048576 };
+};
 // 图 2.1：一行 12 个分数，每块 4 个；V 简化为每个位置一个标量。所有数字按公式实时计算。
 (function () {
   var S = [1.2, 3.1, 0.4, 2.0, 4.5, 0.8, 2.2, 1.0, 3.9, 5.6, 0.3, 2.7];

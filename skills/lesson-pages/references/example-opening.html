@@ -1,7 +1,7 @@
 <!-- 开课片段示例：new --fragment 用。内容取自 guide-learning 的 teaching-exemplars.md 示例二；数字与来源只演示写法，实际教学按所用版本重新核验。 -->
 <section class="lp-narrative" id="intro">
   <h2>这一课要解决什么</h2>
-  <p>Attention 的数学只有三行：<span class="tex">S = QK^{\top}/\sqrt{d}</span>，<span class="tex">P = \operatorname{softmax}_{\text{行}}(S)</span>，<span class="tex">O = PV</span>。但朴素实现要把 N×N 的 S 和 P 写回显存再读出来，序列一长，这部分读写按 N² 增长，成了瓶颈，而矩阵乘本身的算力并不紧张。FlashAttention 要解决的矛盾是：<span class="lp-pen">softmax 需要整行信息才能算分母，片上存储却放不下整行</span>。</p>
+  <p>Attention 的数学只有三行：<span class="tex">S = QK^{\top}/\sqrt{d}</span>，<span class="tex">P = \operatorname{softmax}_{\text{行}}(S)</span>，<span class="tex">O = PV</span>。但朴素实现要把 N×N 的 S 和 P 写回<ruby>显存<rt>HBM</rt></ruby>再读出来，序列一长，这部分读写按 N² 增长，成了瓶颈，而矩阵乘本身的算力并不紧张。FlashAttention 要解决的矛盾是：<span class="lp-pen">softmax 需要整行信息才能算分母，片上存储却放不下整行</span>。</p>
   <figure class="lp-figure is-wide" id="fig-0">
     <ol class="lp-stages lp-flow">
       <li id="st-split" data-label="按 Q 行块分工"><b>按 Q 行块分工</b><span>每个线程块负责 B<sub>r</sub> 行输出</span></li>

@@ -173,7 +173,8 @@
           "progressive-no-spoiler-pages",
           "offline-self-contained-html",
           "attributed-mit-adaptation",
-          "vendored-render-libraries"
+          "vendored-render-libraries",
+          "per-course-page-looks"
         ]
       }
     },

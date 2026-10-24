@@ -157,7 +157,6 @@ sub, sup { line-height: 0; }
 .lp-main h3 { margin: 32px 0 8px; font-size: 18px; line-height: 1.4; font-weight: 600; }
 .lp-main p, .lp-main ul, .lp-main ol, .lp-main dl { margin: 0 0 1em; }
 .lp-main p { text-wrap: pretty; }
-@media (min-width: 640px) { .lp-main :is(section, .lp-addendum) > p:not(.lp-spine):not(.lp-ask) { text-align: justify; } }
 .lp-main ul, .lp-main ol { padding-left: 1.4em; }
 .lp-main li { margin: .25em 0; }
 .lp-main strong, .lp-main b { font-weight: 600; }
@@ -202,12 +201,6 @@ div.tex:hover .lp-copy-tex, .lp-copy-tex:focus-visible, .lp-copy-tex.is-done { o
 @media (min-width: 1100px) { .lp-node > h2 .lp-no { position: absolute; right: 100%; top: .05em; margin-right: 16px; } }
 .lp-spine { margin: -6px 0 6px !important; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
 .lp-spine::before { content: "对应资料　"; color: var(--ink-faint); }
-.lp-where { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 0; margin: 4px 0 22px; font-size: 13px; line-height: 1.5; color: var(--ink-faint); }
-.lp-where a { padding: 2px 10px; color: var(--ink-soft); text-decoration: none; background: var(--raised); border-radius: 999px; transition: color .15s ease, background-color .15s ease; }
-.lp-where a:hover { color: var(--ink); background: var(--rule); }
-.lp-where .lp-sep { padding: 0 4px; color: var(--ink-faint); }
-.lp-where a.is-here { color: var(--accent-ink); font-weight: 600; background: var(--paper); box-shadow: inset 0 0 0 1.5px currentColor; }
-.lp-where .lp-hop { white-space: nowrap; }
 
 /* 批注：宽屏在右栏，窄屏紧跟所属段落 */
 .lp-note { position: relative; margin: -.35em 0 1.1em; padding-left: 16px; font-size: 14px; line-height: 1.65; color: var(--ink-soft); }
@@ -486,6 +479,139 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   ol.lp-code-notes.is-side { position: static !important; width: auto !important; }
   ol.lp-code-notes.is-side > li { position: relative !important; top: auto !important; }
 }
+/* ===== 地铁线路骨架与站牌、迷雾、术语注音、可拖动的数字、圈注、学习地层 ===== */
+:root {
+  --line: var(--accent); --line-idle: var(--rule); --station: var(--paper);
+  --fog: color-mix(in srgb, var(--paper) 72%, transparent);
+  --st1: #d4a94f; --st2: #c06a4a; --st3: #7f9a52; --st4: #4f7fa8; --st5: #9a72b6; --st6: #3f9a8c;
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --st1: #e7c271; --st2: #e08a69; --st3: #a7c27a; --st4: #79a9d6; --st5: #c09ad8; --st6: #6cc7b7; }
+}
+:root[data-theme="dark"] { --st1: #e7c271; --st2: #e08a69; --st3: #a7c27a; --st4: #79a9d6; --st5: #c09ad8; --st6: #6cc7b7; }
+
+/* 地铁线路：讲过的站已通车（实线、实心站），没讲的站在建（虚线、空心站）并蒙着雾 */
+.lp-stages.lp-flow { row-gap: 26px; }
+.lp-stages.lp-flow > li { padding-top: 32px; }
+.lp-stages.lp-flow > li::before { top: 0; width: 22px; height: 22px; background: var(--station); border: 5px solid var(--line-idle); box-shadow: none; }
+.lp-stages.lp-flow > li.is-open::before { border-color: var(--line); box-shadow: none; }
+.lp-stages.lp-flow > li.is-interchange::before { width: 26px; height: 26px; top: -2px; left: -2px; border: 4px solid var(--ink); box-shadow: inset 0 0 0 3px var(--station), inset 0 0 0 7px var(--line); }
+.lp-stages.lp-flow > li:not(:last-child)::after { left: 20px; right: -12px; top: 8px; border-top: 6px solid var(--line); border-radius: 3px; }
+.lp-stages.lp-flow > li.to-fog:not(:last-child)::after, .lp-stages.lp-flow > li.is-fog:not(:last-child)::after { border-top-style: dashed; border-top-color: var(--line-idle); }
+.lp-stages.lp-flow.is-vertical > li { padding: 0 0 0 36px; }
+.lp-stages.lp-flow.is-vertical > li::before { top: .15em; }
+.lp-stages.lp-flow.is-vertical > li:not(:last-child)::after { left: 8px; top: calc(.15em + 20px); bottom: -24px; border-top: 0; border-left: 6px solid var(--line); }
+.lp-stages.lp-flow.is-vertical > li.to-fog:not(:last-child)::after, .lp-stages.lp-flow.is-vertical > li.is-fog:not(:last-child)::after { border-left-style: dashed; border-left-color: var(--line-idle); }
+.lp-xfer { display: block; margin-top: 4px; font-size: 12.5px; color: var(--ink-faint); }
+.lp-xfer a { display: inline-block; margin-left: 4px; padding: 0 7px; color: var(--ink-soft); text-decoration: none; background: var(--raised); border-radius: 999px; }
+.lp-xfer a:hover { color: var(--ink); }
+.lp-soon { display: inline-block; margin-left: .4em; padding: 0 .45em; font-size: 11.5px; font-weight: 600; line-height: 1.6; color: var(--ink-faint); vertical-align: .15em; border: 1px dashed var(--ink-faint); border-radius: 4px; }
+/* 迷雾：字还读得出，只是退后；指向或聚焦时拨开 */
+.lp-stages > li.is-fog > :not(.lp-mist) { opacity: .55; filter: blur(.8px); transition: opacity .5s ease, filter .5s ease; }
+.lp-stages > li.is-fog:hover > :not(.lp-mist), .lp-stages > li.is-fog:focus-within > :not(.lp-mist) { opacity: 1; filter: none; }
+.lp-mist { position: absolute; z-index: 2; inset: -14px 0 -10px -14px; pointer-events: none; background: radial-gradient(55% 45% at 22% 30%, var(--fog), transparent 72%), radial-gradient(60% 50% at 70% 62%, var(--fog), transparent 75%), radial-gradient(40% 40% at 45% 85%, var(--fog), transparent 70%); transition: opacity .5s ease; }
+.lp-stages > li.is-fog:hover .lp-mist, .lp-stages > li.is-fog:focus-within .lp-mist { opacity: .25; }
+.lp-stages > li.is-clearing .lp-mist { animation: lp-clear 1.8s var(--ease) .4s both; }
+.lp-stages > li.is-clearing > :not(.lp-mist) { animation: lp-unblur 1.4s var(--ease) .5s both; }
+@keyframes lp-clear { from { opacity: 1; filter: none; } to { opacity: 0; filter: blur(8px); } }
+@keyframes lp-unblur { from { opacity: .55; filter: blur(.8px); } to { opacity: 1; filter: none; } }
+
+/* 站牌：每个节点开头一块，上一站、本站、下一站，底下是整条线 */
+.lp-where.lp-sign { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); align-items: end; gap: 0 14px; margin: 6px 0 26px; padding: 12px 16px 0; color: var(--band-ink); background: var(--band); border-radius: 10px; overflow: hidden; }
+.lp-sign small { display: block; margin-bottom: 1px; font-size: 11.5px; font-weight: 400; letter-spacing: .06em; color: var(--band-soft); }
+.lp-sign a, .lp-sign .lp-sign-end { display: block; min-width: 0; padding-bottom: 10px; font-size: 14px; line-height: 1.4; color: var(--band-soft); text-decoration: none; }
+.lp-sign a:hover { color: var(--band-ink); }
+.lp-sign-prev > span::before { content: "← "; }
+.lp-sign-next { text-align: right; }
+.lp-sign-next > span::after { content: " →"; }
+.lp-sign-next.is-fog > span { opacity: .6; filter: blur(.5px); }
+.lp-sign-here { min-width: 0; padding-bottom: 10px; text-align: center; }
+.lp-sign-here > span { display: block; font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--band-ink); }
+.lp-sign-here > span + span::before { content: "⇄ "; font-weight: 400; color: var(--band-soft); }
+.lp-sign-line { grid-column: 1 / -1; position: relative; display: flex; justify-content: space-between; align-items: center; height: 18px; margin: 0 -16px !important; padding: 0 22px !important; list-style: none; background: linear-gradient(var(--line), var(--line)) center / 100% 6px no-repeat; }
+.lp-sign-line > li { width: 10px; height: 10px; margin: 0 !important; background: var(--band); border: 2px solid var(--band-ink); border-radius: 50%; }
+.lp-sign-line > li.is-fog { background: var(--band); border-style: dashed; border-color: var(--band-soft); }
+.lp-sign-line > li.is-here { width: 14px; height: 14px; background: var(--band-ink); box-shadow: 0 0 0 4px color-mix(in srgb, var(--band-ink) 30%, transparent); }
+@media (max-width: 559px) {
+  .lp-where.lp-sign { grid-template-columns: 1fr 1fr; }
+  .lp-sign-here { grid-column: 1 / -1; grid-row: 1; padding-bottom: 6px; }
+}
+
+/* 中英术语注音：注音只占行距里的空间，不撑高行 */
+ruby { ruby-position: over; }
+rt { font-family: var(--font-sans); font-size: .5em; font-weight: 400; font-style: normal; line-height: 1; letter-spacing: .02em; color: var(--ink-faint); white-space: nowrap; }
+
+/* 可拖动的数字：可调段落带虚线框和“可调”标签；段里带 ‹ › 的数是小拨盘，左右拖、点按或用方向键换值 */
+.lp-live { --pad: 18px; position: relative; margin: 34px calc(-1 * var(--pad)) 26px; padding: 18px var(--pad) 12px; background: color-mix(in srgb, var(--accent-wash) 38%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 12px; }
+html:not(.js) .lp-live { margin: 0 0 1.1em; padding: 0; background: none; border: 0; }
+.lp-live-tag { position: absolute; top: 0; left: calc(var(--pad) - 8px); display: inline-flex; align-items: center; gap: .45em; padding: 0 .7em; font-size: 12.5px; font-weight: 600; line-height: 1.75; letter-spacing: .02em; color: var(--paper); background: var(--accent); border-radius: 999px; transform: translateY(-55%); white-space: nowrap; }
+.lp-live-tag small { font-size: inherit; font-weight: 400; opacity: .92; }
+.lp-knob { margin: 0 .08em; padding: .04em .34em; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--accent-ink); white-space: nowrap; background: var(--accent-wash); border-radius: 7px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 1.5px 0 color-mix(in srgb, var(--accent) 45%, transparent); cursor: ew-resize; touch-action: none; user-select: none; -webkit-user-select: none; transition: box-shadow .2s ease, background-color .2s ease; }
+.lp-knob::before, .lp-knob::after { display: inline-block; font-weight: 700; color: var(--accent); transition: transform .2s var(--ease); }
+.lp-knob::before { content: "‹"; margin-right: .22em; }
+.lp-knob::after { content: "›"; margin-left: .22em; }
+.lp-knob:hover, .lp-knob:focus-visible, .lp-knob.is-dragging { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+.lp-knob:hover::before, .lp-knob:focus-visible::before, .lp-knob.is-dragging::before { transform: translateX(-3px); }
+.lp-knob:hover::after, .lp-knob:focus-visible::after, .lp-knob.is-dragging::after { transform: translateX(3px); }
+.lp-knob:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.lp-live.is-tweaked [data-out] { color: var(--ink); background: linear-gradient(var(--mark), var(--mark)) 0 88% / 100% .42em no-repeat; }
+@media (prefers-reduced-motion: no-preference) {
+  .lp-knob.is-peek { animation: lp-knob-glow 1.3s var(--ease) 2; }
+  .lp-knob.is-peek::before { animation: lp-knob-left 1.3s var(--ease) 2; }
+  .lp-knob.is-peek::after { animation: lp-knob-right 1.3s var(--ease) 2; }
+}
+@keyframes lp-knob-glow { 40% { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent); } }
+@keyframes lp-knob-left { 35% { transform: translateX(-5px); } 70% { transform: none; } }
+@keyframes lp-knob-right { 35% { transform: translateX(5px); } 70% { transform: none; } }
+html:not(.js) .lp-knob { padding: 0; font-weight: inherit; color: inherit; background: none; box-shadow: none; cursor: auto; }
+html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
+.lp-live-reset { margin-left: .5em; padding: 0 .7em; font: inherit; font-size: 13px; line-height: 1.8; color: var(--ink-soft); background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; cursor: pointer; }
+.lp-live-reset:hover { color: var(--ink); border-color: var(--ink-faint); }
+/* 拨盘的浮层：取值一排，当前值实心；第一次读到可调段落时，浮层先在第一个拨盘上提示一次 */
+.lp-pop .lp-pop-vals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.lp-pop .lp-pop-vals i { padding: 0 7px; font: 12.5px/1.7 var(--font-mono); font-style: normal; color: var(--ink-soft); background: var(--raised); border-radius: 999px; }
+.lp-pop .lp-pop-vals i.is-on { color: var(--paper); background: var(--accent); }
+.lp-pop.is-knob { max-width: min(430px, calc(100vw - 32px)); }
+.lp-pop.is-knob b { font-family: var(--font-sans); }
+.lp-pop.is-intro { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow); }
+.lp-pop.is-intro::after { content: ""; position: absolute; left: var(--arrow, 50%); bottom: -7px; width: 12px; height: 12px; margin-left: -6px; background: var(--paper); border-right: 1px solid var(--accent); border-bottom: 1px solid var(--accent); transform: rotate(45deg); }
+.lp-pop.is-intro.is-below::after { top: -7px; bottom: auto; transform: rotate(225deg); }
+@media (max-width: 639px) { .lp-live { --pad: 12px; margin-left: -10px; margin-right: -10px; } }
+
+/* 圈注：导师用笔圈出的关键数字，滚到时一笔圈上 */
+.lp-ring { position: relative; white-space: nowrap; }
+.lp-ring::after { content: ""; position: absolute; inset: -.16em -.4em -.1em; border: 2px solid var(--accent); border-radius: 52% 46% 55% 44% / 58% 50% 48% 44%; transform: rotate(-3deg); pointer-events: none; clip-path: inset(0 0 0 0); transition: clip-path .9s var(--ease) .15s; }
+.lp-motion .lp-ring:not(.is-drawn)::after { clip-path: inset(0 100% 0 0); }
+
+/* 学习地层：右侧一根地层柱，按内容加入的先后分层；图例里点一层只看这一层 */
+.lp-strata-col { position: absolute; top: 0; right: -30px; width: 10px; pointer-events: none; }
+.lp-strata-col > i { position: absolute; left: 0; right: 0; background: var(--layer); border-radius: 3px; box-shadow: 0 0 0 2px var(--paper); pointer-events: auto; }
+@media (max-width: 1099px) { .lp-strata-col { right: -13px; width: 6px; } }
+.lp-strata .lp-main [data-layer] { transition: opacity .3s ease; }
+.lp-strata .lp-main .is-layer-dim { opacity: .28; }
+.lp-strata .lp-main .is-layer-focus { outline: 2px solid var(--layer); outline-offset: 8px; border-radius: 6px; }
+.lp-strata-legend { position: fixed; z-index: 44; left: 20px; bottom: 20px; width: min(300px, calc(100vw - 40px)); max-height: 60vh; overflow: auto; padding: 12px 12px 10px; font-size: 13.5px; line-height: 1.5; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); }
+.lp-strata-legend h2 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px !important; font-size: 14px !important; }
+.lp-strata-legend h2 button { padding: 0 8px; font: inherit; font-size: 12.5px; color: var(--ink-soft); background: none; border: 1px solid var(--rule); border-radius: 999px; cursor: pointer; }
+.lp-strata-legend ol { margin: 0 !important; padding: 0 !important; list-style: none; }
+.lp-strata-legend li { margin: 0 !important; }
+.lp-strata-legend li button { display: grid; grid-template-columns: 14px 1fr; gap: 0 10px; width: 100%; padding: 6px 6px; font: inherit; text-align: left; color: inherit; background: none; border: 0; border-radius: 8px; cursor: pointer; }
+.lp-strata-legend li button::before { content: ""; grid-row: span 2; width: 14px; height: 100%; min-height: 30px; background: var(--layer); border-radius: 3px; }
+.lp-strata-legend li button:hover, .lp-strata-legend li button[aria-pressed="true"] { background: var(--raised); }
+.lp-strata-legend b { font-weight: 600; }
+.lp-strata-legend small { color: var(--ink-soft); font-size: 12.5px; }
+@media (max-width: 639px) { .lp-strata-legend { left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 45vh; } }
+
+/* 工具多了时换行 */
+.lp-headbar { flex-wrap: wrap; }
+.lp-tools { flex-wrap: wrap; justify-content: flex-end; }
+@media print {
+  .lp-strata-legend, .lp-strata-col, .lp-live-tag, .lp-live-reset, .lp-mist { display: none !important; }
+  .lp-stages > li.is-fog > * { opacity: 1 !important; filter: none !important; }
+  .lp-live { margin: 0 0 1.1em; padding: 0; background: none; border: 0; }
+  .lp-knob { padding: 0; background: none; box-shadow: none; }
+  .lp-knob::before, .lp-knob::after { content: none; }
+}
 </style>
 <style id="lp-page-style">
 /* 整页生效的少量调整写在这里；部件样式随片段写 <style data-lp-style>。颜色只用 var(--…) 令牌。 */
@@ -497,7 +623,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
     <div class="lp-cover-body">
       <div class="lp-headbar">
         <p class="lp-crumb">{{lp:crumb}}</p>
-        <div class="lp-tools"><button type="button" data-lp-review aria-pressed="false">只看要点</button><button type="button" data-lp-theme aria-pressed="false">深色</button></div>
+        <div class="lp-tools"><button type="button" data-lp-strata aria-pressed="false">地层</button><button type="button" data-lp-review aria-pressed="false">只看要点</button><button type="button" data-lp-theme aria-pressed="false">深色</button></div>
       </div>
       <h1 class="lp-title">{{lp:title}}</h1>
       <div class="lp-meta">
@@ -540,6 +666,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   var pageKey = meta && meta.getAttribute("data-key") ? meta.getAttribute("data-key") : pageId + ":" + window.location.pathname;
   var rev = meta ? parseInt(meta.getAttribute("data-rev") || "1", 10) : 1;
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var freshSince = rev - 1;
 
   function $all(selector, scope) { return Array.prototype.slice.call((scope || document).querySelectorAll(selector)); }
   function store(key, value) {
@@ -562,7 +689,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   function splitIds(text) { return String(text || "").split(/[\s,]+/).filter(Boolean); }
   function plainText(node) {
     var clone = node.cloneNode(true);
-    $all(".lp-new, .lp-oral-time, .katex-mathml", clone).forEach(function (child) { child.remove(); });
+    $all(".lp-new, .lp-oral-time, .katex-mathml, rt, rp, .lp-soon, .lp-xfer, .lp-mist, .lp-seal, .lp-live-tag", clone).forEach(function (child) { child.remove(); });
     var number = clone.querySelector(".lp-no");
     if (number) number.textContent = number.textContent.trim() + " ";
     var kind = clone.querySelector(".lp-kind");
@@ -571,7 +698,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   }
   function readable(node) {
     var clone = node.cloneNode(true);
-    $all("script, style, template, .lp-where, .lp-toc-inline, .lp-controls, .katex-mathml, .lp-code-head, .lp-copy-tex", clone).forEach(function (child) { child.remove(); });
+    $all("script, style, template, .lp-where, .lp-toc-inline, .lp-controls, .katex-mathml, .lp-code-head, .lp-copy-tex, rt, rp, .lp-live-tag, .lp-live-reset, .lp-mist, .lp-soon, .lp-xfer", clone).forEach(function (child) { child.remove(); });
     return clone.textContent || "";
   }
   function failed(widget, error) {
@@ -647,6 +774,31 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   }
   LP.setNumber = setNumber;
 
+  /* 浮层：符号释义和拨盘的取值共用一个；kind 记下是谁打开的，各自只收起自己的。 */
+  var pop = null, popFor = null, popKind = "";
+  function hidePop(kind) {
+    if (pop && (!kind || popKind === kind)) { pop.remove(); pop = null; popFor = null; popKind = ""; }
+  }
+  function showPop(target, kind, fill) {
+    if (popFor !== target || popKind !== kind) {
+      hidePop();
+      pop = document.createElement("div");
+      pop.setAttribute("role", "tooltip");
+      document.body.appendChild(pop);
+      popFor = target; popKind = kind;
+    }
+    pop.className = "lp-pop";
+    pop.textContent = "";
+    fill(pop);
+    var box = target.getBoundingClientRect(), width = pop.offsetWidth, height = pop.offsetHeight;
+    var left = Math.max(12, Math.min(window.innerWidth - width - 12, box.left + box.width / 2 - width / 2));
+    var below = box.top - height - 10 < 8;
+    pop.classList.toggle("is-below", below);
+    pop.style.setProperty("--arrow", Math.max(14, Math.min(width - 14, box.left + box.width / 2 - left)) + "px");
+    pop.style.left = (left + window.scrollX) + "px";
+    pop.style.top = ((below ? box.bottom + 10 : box.top - height - 10) + window.scrollY) + "px";
+  }
+
   function announce(text) {
     var region = document.getElementById("lp-status");
     if (!region) {
@@ -720,6 +872,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
     var key = "lesson-pages-seen:" + pageKey;
     var seen = parseInt(store(key) || "0", 10);
     var since = seen && seen < rev ? seen : rev - 1;
+    freshSince = since;
     var fresh = rev > 1 ? stamped.filter(function (el) { return revOf(el) > since; }) : [];
     fresh.forEach(function (el) {
       el.classList.add("is-new");
@@ -727,7 +880,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
       var heading = el.querySelector("h2, h3, dt, summary, figcaption b");
       if (heading && !heading.querySelector(".lp-new")) {
         var badge = document.createElement("span");
-        badge.className = "lp-new"; badge.textContent = "新";
+        badge.className = "lp-new"; badge.textContent = "新"; badge.setAttribute("data-rev", String(revOf(el)));
         heading.appendChild(badge);
       }
     });
@@ -847,48 +1000,108 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
     update();
   }
 
-  /* 你在这里：节点的 data-stages 对应骨架阶段；讲过的阶段链接到第一次讲它的节点。 */
+  /* 地铁线路：骨架的每个阶段是一站。讲过的站已通车，链接到第一次讲它的节点；被几个节点讲到的是换乘站；
+     没讲的站在建、蒙着雾，上次打开以来新通车的站当场散雾。每个节点开头挂一块站牌：上一站、本站、下一站。 */
   function initWhere() {
     var stages = $all(".lp-stages > li[id]");
     if (!stages.length) return;
-    var first = {};
     var nodes = $all(".lp-node[data-stages]");
+    var teachers = {};
     nodes.forEach(function (node) {
-      splitIds(node.getAttribute("data-stages")).forEach(function (id) { if (!first[id]) first[id] = node; });
+      splitIds(node.getAttribute("data-stages")).forEach(function (id) { (teachers[id] = teachers[id] || []).push(node); });
     });
-    nodes.forEach(function (node) {
-      var here = {};
-      splitIds(node.getAttribute("data-stages")).forEach(function (id) { here[id] = true; });
-      var where = document.createElement("nav");
-      where.className = "lp-where";
-      where.setAttribute("aria-label", "本节在全流程中的位置");
-      stages.forEach(function (stage, index) {
-        var hop = where;
-        if (index) {
-          hop = document.createElement("span");
-          hop.className = "lp-hop";
-          var sep = document.createElement("span");
-          sep.className = "lp-sep"; sep.setAttribute("aria-hidden", "true"); sep.textContent = "→";
-          hop.appendChild(sep);
-          where.appendChild(hop);
-        }
-        var link = document.createElement("a");
-        link.href = "#" + stage.id;
-        link.textContent = stage.getAttribute("data-label") || plainText(stage);
-        if (here[stage.id]) { link.className = "is-here"; link.setAttribute("aria-current", "step"); }
-        hop.appendChild(link);
-      });
-      var anchor = node.querySelector(":scope > .lp-spine") || node.querySelector(":scope > h2");
-      if (anchor) anchor.insertAdjacentElement("afterend", where);
-    });
-    stages.forEach(function (stage) {
-      var node = first[stage.id];
+    var revOf = function (el) { return parseInt(el.getAttribute("data-rev"), 10) || 0; };
+    var taughtBy = function (stage) { return stage ? teachers[stage.id] || [] : []; };
+    var nameOf = function (stage) { return stage.getAttribute("data-label") || plainText(stage.querySelector("b") || stage); };
+    var numberOf = function (node) { var no = node.querySelector(":scope > h2 .lp-no"); return no ? no.textContent.trim() : node.id; };
+    var mist = function (stage) {
+      var cloud = document.createElement("span");
+      cloud.className = "lp-mist"; cloud.setAttribute("aria-hidden", "true");
+      stage.appendChild(cloud);
+      return cloud;
+    };
+    stages.forEach(function (stage, index) {
+      var taught = taughtBy(stage), open = taught.length > 0;
+      stage.classList.toggle("is-open", open);
+      stage.classList.toggle("is-fog", !open);
+      stage.classList.toggle("is-interchange", taught.length > 1);
+      if (stages[index + 1]) stage.classList.toggle("to-fog", !taughtBy(stages[index + 1]).length);
       var label = stage.querySelector("b") || stage;
-      if (!node || label.querySelector("a")) return;
-      var link = document.createElement("a");
-      link.href = "#" + node.id;
-      while (label.firstChild) link.appendChild(label.firstChild);
-      label.appendChild(link);
+      if (open && !label.querySelector("a")) {
+        var link = document.createElement("a");
+        link.href = "#" + taught[0].id;
+        while (label.firstChild) link.appendChild(label.firstChild);
+        label.appendChild(link);
+      }
+      if (taught.length > 1) {
+        var xfer = document.createElement("span");
+        xfer.className = "lp-xfer";
+        xfer.appendChild(document.createTextNode("换乘"));
+        taught.forEach(function (node) {
+          var hop = document.createElement("a");
+          hop.href = "#" + node.id; hop.textContent = "第 " + numberOf(node) + " 节";
+          xfer.appendChild(hop);
+        });
+        stage.appendChild(xfer);
+      }
+      if (!open) {
+        var soon = document.createElement("span");
+        soon.className = "lp-soon"; soon.textContent = "未开通";
+        label.appendChild(soon);
+        mist(stage);
+      } else if (rev > 1 && revOf(taught[0]) > freshSince && !reduceMotion) {
+        var cloud = mist(stage);
+        stage.classList.add("is-clearing");
+        cloud.addEventListener("animationend", function () { cloud.remove(); stage.classList.remove("is-clearing"); });
+      }
+    });
+    nodes.forEach(function (node) {
+      var indices = splitIds(node.getAttribute("data-stages")).map(function (id) {
+        for (var i = 0; i < stages.length; i += 1) if (stages[i].id === id) return i;
+        return -1;
+      }).filter(function (i) { return i >= 0; }).sort(function (a, b) { return a - b; });
+      if (!indices.length) return;
+      var sign = document.createElement("nav");
+      sign.className = "lp-where lp-sign";
+      sign.setAttribute("aria-label", "本节在全流程中的位置");
+      var end = function (stage, role) {
+        if (!stage) {
+          var none = document.createElement("span");
+          none.className = "lp-sign-end" + (role === "next" ? " lp-sign-next" : "");
+          none.innerHTML = "<small></small>";
+          none.firstChild.textContent = role === "prev" ? "起点站" : "终点站";
+          return none;
+        }
+        var taught = taughtBy(stage), hop = document.createElement("a");
+        hop.className = "lp-sign-" + role + (taught.length ? "" : " is-fog");
+        hop.href = "#" + (taught.length ? taught[0].id : stage.id);
+        hop.innerHTML = "<small></small><span></span>";
+        hop.firstChild.textContent = (role === "prev" ? "上一站" : "下一站") + (taught.length ? "" : " · 未开通");
+        hop.lastChild.textContent = nameOf(stage);
+        return hop;
+      };
+      sign.appendChild(end(stages[indices[0] - 1], "prev"));
+      var here = document.createElement("div");
+      here.className = "lp-sign-here"; here.setAttribute("aria-current", "step");
+      here.innerHTML = "<small>本站</small>";
+      indices.forEach(function (i) {
+        var name = document.createElement("span");
+        name.textContent = nameOf(stages[i]);
+        here.appendChild(name);
+      });
+      sign.appendChild(here);
+      sign.appendChild(end(stages[indices[indices.length - 1] + 1], "next"));
+      var line = document.createElement("ol");
+      line.className = "lp-sign-line"; line.setAttribute("aria-hidden", "true");
+      stages.forEach(function (stage, i) {
+        var dot = document.createElement("li");
+        if (indices.indexOf(i) >= 0) dot.className = "is-here";
+        else if (!taughtBy(stage).length) dot.className = "is-fog";
+        line.appendChild(dot);
+      });
+      sign.appendChild(line);
+      var anchor = node.querySelector(":scope > .lp-spine") || node.querySelector(":scope > h2");
+      if (anchor) anchor.insertAdjacentElement("afterend", sign);
     });
   }
 
@@ -1447,7 +1660,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
     var pattern = /[A-Za-z_][A-Za-z0-9_]{0,15} ?= ?[−-]?\d[\d.,]*(?: ?(?:[KMGTP]i?B|ms|μs|ns|s|B|%))?|\d[\d.,]* (?:[KMGTP]i?B|ms|μs|ns|B|%|个|张|块|行|列|层|位|秒|分钟|字节)/g;
     var walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
-        if (!node.parentElement || node.parentElement.closest("pre, code, script, style, .nb, svg, math, .katex, .lp-controls, .lp-where, .lp-flow, a, button, var")) return NodeFilter.FILTER_REJECT;
+        if (!node.parentElement || node.parentElement.closest("pre, code, script, style, .nb, svg, math, .katex, .lp-controls, .lp-where, .lp-flow, a, button, var, ruby, .lp-knob, [data-out]")) return NodeFilter.FILTER_REJECT;
         pattern.lastIndex = 0;
         return pattern.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       }
@@ -1487,24 +1700,15 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
       var colored = symbolOf(term.querySelector(".lp-s1, .lp-s2, .lp-s3, .lp-s4"));
       if (colored && !byColor[colored.n]) byColor[colored.n] = entry;
     });
-    var pop = null, popFor = null;
-    var hide = function () { if (pop) { pop.remove(); pop = null; popFor = null; } };
+    var hide = function () { hidePop("symbol"); };
     var show = function (target, entry) {
-      if (popFor === target) return;
-      hide();
-      pop = document.createElement("div");
-      pop.className = "lp-pop"; pop.setAttribute("role", "tooltip");
-      var term = document.createElement("b"), text = document.createElement("span");
-      term.innerHTML = entry.querySelector("dt").innerHTML;
-      text.innerHTML = entry.querySelector("dd").innerHTML;
-      pop.appendChild(term); pop.appendChild(text);
-      document.body.appendChild(pop);
-      var box = target.getBoundingClientRect(), width = pop.offsetWidth, height = pop.offsetHeight;
-      var left = Math.max(12, Math.min(window.innerWidth - width - 12, box.left + box.width / 2 - width / 2));
-      var top = box.top - height - 10 < 8 ? box.bottom + 10 : box.top - height - 10;
-      pop.style.left = (left + window.scrollX) + "px";
-      pop.style.top = (top + window.scrollY) + "px";
-      popFor = target;
+      if (popFor === target && popKind === "symbol") return;
+      showPop(target, "symbol", function (box) {
+        var term = document.createElement("b"), text = document.createElement("span");
+        term.innerHTML = entry.querySelector("dt").innerHTML;
+        text.innerHTML = entry.querySelector("dd").innerHTML;
+        box.appendChild(term); box.appendChild(text);
+      });
     };
     var entryFor = function (el) {
       if (!el || !el.closest || el.closest("#glossary, .lp-pop, .lp-controls")) return null;
@@ -1540,13 +1744,13 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
       if (found) show(found.target, found.entry);
       else if (!(event.target.closest && event.target.closest(".lp-pop"))) hide();
     });
-    document.addEventListener("keydown", function (event) { if (event.key === "Escape") hide(); });
+    document.addEventListener("keydown", function (event) { if (event.key === "Escape") hidePop(); });
     window.addEventListener("scroll", hide, { passive: true });
   }
 
   /* 滚动出现、导师划线和检查题提示：每样只做一次；减少动态效果或不支持时全部直接显示。 */
   function initReveal() {
-    var pens = $all(".lp-pen"), checks = $all(".lp-check");
+    var pens = $all(".lp-pen, .lp-ring"), checks = $all(".lp-check");
     if (reduceMotion || !("IntersectionObserver" in window)) {
       checks.forEach(function (check) { check.classList.add("is-in"); });
       return;
@@ -1559,7 +1763,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
     var observer = new IntersectionObserver(function (records) {
       records.forEach(function (record) {
         if (!record.isIntersecting) return;
-        record.target.classList.add(record.target.classList.contains("lp-pen") ? "is-drawn" : "is-in");
+        record.target.classList.add(record.target.matches(".lp-pen, .lp-ring") ? "is-drawn" : "is-in");
         observer.unobserve(record.target);
         window.clearTimeout(later);
         later = window.setTimeout(function () { document.dispatchEvent(new CustomEvent("lp:layout")); }, 750);
@@ -1587,10 +1791,299 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
     update();
   }
 
+  /* 可拖动的数字：.lp-live 段落里的 [data-knob] 可以左右拖、点按或用方向键换值，[data-out] 按注册的计算函数跟着变。
+     段落挂一个“可调”标签；指向、聚焦或按住拨盘时浮出它的全部取值；第一次读到段落时，在第一个拨盘上提示一次。 */
+  function initLive() {
+    var boxes = $all(".lp-live");
+    if (!boxes.length) return;
+    document.addEventListener("pointerdown", function (event) {
+      if (popKind.indexOf("knob") === 0 && !(event.target.closest && event.target.closest(".lp-knob"))) hidePop();
+    }, true);
+    boxes.forEach(function (box) {
+      try {
+        var compute = LP.explorers[box.id];
+        if (typeof compute !== "function") { failed(box, new Error("没有注册计算函数 " + box.id)); return; }
+        selfTest(box, compute);
+        var knobs = $all("[data-knob]", box).map(function (el) {
+          var values = String(el.getAttribute("data-values") || "").split(",").map(function (v) { return v.trim(); }).filter(Boolean);
+          var labels = el.hasAttribute("data-labels") ? el.getAttribute("data-labels").split(",").map(function (v) { return v.trim(); }) : values;
+          if (!values.length || labels.length !== values.length) throw new Error("可调的数 " + el.getAttribute("data-knob") + " 的取值与标签不一致");
+          var shown = el.textContent.trim(), index = labels.indexOf(shown);
+          if (index < 0) throw new Error("可调的数 " + el.getAttribute("data-knob") + " 的初值 " + shown + " 不在取值里");
+          return { el: el, values: values, labels: labels, index: index, initial: index };
+        });
+        if (!knobs.length) return;
+        var outputs = $all("[data-out]", box), reset = null, active = null, touched = false;
+        var valueOf = function (knob) {
+          var raw = knob.values[knob.index], number = Number(raw);
+          return raw !== "" && isFinite(number) ? number : raw;
+        };
+        var card = function (knob, intro) {
+          active = knob;
+          showPop(knob.el, intro ? "knob-intro" : "knob", function (panel) {
+            panel.classList.add("is-knob");
+            if (intro) panel.classList.add("is-intro");
+            var head = document.createElement("b"), text = document.createElement("span"), list = document.createElement("span");
+            head.textContent = intro ? "试试拖动这个数" : knob.el.getAttribute("aria-label");
+            text.textContent = intro ? "带 ‹ › 的数可以左右拖动或点按，句子里的结果会跟着重算。" : "左右拖动、点按或用方向键换值。";
+            list.className = "lp-pop-vals";
+            knob.labels.forEach(function (label, i) {
+              var item = document.createElement("i");
+              item.textContent = label;
+              if (i === knob.index) item.className = "is-on";
+              list.appendChild(item);
+            });
+            panel.appendChild(head); panel.appendChild(text); panel.appendChild(list);
+          });
+        };
+        var hideCard = function (knob) { if (popFor === knob.el) hidePop(); };
+        var update = function (byReader) {
+          var values = {};
+          knobs.forEach(function (knob) {
+            values[knob.el.getAttribute("data-knob")] = valueOf(knob);
+            knob.el.textContent = knob.labels[knob.index];
+            knob.el.setAttribute("aria-valuenow", String(knob.index));
+            knob.el.setAttribute("aria-valuetext", knob.labels[knob.index]);
+          });
+          var result;
+          try { result = compute(values) || {}; } catch (error) { failed(box, error); return; }
+          recovered(box);
+          outputs.forEach(function (node) {
+            var key = node.getAttribute("data-out");
+            if (key in result) setNumber(node, result[key]);
+          });
+          var tweaked = knobs.some(function (knob) { return knob.index !== knob.initial; });
+          box.classList.toggle("is-tweaked", tweaked);
+          if (reset) reset.hidden = !tweaked;
+          if (byReader) {
+            touched = true;
+            if (active && popFor === active.el) card(active);
+          }
+        };
+        knobs.forEach(function (knob) {
+          var el = knob.el, last = knob.values.length - 1;
+          el.setAttribute("role", "slider"); el.setAttribute("tabindex", "0");
+          el.setAttribute("aria-valuemin", "0"); el.setAttribute("aria-valuemax", String(last));
+          el.setAttribute("aria-label", el.getAttribute("data-label") || "可调的数 " + el.getAttribute("data-knob"));
+          var set = function (i) {
+            i = Math.max(0, Math.min(last, i));
+            if (i !== knob.index) { knob.index = i; update(true); }
+          };
+          var startX = 0, startIndex = 0, moved = false, dragging = false;
+          el.addEventListener("pointerenter", function (event) { if (event.pointerType === "mouse") card(knob); });
+          el.addEventListener("pointerleave", function (event) { if (event.pointerType === "mouse" && !dragging) hideCard(knob); });
+          el.addEventListener("focus", function () { card(knob); });
+          el.addEventListener("blur", function () { if (!dragging) hideCard(knob); });
+          el.addEventListener("pointerdown", function (event) {
+            if (event.button !== 0) return;
+            dragging = true; moved = false; startX = event.clientX; startIndex = knob.index; touched = true;
+            el.classList.remove("is-peek");
+            el.setPointerCapture(event.pointerId); el.classList.add("is-dragging");
+            card(knob);
+            event.preventDefault();
+          });
+          el.addEventListener("pointermove", function (event) {
+            if (!dragging) return;
+            var steps = Math.round((event.clientX - startX) / 18);
+            if (steps) moved = true;
+            set(startIndex + steps);
+          });
+          el.addEventListener("pointerup", function (event) {
+            if (!dragging) return;
+            dragging = false; el.classList.remove("is-dragging");
+            if (!moved) set(knob.index === last ? 0 : knob.index + 1);
+            if (event.pointerType === "mouse" && !el.matches(":hover")) hideCard(knob);
+          });
+          el.addEventListener("pointercancel", function () { dragging = false; el.classList.remove("is-dragging"); });
+          el.addEventListener("keydown", function (event) {
+            var step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[event.key];
+            if (step) set(knob.index + step);
+            else if (event.key === "Home") set(0);
+            else if (event.key === "End") set(last);
+            else if (event.key === "Enter" || event.key === " ") set(knob.index === last ? 0 : knob.index + 1);
+            else return;
+            event.preventDefault();
+          });
+        });
+        var tag = document.createElement("span");
+        tag.className = "lp-live-tag"; tag.setAttribute("aria-hidden", "true");
+        tag.innerHTML = "可调<small>拖动或点按带 ‹ › 的数</small>";
+        box.insertBefore(tag, box.firstChild);
+        reset = document.createElement("button");
+        reset.type = "button"; reset.className = "lp-live-reset"; reset.textContent = "还原"; reset.hidden = true;
+        reset.addEventListener("click", function () { knobs.forEach(function (knob) { knob.index = knob.initial; }); update(true); });
+        box.appendChild(reset);
+        /* 正文里写下的结果应当就是初值算出来的结果；不一致时在控制台指出，供作者核对。 */
+        var written = outputs.map(function (node) { return node.textContent.trim(); });
+        update(false);
+        outputs.forEach(function (node, i) {
+          var shown = node.textContent.trim();
+          if (shown !== written[i]) console.error("lesson-pages " + box.id + "：正文写的 " + written[i] + " 与初值算出的 " + shown + " 不一致");
+        });
+        if (!("IntersectionObserver" in window)) return;
+        var first = knobs[0], wait = 0;
+        var watch = new IntersectionObserver(function (records) {
+          window.clearTimeout(wait);
+          if (touched) { watch.disconnect(); return; }
+          if (!records[records.length - 1].isIntersecting) return;
+          wait = window.setTimeout(function () {
+            if (touched || pop) return;
+            watch.disconnect();
+            card(first, true);
+            if (!reduceMotion) first.el.classList.add("is-peek");
+            window.setTimeout(function () {
+              first.el.classList.remove("is-peek");
+              if (popFor === first.el && popKind === "knob-intro") hidePop();
+            }, 6000);
+          }, 700);
+        }, { rootMargin: "-56px 0px -22% 0px", threshold: 1 });
+        watch.observe(first.el);
+      } catch (error) { failed(box, error); }
+    });
+  }
+
+  /* 学习地层：按内容加入页面的版本分层。右侧一根地层柱对齐每一块，图例里点一层只看这一层。 */
+  function initStrata() {
+    var buttons = $all("[data-lp-strata]");
+    if (!buttons.length || !main) return;
+    var revOf = function (el) { return parseInt(el.getAttribute("data-rev"), 10) || 0; };
+    var blocks = $all("[data-rev]", main).filter(function (el) {
+      var outer = el.parentElement.closest("[data-rev]");
+      return !outer || revOf(outer) < revOf(el);
+    });
+    var revs = [];
+    blocks.forEach(function (el) { if (revs.indexOf(revOf(el)) < 0) revs.push(revOf(el)); });
+    revs.sort(function (a, b) { return a - b; });
+    if (revs.length < 2) { buttons.forEach(function (button) { button.hidden = true; }); return; }
+    var colorOf = function (r) { return "var(--st" + (revs.indexOf(r) % 6 + 1) + ")"; };
+    var labelOf = function (el) {
+      if (el.closest("#glossary")) return "符号表";
+      if (el.closest("#sources")) return "来源";
+      var check = el.closest(".lp-check");
+      if (el.classList.contains("lp-answer")) return (check ? plainText(check.querySelector("h3")) : "题目") + " 的参考要点";
+      var heading = el.querySelector(":scope > h2, :scope > h3") || el.querySelector("h2, h3, figcaption b");
+      var text = heading ? plainText(heading) : el.id;
+      var state = el.classList.contains("lp-check") ? el.getAttribute("data-state") : "";
+      return text + ({ answered: "（作答）", closed: "（关闭）", replaced: "（更换）" }[state] || "");
+    };
+    var layers = revs.map(function (r) {
+      var names = [];
+      blocks.forEach(function (el) {
+        if (revOf(el) !== r) return;
+        var name = labelOf(el);
+        if (name && names.indexOf(name) < 0) names.push(name);
+      });
+      return { rev: r, names: names };
+    });
+    blocks.forEach(function (el) { el.setAttribute("data-layer", String(revOf(el))); el.style.setProperty("--layer", colorOf(revOf(el))); });
+    var column = null, legend = null, focus = null;
+    var draw = function () {
+      if (!column) return;
+      column.textContent = "";
+      var base = main.getBoundingClientRect().top;
+      blocks.forEach(function (el) {
+        if (!el.getClientRects().length) return;
+        var box = el.getBoundingClientRect(), band = document.createElement("i");
+        band.style.top = (box.top - base) + "px";
+        band.style.height = Math.max(4, box.height - 6) + "px";
+        band.style.setProperty("--layer", colorOf(revOf(el)));
+        band.title = "第 " + revOf(el) + " 层 · " + labelOf(el);
+        column.appendChild(band);
+      });
+    };
+    var setFocus = function (r) {
+      focus = focus === r ? null : r;
+      blocks.forEach(function (el) {
+        var mine = revOf(el) === focus;
+        el.classList.toggle("is-layer-focus", mine);
+        el.classList.toggle("is-layer-dim", focus !== null && !mine && !el.querySelector('[data-layer="' + focus + '"]'));
+      });
+      $all("li button", legend).forEach(function (button) { button.setAttribute("aria-pressed", String(focus) === button.getAttribute("data-rev") ? "true" : "false"); });
+      var first = blocks.filter(function (el) { return revOf(el) === focus && el.getClientRects().length; })[0];
+      if (first) first.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+    };
+    var set = function (on) {
+      root.classList.toggle("lp-strata", on);
+      buttons.forEach(function (button) { button.setAttribute("aria-pressed", on ? "true" : "false"); });
+      if (on && !legend) {
+        legend = document.createElement("aside");
+        legend.className = "lp-strata-legend"; legend.setAttribute("aria-label", "学习地层");
+        legend.innerHTML = '<h2>学习地层<button type="button">关闭</button></h2><ol></ol>';
+        layers.slice().reverse().forEach(function (layer) {
+          var item = document.createElement("li"), button = document.createElement("button");
+          button.type = "button"; button.setAttribute("aria-pressed", "false"); button.setAttribute("data-rev", String(layer.rev));
+          button.style.setProperty("--layer", colorOf(layer.rev));
+          button.innerHTML = "<b></b><small></small>";
+          button.firstChild.textContent = "第 " + layer.rev + " 层" + (layer.rev === rev ? " · 最新" : layer.rev === revs[0] ? " · 最早" : "");
+          button.lastChild.textContent = layer.names.slice(0, 4).join("、") + (layer.names.length > 4 ? " 等 " + layer.names.length + " 处" : "");
+          button.addEventListener("click", function () { setFocus(layer.rev); });
+          item.appendChild(button);
+          legend.querySelector("ol").appendChild(item);
+        });
+        legend.querySelector("h2 button").addEventListener("click", function () { set(false); });
+        document.body.appendChild(legend);
+        column = document.createElement("div");
+        column.className = "lp-strata-col"; column.setAttribute("aria-hidden", "true");
+        main.appendChild(column);
+      }
+      if (legend) { legend.hidden = !on; column.hidden = !on; }
+      if (!on && focus !== null) setFocus(focus);
+      if (on) draw();
+    };
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () { set(!root.classList.contains("lp-strata")); });
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && root.classList.contains("lp-strata") && !document.querySelector(".lp-pop")) set(false);
+    });
+    var later = 0;
+    var redraw = function () { window.clearTimeout(later); later = window.setTimeout(function () { if (root.classList.contains("lp-strata")) draw(); }, 80); };
+    window.addEventListener("resize", redraw);
+    document.addEventListener("lp:layout", redraw);
+    if (window.ResizeObserver) new ResizeObserver(redraw).observe(main);
+  }
+
+  /* 风格：朱批用汉字节号和题目后的印章，蓝图用标题栏里的图号与版次；讲义不加任何东西。 */
+  function initLook() {
+    var look = root.getAttribute("data-look");
+    if (look === "vermilion") {
+      var digits = "零一二三四五六七八九";
+      var cn = function (n) {
+        if (n < 10) return digits[n];
+        if (n < 20) return "十" + (n % 10 ? digits[n % 10] : "");
+        return digits[Math.floor(n / 10)] + "十" + (n % 10 ? digits[n % 10] : "");
+      };
+      $all(".lp-no").forEach(function (no) {
+        var n = parseInt(no.textContent, 10);
+        if (n > 0 && n < 100) no.setAttribute("data-cn", cn(n));
+      });
+      var title = document.querySelector(".lp-title"), crumb = document.querySelector(".lp-crumb");
+      if (title && !title.querySelector(".lp-seal")) {
+        var lesson = crumb && crumb.textContent.match(/第\s*(\d{1,2})\s*课/);
+        var seal = document.createElement("span");
+        seal.className = "lp-seal"; seal.setAttribute("aria-hidden", "true");
+        (lesson ? "第" + cn(parseInt(lesson[1], 10)) + "课" : "讲义").split("").forEach(function (ch) {
+          var cell = document.createElement("span");
+          cell.textContent = ch;
+          seal.appendChild(cell);
+        });
+        title.appendChild(seal);
+      }
+    }
+    var sheet = document.querySelector(".lp-meta");
+    if (look === "blueprint" && sheet && meta && !sheet.querySelector(".lp-meta-x")) {
+      [["图号", pageId.toUpperCase()], ["版次", "R" + rev]].forEach(function (pair) {
+        var cell = document.createElement("p");
+        cell.className = "lp-meta-x"; cell.setAttribute("data-k", pair[0]); cell.textContent = pair[1];
+        sheet.appendChild(cell);
+      });
+    }
+  }
+
   function init() {
     $all(".lp-glossary").forEach(function (section) { if (!section.querySelector("dt")) section.hidden = true; });
     $all(".lp-sources").forEach(function (section) { if (!section.querySelector("li")) section.hidden = true; });
-    var steps = [initTheme, initReview, initFreshness, initToc, initWhere, initFlows, initCode, initMath, initNoBreak, initSteppers, initExplorers, initToggles, initTimers, initSymbols, initReveal, initProgress, initNotes, initLiveUpdates, initScrollMemory];
+    var steps = [initTheme, initReview, initFreshness, initLook, initToc, initWhere, initFlows, initCode, initMath, initNoBreak, initSteppers, initExplorers, initLive, initToggles, initTimers, initSymbols, initReveal, initProgress, initStrata, initNotes, initLiveUpdates, initScrollMemory];
     steps.forEach(function (step) {
       try { step(); } catch (error) { console.error("lesson-pages " + step.name, error); }
     });

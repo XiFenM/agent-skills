@@ -1,0 +1,113 @@
+/* lesson-pages 风格：蓝图（工程蓝图）。由 lesson_pages.py 写进页面的 #lp-look，页面不要修改本段。
+   浅色：正文在白图纸上，封面与实验台是蓝图；深色：整页都是蓝图。线条细、角是直角、注记用橙色铅笔。 */
+:root[data-look="blueprint"] {
+  --paper: #f4f7fb; --raised: #e6edf6; --ink: #0c2546; --ink-soft: #2e4767; --ink-faint: #566b88;
+  --rule: #c5d3e4; --accent: #c2410c; --accent-ink: #a3360a; --accent-wash: #fbe4d6; --focus: #1d5fd0;
+  --mark: #fdeeb0; --s1: #0b5fae; --s2: #00766a; --s3: #9d2f6e; --s4: #8a5a00;
+  --band: #123f6e; --band-ink: #eef5ff; --band-soft: #b9cde6; --band-rule: #3d6796;
+  --stage: #123d6a; --glow-a: transparent; --glow-b: transparent;
+  --grid-minor: rgba(23, 79, 150, .055); --grid-major: rgba(23, 79, 150, .1);
+  --line: var(--ink); --line-idle: #9fb3cc; --station: var(--paper);
+  --font-head: "DIN Alternate", "Bahnschrift", "Barlow Condensed", "Roboto Condensed", "Arial Narrow", var(--font-sans);
+  --round: 2px;
+  --st1: #e0902b; --st2: #2f8fd0; --st3: #4caf8e; --st4: #b0569a; --st5: #c9a227; --st6: #6d7fd6;
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root[data-look="blueprint"]:not([data-theme="light"]) {
+    --paper: #103660; --raised: #164373; --ink: #eaf3ff; --ink-soft: #b7cbe5; --ink-faint: #8ea9cb;
+    --rule: #2f5c8c; --accent: #ffb04a; --accent-ink: #ffc373; --accent-wash: #2f4f6a; --focus: #9cc2ff;
+    --mark: #5b4f1d; --s1: #8fd6ff; --s2: #7ff0bf; --s3: #ffaad8; --s4: #ffd36b;
+    --band: #0b2747; --band-ink: #eef5ff; --band-soft: #b9cde6; --band-rule: #2f5c8c; --stage: #0c2a4d;
+    --grid-minor: rgba(255, 255, 255, .045); --grid-major: rgba(255, 255, 255, .09);
+    --line: #eaf3ff; --line-idle: #5f82ab; --station: #103660;
+  }
+}
+:root[data-look="blueprint"][data-theme="dark"] {
+  --paper: #103660; --raised: #164373; --ink: #eaf3ff; --ink-soft: #b7cbe5; --ink-faint: #8ea9cb;
+  --rule: #2f5c8c; --accent: #ffb04a; --accent-ink: #ffc373; --accent-wash: #2f4f6a; --focus: #9cc2ff;
+  --mark: #5b4f1d; --s1: #8fd6ff; --s2: #7ff0bf; --s3: #ffaad8; --s4: #ffd36b;
+  --band: #0b2747; --band-ink: #eef5ff; --band-soft: #b9cde6; --band-rule: #2f5c8c; --stage: #0c2a4d;
+  --grid-minor: rgba(255, 255, 255, .045); --grid-major: rgba(255, 255, 255, .09);
+  --line: #eaf3ff; --line-idle: #5f82ab; --station: #103660;
+}
+:root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage, pre.lp-code, .lp-code-head) {
+  --paper: var(--stage); --raised: #1a4a7c; --ink: #eef6ff; --ink-soft: #bcd0e8; --ink-faint: #93aed0;
+  --rule: #3a6a9c; --accent: #ffb04a; --accent-ink: #ffc76f; --accent-wash: #33506b; --mark: #5b4f1d;
+  --s1: #8fd6ff; --s2: #7ff0bf; --s3: #ffaad8; --s4: #ffd36b; --rim: transparent; --glow-a: transparent;
+  --dot: rgba(255, 255, 255, .07);
+  --code-kw: #c9b6ff; --code-str: #a8f0a0; --code-num: #ffb47a; --code-fn: #8fd6ff; --code-type: #7fe7d9; --code-com: #a4bbd8; --code-meta: #ffd36b;
+}
+:root[data-look="blueprint"] body { background-color: var(--paper); background-image: linear-gradient(var(--grid-major) 1px, transparent 1px), linear-gradient(90deg, var(--grid-major) 1px, transparent 1px), linear-gradient(var(--grid-minor) 1px, transparent 1px), linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px); background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px; }
+:root[data-look="blueprint"] :is(.lp-title, .lp-main h2, .lp-main h3) { font-family: var(--font-head); letter-spacing: .02em; }
+/* 封面：一张图纸，有图框、角标和标题栏 */
+:root[data-look="blueprint"] .lp-cover { border-bottom: 0; background-color: var(--band); background-image: linear-gradient(rgba(255, 255, 255, .1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .1) 1px, transparent 1px), linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px); background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px; }
+:root[data-look="blueprint"] .lp-cover::before { inset: 12px; background: none; border: 1px solid rgba(255, 255, 255, .55); box-shadow: inset 0 0 0 4px var(--band), inset 0 0 0 5px rgba(255, 255, 255, .3); }
+:root[data-look="blueprint"] .lp-cover::after { display: none; }
+:root[data-look="blueprint"] .lp-cover-in::before { display: none; }
+:root[data-look="blueprint"] .lp-cover-in { padding-top: 48px; padding-bottom: 40px; }
+:root[data-look="blueprint"] .lp-title { font-size: clamp(30px, 4.6vw, 48px); font-weight: 700; color: transparent; -webkit-text-stroke: 1.2px var(--band-ink); text-shadow: none; }
+:root[data-look="blueprint"] .lp-title::after { width: 100%; height: 9px; margin-top: 16px; background: linear-gradient(var(--band-soft), var(--band-soft)) center / 100% 1px no-repeat; border-left: 1px solid var(--band-soft); border-right: 1px solid var(--band-soft); border-radius: 0; }
+:root[data-look="blueprint"] .lp-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; width: min(100%, 620px); margin: 22px 0 0 auto; font-size: 13px; border: 1px solid var(--band-soft); }
+:root[data-look="blueprint"] .lp-meta > .lp-meta-x[data-k="图号"] { order: 1; }
+:root[data-look="blueprint"] .lp-meta > .lp-meta-x[data-k="版次"] { order: 2; }
+:root[data-look="blueprint"] .lp-meta > [data-lp-auto="date"] { order: 3; }
+:root[data-look="blueprint"] .lp-meta > [data-lp-auto="minutes"] { order: 4; }
+:root[data-look="blueprint"] .lp-meta > p:not([data-lp-auto]):not(.lp-meta-x) { order: 5; grid-column: 1 / -1; }
+@media (max-width: 639px) { :root[data-look="blueprint"] .lp-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } :root[data-look="blueprint"] .lp-cover-in { padding-left: 30px; padding-right: 30px; } }
+:root[data-look="blueprint"] .lp-meta > p { padding: 6px 10px; border-right: 1px solid var(--band-rule); border-bottom: 1px solid var(--band-rule); }
+:root[data-look="blueprint"] .lp-meta > p[data-k]::before { content: attr(data-k); display: block; font-size: 11px; letter-spacing: .08em; color: var(--band-soft); }
+:root[data-look="blueprint"] .lp-meta-x { font-family: var(--font-mono); color: var(--band-ink); }
+:root[data-look="blueprint"] .lp-updated { border-radius: 0; background: rgba(255, 255, 255, .06); }
+:root[data-look="blueprint"] .lp-tools button { border-radius: 0; }
+/* 正文：节号是圆圈引线，标题下是一条尺寸线 */
+:root[data-look="blueprint"] .lp-no { color: var(--ink); background: var(--paper); border: 1.5px solid var(--ink); border-radius: 50%; font-family: var(--font-mono); }
+:root[data-look="blueprint"] .lp-node.is-current > h2 .lp-no { color: var(--paper); background: var(--accent); border-color: var(--accent); box-shadow: none; }
+:root[data-look="blueprint"] .lp-main h2::after { content: ""; display: block; height: 9px; margin-top: 10px; background: linear-gradient(var(--ink-faint), var(--ink-faint)) center / 100% 1px no-repeat; border-left: 1px solid var(--ink-faint); border-right: 1px solid var(--ink-faint); }
+:root[data-look="blueprint"] .lp-lead > b:first-child { border-radius: 0; background: var(--ink); }
+:root[data-look="blueprint"] .lp-layer::before { border-radius: 0; transform: rotate(45deg); }
+:root[data-look="blueprint"] .lp-note::before { content: "注"; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+:root[data-look="blueprint"] .lp-note { border-top: 1px solid var(--rule); padding-top: 4px; font-family: var(--font-sans); }
+/* 实验台：方角、白色细框和角标，像图纸上的一个视图 */
+:root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) { border-radius: 0; background-image: linear-gradient(var(--dot) 1px, transparent 1px), linear-gradient(90deg, var(--dot) 1px, transparent 1px); background-size: 20px 20px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45), inset 0 0 0 5px var(--stage), inset 0 0 0 6px rgba(255, 255, 255, .18); }
+:root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) figcaption b::before { content: "视图 "; font-weight: 400; color: var(--ink-faint); }
+:root[data-look="blueprint"] pre.lp-code, :root[data-look="blueprint"] .lp-code-head { border-radius: 0 !important; }
+:root[data-look="blueprint"] .lp-canvas { border-radius: 0; border: 1px solid var(--rule); background: transparent; }
+:root[data-look="blueprint"] .lp-seg, :root[data-look="blueprint"] .lp-seg button, :root[data-look="blueprint"] .lp-seg-thumb, :root[data-look="blueprint"] .lp-btn { border-radius: 2px; }
+/* 检查题：审核栏，双线框 */
+:root[data-look="blueprint"] .lp-check { border-radius: 0; box-shadow: inset 0 0 0 1px var(--ink-faint); }
+:root[data-look="blueprint"] .lp-check[data-state="open"] { box-shadow: inset 0 0 0 3px var(--accent), inset 0 0 0 6px var(--accent-wash), inset 0 0 0 7px var(--accent); }
+:root[data-look="blueprint"] .lp-check[data-state="open"] > h3 { border-radius: 0; }
+:root[data-look="blueprint"] .lp-check > h3::after { border-radius: 0; }
+:root[data-look="blueprint"] blockquote.lp-oral { border-radius: 0; border-left: 0; box-shadow: inset 0 0 0 1px var(--rule); }
+/* 新内容：修订三角，写着版次 */
+:root[data-look="blueprint"] .lp-new { width: 1.9em; height: 1.65em; padding: .35em 0 0; font-size: 11px; line-height: 1; text-align: center; color: var(--paper); background: var(--accent); border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+:root[data-look="blueprint"] .lp-new[data-rev] { font-size: 0; }
+:root[data-look="blueprint"] .lp-new[data-rev]::after { content: attr(data-rev); font-size: 10px; font-weight: 700; }
+/* 地铁线路变成管线图：细双线、十字准星的站，未开通的地段画剖面线 */
+:root[data-look="blueprint"] .lp-stages.lp-flow > li::before { border-width: 2px; border-color: var(--line); background: radial-gradient(circle, var(--line) 0 2px, transparent 2.5px), linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat, linear-gradient(90deg, var(--line), var(--line)) center / 1px 100% no-repeat, var(--station); }
+:root[data-look="blueprint"] .lp-stages.lp-flow > li.is-fog::before { border-style: dashed; border-color: var(--line-idle); background: var(--station); }
+:root[data-look="blueprint"] .lp-stages.lp-flow > li:not(:last-child)::after { top: 6px; height: 7px; border-top: 1.5px solid var(--line); border-bottom: 1.5px solid var(--line); border-radius: 0; }
+:root[data-look="blueprint"] .lp-stages.lp-flow > li.to-fog:not(:last-child)::after, :root[data-look="blueprint"] .lp-stages.lp-flow > li.is-fog:not(:last-child)::after { border-top: 1.5px dashed var(--line-idle); border-bottom: 1.5px dashed var(--line-idle); }
+:root[data-look="blueprint"] .lp-stages.lp-flow.is-vertical > li:not(:last-child)::after { width: 7px; height: auto; border: 0; border-left: 1.5px solid var(--line); border-right: 1.5px solid var(--line); }
+:root[data-look="blueprint"] .lp-mist { inset: -12px 0 -8px -12px; background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--line-idle) 45%, transparent) 0 1px, transparent 1px 7px); -webkit-mask-image: radial-gradient(70% 60% at 50% 50%, #000 40%, transparent 80%); mask-image: radial-gradient(70% 60% at 50% 50%, #000 40%, transparent 80%); }
+:root[data-look="blueprint"] .lp-soon { border-radius: 0; }
+:root[data-look="blueprint"] .lp-where.lp-sign { border-radius: 0; color: var(--ink); background: var(--paper); box-shadow: inset 0 0 0 1px var(--ink), inset 0 0 0 4px var(--paper), inset 0 0 0 5px var(--rule); }
+:root[data-look="blueprint"] .lp-sign small { font-family: var(--font-mono); color: var(--ink-faint); }
+:root[data-look="blueprint"] .lp-sign a, :root[data-look="blueprint"] .lp-sign .lp-sign-end { color: var(--ink-soft); }
+:root[data-look="blueprint"] .lp-sign a:hover { color: var(--accent-ink); }
+:root[data-look="blueprint"] .lp-sign-here > span { color: var(--ink); font-family: var(--font-head); }
+:root[data-look="blueprint"] .lp-sign-line { background: linear-gradient(var(--ink), var(--ink)) center calc(50% - 3px) / 100% 1.5px no-repeat, linear-gradient(var(--ink), var(--ink)) center calc(50% + 3px) / 100% 1.5px no-repeat; }
+:root[data-look="blueprint"] .lp-sign-line > li { background: var(--paper); border-color: var(--ink); }
+:root[data-look="blueprint"] .lp-sign-line > li.is-here { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); }
+:root[data-look="blueprint"] .lp-sign-line > li.is-fog { background: var(--paper); border-color: var(--line-idle); }
+:root[data-look="blueprint"] .lp-ring::after { border-radius: 0; border-style: dashed; transform: none; }
+:root[data-look="blueprint"] .lp-knob { border-radius: 0; }
+:root.js[data-look="blueprint"] .lp-knob { font-family: var(--font-mono); font-size: .94em; }
+@media screen { :root.js[data-look="blueprint"] .lp-live { border-radius: 0; border-style: dashed; background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--accent) 7%, transparent) 0 1px, transparent 1px 9px); } }
+:root[data-look="blueprint"] .lp-live-tag { border-radius: 0; font-family: var(--font-mono); letter-spacing: .06em; }
+:root[data-look="blueprint"] .lp-live-reset, :root[data-look="blueprint"] .lp-pop, :root[data-look="blueprint"] .lp-pop .lp-pop-vals i { border-radius: 0; }
+:root[data-look="blueprint"] .lp-strata-legend { border-radius: 0; font-family: var(--font-sans); }
+:root[data-look="blueprint"] .lp-strata-legend h2::before { content: "修订记录 · "; }
+:root[data-look="blueprint"] .lp-strata-col > i { border-radius: 0; }
+:root[data-look="blueprint"] .lp-glossary dt, :root[data-look="blueprint"] .lp-where a, :root[data-look="blueprint"] code, :root[data-look="blueprint"] .lp-tag { border-radius: 0; }
+@media print { :root[data-look] body { background-image: none; } }

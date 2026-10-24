@@ -50,8 +50,8 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 ## 一课在页面上怎样展开
 
-1. **开课**：`new` 建页，只写导入、骨架和资料指路。核对画像与前置在对话里进行；不需要提问时，同一轮接着追加
-   第一段。
+1. **开课**：`new` 建页，只写导入、骨架和资料指路；一门课的页面用同一种风格（`--look`，见
+   [page-design.md](references/page-design.md) 第 9 节）。核对画像与前置在对话里进行；不需要提问时，同一轮接着追加第一段。
 2. **每段**：讲到下一次提问为止的那几个节点连同那道题，一次 `add`；每个节点至多一个交互部件。节奏只听 `guide-learning`；
    一段读起来超过约 9 分钟时，先删冗余、把细节移进图或已讲内容的 `<details>`，不为篇幅多加提问。
 3. **作答之后**：先 `state --to answered`，题头不再提示作答；反馈在对话，需要展开的补充用 `add --into node-N` 放到所属
@@ -90,6 +90,7 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 
 改正已有内容里的小错时，按 `outline` 给的行号只读那几行，再用宿主的编辑工具改，改完运行 `check`；不整页重写。
 改公式时只改它的 `data-tex`，再运行 `render --page … --id …` 重新排版；`check` 会指出改了却没重排的公式。
+学习者要换风格时，对这门课的每页运行 `look --page … --id … --to <风格>`。
 `outline` 也列出各块里后加的补充、参考要点，以及片段带进来的样式和脚本所在的行。
 
 ## 文件、查看与授权
@@ -112,7 +113,7 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 - 页面上的任何部件、推导、折叠内容或资料指路都不能提前给出开放题和后续验收变式的答案。部件触及开放题的变量时标
   `data-reveals`，题目关闭后才追加；会直接回答开放题的资料段落，等题目关闭后再安排阅读。
 - 题目只在真正提出时写进页面。题意不清换题时，把原题标为 `replaced`，不算学习者的错。
-- 部件里由公式算出的数字交给计算函数实时算，参数探索附用 Python 等工具算好的 `data-cases`；正文里的真实规模数字和
+- 部件里由公式算出的数字交给计算函数实时算，参数探索和可调段落附用 Python 等工具算好的 `data-cases`；正文里的真实规模数字和
   实测数字可以静态写出，用工具算好或测好，并注明来历。都不手算。
 
 ## 验证
@@ -133,5 +134,5 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 - [page-structure.md](references/page-structure.md)：每次写片段前读。各块怎样对应课程结构、写法、编号、题目状态、恢复与对话指路。
 - [example-opening.html](references/example-opening.html) 与 [example-segment.html](references/example-segment.html)：第一次建页前读。开课片段与一段讲解的完整示例。
 - [interactive-widgets.md](references/interactive-widgets.md)：做交互部件前读。
-- [page-design.md](references/page-design.md)：自绘图形、改样式或检查视觉时读。
+- [page-design.md](references/page-design.md)：选风格、自绘图形、改样式或检查视觉时读。
 - [files-and-viewing.md](references/files-and-viewing.md)：选位置、定查看方式、读受管配置或处理授权细节时读。
