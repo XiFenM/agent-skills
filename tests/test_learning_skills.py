@@ -49,7 +49,9 @@ PAGES_REFERENCE_FILES = {
     "interactive-widgets.md",
     "page-design.md",
     "page-structure.md",
+    "widget-packs.md",
 }
+PAGES_PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "zoom")
 PAGES_VENDOR_FILES = {
     "highlight/LICENSE",
     "highlight/highlight.min.js",
@@ -74,18 +76,22 @@ EXPECTED_PAGES_FILES = {
     "assets/lesson-template.html",
     "assets/looks/blueprint.css",
     "assets/looks/vermilion.css",
+    *(f"assets/packs/{name}.{kind}" for name in PAGES_PACKS for kind in ("css", "js")),
     *(f"assets/vendor/{name}" for name in PAGES_VENDOR_FILES),
     "scripts/context_config.py",
     "scripts/lesson_pages.py",
     "scripts/render.cjs",
     "tests/test_lesson_pages.py",
     "tests/test_lesson_pages_context.py",
+    "tests/fixtures/widget-packs.html",
     *(f"references/{name}" for name in PAGES_REFERENCE_FILES),
+    *(f"references/sample-pages/attn-03-{look}.html" for look in ("handout", "blueprint", "vermilion")),
 }
 PAGES_MAIN_MAX_LINES = 150
-PAGES_TEXT_MAX_BYTES = 55_000
-PAGES_TEMPLATE_MAX_BYTES = 145_000
+PAGES_TEXT_MAX_BYTES = 67_000
+PAGES_TEMPLATE_MAX_BYTES = 170_000
 PAGES_LOOK_MAX_BYTES = 16_000
+PAGES_PACK_MAX_BYTES = 16_000
 
 
 def _relative_files(root: Path) -> set[str]:
@@ -361,6 +367,8 @@ def test_lesson_pages_frontmatter_main_and_budgets_stay_compact() -> None:
     assert len((PAGES_ROOT / "assets" / "lesson-template.html").read_bytes()) <= PAGES_TEMPLATE_MAX_BYTES
     for look in (PAGES_ROOT / "assets" / "looks").glob("*.css"):
         assert len(look.read_bytes()) <= PAGES_LOOK_MAX_BYTES, look.name
+    for pack in (PAGES_ROOT / "assets" / "packs").iterdir():
+        assert len(pack.read_bytes()) <= PAGES_PACK_MAX_BYTES, pack.name
 
 
 def test_lesson_pages_links_every_reference_and_long_references_have_contents() -> None:

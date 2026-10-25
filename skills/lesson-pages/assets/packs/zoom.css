@@ -1,0 +1,92 @@
+/* lesson-pages 部件包：可缩放的系统结构图 .lp-zoom。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   画面是当前一层：标题与说明在上，下一层的部件排成格子；带下一层的部件里是下一层的缩略图，并可放大。
+   放大后外面几层一圈套一圈留在四周，每圈顶边写着那一层的名字。底纹只画在当前一层上：
+   data-domain="hardware" 是电路板底纹和带引脚的芯片，"software" 是点阵底纹和带标题栏的窗口。颜色只用中性色，符号色留给符号。 */
+.lp-zoom > ul, .lp-zoom > ul ul { margin: 0 0 .4em !important; padding-left: 1.3em !important; }
+.lp-zoom > ul li { margin: .2em 0; }
+.lp-zoom > ul li > b { margin-right: .5em; }
+.lp-zoom > ul li > p { display: inline; margin: 0 !important; font-size: .94em; color: var(--ink-soft); }
+.lp-zoom.is-ready > ul { display: none; }
+.lp-zoom-view { position: relative; }
+.lp-zoom-view:focus { outline: none; }
+.lp-zoom-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; }
+.lp-main .lp-zoom-hint { flex: 1 1 12em; min-width: 0; margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink-faint); }
+.lp-zoom-up { min-height: 32px; padding: 2px 13px; font-size: 13.5px; }
+/* 画面：--rings 是外面还有几层；每层一圈，顶边留 --band 写名字，左右下留 --side */
+.lp-zoom-frame { --band: 26px; --side: 10px; --pad: 18px; position: relative; min-height: 300px; padding: calc(var(--pad) + var(--rings, 0) * var(--band)) calc(var(--pad) + var(--rings, 0) * var(--side)) calc(var(--pad) + var(--rings, 0) * var(--side)); background: color-mix(in srgb, var(--raised) 45%, var(--paper)); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--rule); }
+.lp-zoom-frame > :is(.lp-zoom-head, .lp-zoom-kids) { position: relative; z-index: 1; }
+.lp-zoom-frame.is-moving > :is(.lp-zoom-head, .lp-zoom-kids, .lp-zoom-path) { visibility: hidden; }
+.lp-zoom-path { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.lp-zoom-ring { position: absolute; inset: calc(var(--k) * var(--band)) calc(var(--k) * var(--side)) calc(var(--k) * var(--side)); border-radius: 12px; background: color-mix(in srgb, var(--ink) 3.5%, transparent); box-shadow: inset 0 0 0 1px var(--rule); }
+.lp-zoom-ring > button { position: absolute; left: 10px; top: 0; max-width: calc(100% - 96px); height: var(--band); padding: 0 6px; overflow: hidden; font: 600 12.5px/var(--band) var(--font-sans); letter-spacing: .02em; color: var(--ink-soft); text-align: left; text-overflow: ellipsis; white-space: nowrap; background: none; border: 0; border-radius: 4px; cursor: zoom-out; pointer-events: auto; transition: color .15s ease; }
+.lp-zoom-ring > button::before { content: "↖"; margin-right: .45em; font-weight: 400; opacity: .7; }
+.lp-zoom-ring > button:hover { color: var(--ink); }
+.lp-zoom-here { position: absolute; z-index: 0; inset: calc(var(--rings, 0) * var(--band)) calc(var(--rings, 0) * var(--side)) calc(var(--rings, 0) * var(--side)); border-radius: 12px; box-shadow: inset 0 0 0 1px var(--rule); pointer-events: none; }
+.lp-zoom[data-depth]:not([data-depth="1"]) .lp-zoom-here { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent), 0 10px 30px -18px color-mix(in srgb, var(--stage) 80%, transparent); }
+.lp-zoom-head { margin: 0 0 16px; padding-right: 4.5em; }
+.lp-zoom-title { margin: 0 !important; font-size: 19px; font-weight: 700; line-height: 1.4; outline: none; }
+.lp-zoom-about { max-width: 46em; margin: 4px 0 0 !important; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.lp-zoom-kids { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); grid-auto-flow: dense; gap: 14px; }
+.lp-zoom-box { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; padding: 12px 14px; font: inherit; text-align: left; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; }
+.lp-zoom-box[data-size="2"] { grid-column: span 2; }
+.lp-zoom-box[data-size="3"] { grid-column: span 3; }
+.lp-zoom-row { display: flex; align-items: flex-start; gap: 8px; }
+.lp-zoom-row b { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 700; line-height: 1.35; }
+.lp-zoom-text { font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+.lp-zoom-box.can-zoom { cursor: zoom-in; transition: border-color .2s ease, transform .2s var(--ease), box-shadow .2s ease; }
+.lp-zoom-box.can-zoom:hover, .lp-zoom-box.can-zoom:focus-visible { border-color: var(--accent); box-shadow: 0 12px 26px -16px var(--accent); transform: translateY(-2px); }
+.lp-zoom-go { flex: none; margin: 0 -4px 0 0; padding: 0 7px; font-size: 11.5px; font-style: normal; font-weight: 600; line-height: 1.7; white-space: nowrap; color: var(--accent-ink); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 999px; transition: background-color .2s ease, color .2s ease; }
+.lp-zoom-go::before { content: "⊕ "; }
+.lp-zoom-box.can-zoom:hover .lp-zoom-go, .lp-zoom-box.can-zoom:focus-visible .lp-zoom-go { color: var(--paper); background: var(--accent); }
+/* 缩略图：下一层的部件按分量排成小格；自己还能再放大的格子用虚线框 */
+.lp-zoom-mini { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding: 8px; background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: 6px; }
+.lp-zoom-mini i { flex: 1 1 64px; min-width: 0; padding: 2px 6px; overflow: hidden; font-size: 10.5px; font-style: normal; line-height: 1.6; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; background: var(--raised); border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 3px; }
+.lp-zoom-mini i[data-size="2"] { flex: 2 1 132px; }
+.lp-zoom-mini i[data-size="3"] { flex: 3 1 200px; }
+.lp-zoom-mini i.is-deep { border-style: dashed; border-color: color-mix(in srgb, var(--ink) 34%, transparent); }
+.lp-zoom-box.is-from { box-shadow: 0 0 0 2px var(--accent); }
+.lp-zoom-ghost { position: absolute; z-index: 3; background: color-mix(in srgb, var(--accent) 14%, var(--paper)); border-radius: 10px; box-shadow: inset 0 0 0 1.5px var(--accent); pointer-events: none; }
+/* 领域小签：放得进最外一圈的名字带里（高 18px，带高 24–26px），自带纸色底，底纹和外框线不会从字后面穿过 */
+.lp-zoom[data-domain] .lp-zoom-frame::before { position: absolute; z-index: 2; right: 12px; top: 3px; padding: 0 7px; font-size: 11px; font-weight: 600; line-height: 16px; letter-spacing: .08em; color: var(--ink-soft); background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; }
+/* 硬件：电路板（走线与过孔）只铺在当前一层；部件是带引脚的芯片，缩略图是小芯片 */
+.lp-zoom[data-domain="hardware"] .lp-zoom-frame::before { content: "硬件"; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-here { background-color: color-mix(in srgb, var(--paper) 88%, var(--ink)); background-image: radial-gradient(circle, color-mix(in srgb, var(--ink) 32%, transparent) 1.6px, transparent 2.2px), linear-gradient(90deg, transparent 23px, color-mix(in srgb, var(--ink) 8%, transparent) 23px 25px, transparent 25px), linear-gradient(transparent 23px, color-mix(in srgb, var(--ink) 8%, transparent) 23px 25px, transparent 25px); background-size: 48px 48px; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-kids { gap: 22px 16px; padding: 6px 0; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-box { background: var(--raised); border-color: color-mix(in srgb, var(--ink) 26%, transparent); border-radius: 3px; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-box::before, .lp-zoom[data-domain="hardware"] .lp-zoom-box::after { content: ""; position: absolute; left: 14px; right: 14px; height: 6px; background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink-faint) 85%, transparent) 0 4px, transparent 4px 10px); }
+.lp-zoom[data-domain="hardware"] .lp-zoom-box::before { top: -7px; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-box::after { bottom: -7px; }
+.lp-zoom[data-domain="hardware"] :is(.lp-zoom-row b, .lp-zoom-title, .lp-zoom-ring > button) { font-family: var(--font-mono); letter-spacing: .01em; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-mini { background: none; padding: 4px 0 0; gap: 6px; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-mini i { padding: 5px 7px; background: repeating-linear-gradient(90deg, var(--ink-faint) 0 2px, transparent 2px 5px) 6px 0 / calc(100% - 12px) 3px no-repeat, repeating-linear-gradient(90deg, var(--ink-faint) 0 2px, transparent 2px 5px) 6px 100% / calc(100% - 12px) 3px no-repeat, linear-gradient(var(--paper), var(--paper)) 0 3px / 100% calc(100% - 6px) no-repeat; border: 0; border-radius: 0; }
+.lp-zoom[data-domain="hardware"] .lp-zoom-mini i.is-deep { background: repeating-linear-gradient(90deg, var(--ink-faint) 0 2px, transparent 2px 5px) 6px 0 / calc(100% - 12px) 3px no-repeat, repeating-linear-gradient(90deg, var(--ink-faint) 0 2px, transparent 2px 5px) 6px 100% / calc(100% - 12px) 3px no-repeat, linear-gradient(var(--paper), var(--paper)) 0 3px / 100% calc(100% - 6px) no-repeat; outline: 1px dashed color-mix(in srgb, var(--ink) 34%, transparent); outline-offset: -3px; }
+.lp-zoom[data-domain="hardware"] :is(.lp-zoom-here, .lp-zoom-ghost, .lp-zoom-ring) { border-radius: 4px; }
+/* 软件：点阵底纹只铺在当前一层；部件是带标题栏的窗口，缩略图是小窗口 */
+.lp-zoom[data-domain="software"] .lp-zoom-frame::before { content: "软件"; }
+.lp-zoom[data-domain="software"] .lp-zoom-here { background-color: var(--paper); background-image: radial-gradient(color-mix(in srgb, var(--ink) 20%, transparent) 1px, transparent 1.5px); background-size: 16px 16px; }
+.lp-zoom[data-domain="software"] .lp-zoom-box { padding-top: 24px; overflow: hidden; }
+.lp-zoom[data-domain="software"] .lp-zoom-box::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 12px; background: radial-gradient(circle at 10px 6px, var(--ink-faint) 2.2px, transparent 2.8px), radial-gradient(circle at 19px 6px, color-mix(in srgb, var(--ink-faint) 60%, transparent) 2.2px, transparent 2.8px), radial-gradient(circle at 28px 6px, color-mix(in srgb, var(--ink-faint) 35%, transparent) 2.2px, transparent 2.8px), color-mix(in srgb, var(--ink) 10%, var(--raised)); }
+.lp-zoom[data-domain="software"] :is(.lp-zoom-row b, .lp-zoom-ring > button) { font-family: var(--font-mono); }
+.lp-zoom[data-domain="software"] .lp-zoom-mini i { padding-top: 5px; background: linear-gradient(color-mix(in srgb, var(--ink) 16%, var(--raised)), color-mix(in srgb, var(--ink) 16%, var(--raised))) 0 0 / 100% 3px no-repeat, var(--raised); }
+@media (max-width: 479px) {
+  .lp-zoom-frame { --band: 24px; --side: 6px; --pad: 13px; }
+  .lp-zoom-kids { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .lp-zoom-box[data-size] { grid-column: auto; }
+  .lp-zoom-head { padding-right: 0; }
+  .lp-zoom[data-depth="1"] .lp-zoom-head { padding-right: 3.6em; }
+  .lp-zoom[data-domain] .lp-zoom-frame::before { right: 8px; }
+}
+:root[data-look="blueprint"] :is(.lp-zoom-frame, .lp-zoom-box, .lp-zoom-ghost, .lp-zoom-mini, .lp-zoom-mini i, .lp-zoom-here, .lp-zoom-ring) { border-radius: 0 !important; }
+:root[data-look="blueprint"] .lp-zoom-ring { background: none; box-shadow: inset 0 0 0 1px var(--rule); }
+:root[data-look="blueprint"] .lp-zoom[data-depth]:not([data-depth="1"]) .lp-zoom-here { outline: 1px dashed color-mix(in srgb, var(--ink) 30%, transparent); outline-offset: 3px; }
+:root[data-look="blueprint"] :is(.lp-zoom-go, .lp-zoom-ring > button), :root[data-look="blueprint"] .lp-zoom[data-domain] .lp-zoom-frame::before { border-radius: 0; font-family: var(--font-mono); }
+:root[data-look="vermilion"] :is(.lp-zoom-frame, .lp-zoom-box, .lp-zoom-ghost) { border-radius: 3px; }
+:root[data-look="vermilion"] .lp-zoom-ring { border-radius: 3px; box-shadow: inset 0 0 0 1px var(--rule), inset 0 0 0 3px color-mix(in srgb, var(--paper) 60%, transparent), inset 0 0 0 4px color-mix(in srgb, var(--rule) 70%, transparent); }
+:root[data-look="vermilion"] .lp-zoom-here { border-radius: 3px; }
+:root[data-look="vermilion"] .lp-zoom-ring > button { font-family: var(--font-serif); }
+/* 触屏：外圈的名字也是退回的按钮，每圈顶边加高到 44 像素 */
+@media (pointer: coarse) { .lp-zoom-up { min-height: 44px; } .lp-zoom-frame { --band: 44px; } }
+@media print {
+  .lp-zoom-view { display: none !important; }
+  .lp-zoom.is-ready > ul { display: block !important; }
+}

@@ -68,7 +68,8 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 1. 用 `outline` 看已有的块、行号和题目状态。不读整页，不读模板。
 2. 用宿主的写文件工具把片段写成 UTF-8 文件，放在临时目录而不是仓库里；片段只含内容块，不写页面框架和基础样式。
    公式写成 TeX（`<span class="tex">`、`<div class="tex">`），代码块标 `data-lang`，写入时由随附的 KaTeX 与 highlight.js
-   渲染成静态 HTML；这需要本机有 Node，TeX 写错、语言名不认识或缺 Node 时整段不写入。
+   渲染成静态 HTML；这需要本机有 Node，TeX 写错、语言名不认识或缺 Node 时整段不写入。海报、对数尺、误区对照、
+   类比卡、公式解剖、逐行推导、执行回放与系统结构图是部件包，片段只写结构，脚本只把用到的部件包带进这一页。
 3. 用 `add` 插入片段，或用 `state` 改题目状态。脚本会盖上新版本号并检查，结果不合格就不写入。
 4. 按下文“验证”检查。
 5. 在对话里发指路。
@@ -86,10 +87,14 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py state --page learning
   --question q-1 --to closed --fragment /tmp/answer-q-1.html
 python .agents/skills/lesson-pages/scripts/lesson_pages.py outline --page learning/pages/attn-03.html
 python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning/pages/attn-03.html --anchor q-2
+python .agents/skills/lesson-pages/scripts/lesson_pages.py trace --code /tmp/online_softmax.py --vars "m l acc return" \
+  --function attention_row
 ```
 
+`trace` 在本机跑一段讲解用的小例子，逐行列出变量的变化，供执行回放使用。
+
 改正已有内容里的小错时，按 `outline` 给的行号只读那几行，再用宿主的编辑工具改，改完运行 `check`；不整页重写。
-改公式时只改它的 `data-tex`，再运行 `render --page … --id …` 重新排版；`check` 会指出改了却没重排的公式。
+改公式时只改它的 `data-tex`，再运行 `render --page … --id …` 重新排版，部件包也随之刷新；`check` 会指出改了却没重排的公式。
 学习者要换风格时，对这门课的每页运行 `look --page … --id … --to <风格>`。
 `outline` 也列出各块里后加的补充、参考要点，以及片段带进来的样式和脚本所在的行。
 
@@ -134,5 +139,8 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 - [page-structure.md](references/page-structure.md)：每次写片段前读。各块怎样对应课程结构、写法、编号、题目状态、恢复与对话指路。
 - [example-opening.html](references/example-opening.html) 与 [example-segment.html](references/example-segment.html)：第一次建页前读。开课片段与一段讲解的完整示例。
 - [interactive-widgets.md](references/interactive-widgets.md)：做交互部件前读。
+- [widget-packs.md](references/widget-packs.md)：用海报、对数尺、误区对照、类比卡、公式解剖、逐行推导、执行回放或系统结构图前读。
 - [page-design.md](references/page-design.md)：选风格、自绘图形、改样式或检查视觉时读。
 - [files-and-viewing.md](references/files-and-viewing.md)：选位置、定查看方式、读受管配置或处理授权细节时读。
+- `references/sample-pages/`：同一课用讲义、蓝图、朱批三种风格写成的成品页（2026-10-24 版）。想看整体效果时用浏览器
+  打开；每页约 500 KB，不读进上下文，写法以上面的参考为准。

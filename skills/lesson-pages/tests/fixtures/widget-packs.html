@@ -1,0 +1,148 @@
+<!-- 测试与维护用片段：部件包里每种部件各一个，作为第 3 节追加到示例页之后。内容取自 attn-03 试做页，回放轨迹由 trace 记录。 -->
+<section class="lp-node" id="node-3" data-stages="st-final">
+  <h2><span class="lp-no">3</span>部件包一览</h2>
+  <p class="lp-spine">维护用，不对应资料</p>
+  <p class="lp-lead"><b>结论</b>下面每种部件各一个，用来检查三种风格、深浅主题与窄屏下的样子。</p>
+  <div class="lp-poster">
+    <p class="lp-poster-kicker">序列长度 N = 16,384 时，单头一份 FP16 的分数矩阵 S</p>
+    <p class="lp-poster-num"><b>512</b><small>MiB</small><span>N × N 个分数，每个 2 字节</span></p>
+    <p class="lp-poster-num"><b>192</b><small>KB</small><span>A100 每个 SM 的片上存储（108 个 SM 合计约 20 MB）</span></p>
+    <p class="lp-poster-say">差了约 2,700 倍。整行放不进片上，softmax 的分母还怎么算？</p>
+  </div>
+  <figure class="lp-figure lp-scale" id="fig-3-1" data-unit="B/s">
+    <ol>
+      <li data-value="1.28e10"><b>CPU 内存（DRAM）</b>12.8 GB/s</li>
+      <li data-value="1.5e12"><b>GPU 显存（HBM）</b>1.5 TB/s</li>
+      <li data-value="1.9e13"><b>GPU 片上 SRAM</b>19 TB/s</li>
+    </ol>
+    <figcaption><b>图 3.1</b>存储层次的带宽，相邻两级之间写着倍数。越快的越小：片上 SRAM 约 20 MB，HBM 40 GB，CPU 内存 1 TB 以上。数字取自 FlashAttention 论文图 1（A100）。</figcaption>
+  </figure>
+  <div class="lp-myth">
+    <p class="lp-myth-wrong">FlashAttention 快，是因为它少算了一部分注意力，得到的是近似结果。</p>
+    <p class="lp-myth-right">它是精确算法，每个分数都算了；反向还要重算 S，计算量不降反升。快在不把 N×N 的 S、P 写回显存，显存读写大幅减少。</p>
+  </div>
+  <aside class="lp-analogy">
+    <p>分块像在一张小书桌上整理一大柜文件：桌面（片上存储）只摊得开一摞，就一摞一摞地从柜子（显存）里拿出来处理，处理完放回去再拿下一摞。柜子里的文件从来不用全部摊开。</p>
+    <div class="lp-analogy-limit">
+      <p>文件可以一摞一摞各自处理完，softmax 却不行：每个分数的概率要除以整行的指数和，没看完最后一摞，前面每一摞算出的都不是最终值。这正是节点 2 的在线 softmax 要补上的。</p>
+    </div>
+  </aside>
+  <figure class="lp-figure is-stage lp-zoom" id="fig-3-2" data-domain="hardware">
+    <ul>
+      <li><b>A100 GPU</b><p>108 个 SM 共用 40 MB 的 L2 缓存和 40 GB 或 80 GB 的 HBM。分块实现里，S、P 只在 SM 里出现。</p>
+        <ul>
+          <li data-size="2"><b>HBM 显存</b><p>40 GB（约 1.6 TB/s）或 80 GB（约 2.0 TB/s）。Q、K、V、O 放在这里，朴素实现的 S、P 也写在这里。</p></li>
+          <li><b>L2 缓存</b><p>40 MB，所有 SM 共用。</p></li>
+          <li data-size="2"><b>SM × 108</b><p>流式多处理器。一个线程块落在一个 SM 上运行，分块的 S、P 就在这里算完即弃。</p>
+            <ul>
+              <li><b>寄存器堆</b><p>每个 SM 256 KB，即 65,536 个 32 位寄存器。</p></li>
+              <li><b>共享内存 / L1</b><p>每个 SM 合计 192 KB，其中共享内存最多 164 KB。</p></li>
+              <li><b>Tensor Core × 4</b><p>第三代 Tensor Core，算 QKᵀ 和 PV 这样的矩阵乘。</p></li>
+              <li data-size="2"><b>处理块 × 4</b><p>SM 分成 4 个处理块，各有一个 warp 调度器。</p>
+                <ul>
+                  <li><b>warp 调度器</b><p>每个时钟周期挑一个就绪的 warp 发出指令。</p></li>
+                  <li><b>寄存器 64 KB</b><p>16,384 个 32 位寄存器，SM 的四分之一。</p></li>
+                  <li><b>Tensor Core × 1</b><p>每个处理块一个。</p></li>
+                  <li><b>CUDA 核心</b><p>16 个 FP32、16 个 INT32、8 个 FP64。</p></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <figcaption><b>图 3.2</b>A100 的存储与计算层次。点带“放大”的部件进入下一层，面包屑或“上一层”退回。数字取自 NVIDIA A100 架构白皮书。</figcaption>
+  </figure>
+  <figure class="lp-figure is-stage lp-zoom" id="fig-3-3" data-domain="software">
+    <ul>
+      <li><b>一次前向 kernel 启动</b><p>FlashAttention-2 的前向一次启动就算完所有批、所有头。</p>
+        <ul>
+          <li data-size="2"><b>网格：批 × 头 × Q 行块</b><p>每一格是一个线程块；长序列、小批量时，靠 Q 行块这一维凑够线程块占满 GPU。</p>
+            <ul>
+              <li data-size="2"><b>线程块：负责一个 Q 行块</b><p>Q<sub>i</sub>（B<sub>r</sub> 行）留在片上，沿 K、V 的列块循环。</p>
+                <ul>
+                  <li data-size="2"><b>warp × 4</b><p>Q<sub>i</sub> 的行分给 4 个（有时 8 个）warp，K、V 的块各 warp 共用，warp 之间不用交换中间结果。</p>
+                    <ul>
+                      <li><b>线程 × 32</b><p>一个 warp 的 32 个线程一起执行矩阵乘的片段。</p></li>
+                    </ul>
+                  </li>
+                  <li><b>共享内存</b><p>当前一轮的 K<sub>j</sub>、V<sub>j</sub> 块，每轮换一块。</p></li>
+                  <li><b>寄存器</b><p>S<sub>ij</sub>、P<sub>ij</sub> 的片段和每行的 m、ℓ、acc。</p></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><b>写回 O 与 L</b><p>每个线程块最后把 O<sub>i</sub> 和每行的 L 写回 HBM。</p></li>
+        </ul>
+      </li>
+    </ul>
+    <figcaption><b>图 3.3</b>同一次计算在软件上的层次：kernel、网格、线程块、warp、线程。据 FlashAttention-2 论文第 3.2、3.3 节。</figcaption>
+  </figure>
+  <figure class="lp-figure lp-anatomy" id="fig-3-4">
+    <div class="tex">\sB{\ell}_{\text{new}} = \tA{e^{\sA{m} - \sA{m}_{\text{new}}}}\,\tB{\sB{\ell}} + \tC{\sum_{k \in \text{新块}} e^{s_k - \sA{m}_{\text{new}}}}</div>
+    <ol class="lp-terms">
+      <li>缩放因子 α：把旧基准 <var class="lp-s1">m</var> 换到新基准的比例。新基准不会更小，所以它不超过 1。</li>
+      <li>旧的指数和，是以旧的 <var class="lp-s1">m</var> 为基准算的。</li>
+      <li>本块的指数和，直接以新的最大值为基准。</li>
+    </ol>
+    <figcaption><b>图 3.4</b>把 <var class="lp-s2">ℓ</var> 的更新式拆开看：旧的部分先换基准，再加上新的部分。指向一项或一条说明，两边一起亮起。</figcaption>
+  </figure>
+  <figure class="lp-figure lp-derive" id="fig-3-5">
+    <ol>
+      <li><div class="tex">\sB{\ell}_{\text{new}} = \sum_{k \in \text{旧块}} e^{s_k - \sA{m}_{\text{new}}} + \sum_{k \in \text{新块}} e^{s_k - \sA{m}_{\text{new}}}</div><p>按定义：以新的最大值为基准，看过的所有分数的指数和，分成旧块与新块两部分。</p></li>
+      <li><div class="tex">= \sum_{k \in \text{旧块}} e^{s_k \hl{{} - \sA{m} + \sA{m}} - \sA{m}_{\text{new}}} + \sum_{k \in \text{新块}} e^{s_k - \sA{m}_{\text{new}}}</div><p>指数里减一个 <var class="lp-s1">m</var> 再加回来，值不变。</p></li>
+      <li><div class="tex">= \hl{e^{\sA{m} - \sA{m}_{\text{new}}}} \sum_{k \in \text{旧块}} e^{s_k - \sA{m}} + \sum_{k \in \text{新块}} e^{s_k - \sA{m}_{\text{new}}}</div><p>与 k 无关的因子提到求和号外面。</p></li>
+      <li><div class="tex">= \hl{\alpha\,\sB{\ell}} + \operatorname{rowsum}\bigl(\exp(S_j - \sA{m}_{\text{new}})\bigr)</div><p>剩下的求和正是旧的 <var class="lp-s2">ℓ</var>，前面的因子就是 α。</p></li>
+    </ol>
+    <figcaption><b>图 3.5</b>为什么旧的 <var class="lp-s2">ℓ</var> 乘上 α 就换到了新基准。按“下一步”逐行展开，每步变化的部分会标出来。</figcaption>
+  </figure>
+  <figure class="lp-figure is-wide is-stage lp-replay" id="fig-3-8">
+    <pre class="lp-code" data-lang="python" data-title="online_softmax.py" data-symbols="m=1 m_new=1 l=2 acc=3"><code>import math
+
+def attention_row(scores, values, block=4):
+    m, l, acc = -math.inf, 0.0, 0.0
+    for start in range(0, len(scores), block):
+        s = scores[start:start + block]
+        v = values[start:start + block]
+        m_new = max(m, max(s))
+        alpha = math.exp(m - m_new)  # 第一块时 m = −∞，alpha = 0
+        p = [math.exp(x - m_new) for x in s]
+        l = alpha * l + sum(p)
+        acc = alpha * acc + sum(pi * vi for pi, vi in zip(p, v))
+        m = m_new
+    return acc / l, m + math.log(l)  # 输出 O 与 logsumexp L</code></pre>
+    <ol class="lp-trace" data-vars="s m m_new alpha p l acc return">
+      <li data-line="4" data-set="m=−∞ l=0 acc=0" data-group="初始化">三样状态的初值：还没看到任何分数，最大值记作 −∞，指数和与累加都是 0。</li>
+      <li data-line="5" data-group="第 1 块">进入第 1 块：start = 0，取第 0–3 个分数。</li>
+      <li data-line="6" data-set="s=[1.2,3.1,0.4,2]">取出本块的 4 个分数。</li>
+      <li data-line="7">同样取出这 4 个位置的 V。</li>
+      <li data-line="8" data-set="m_new=3.1">新的最大值：max(−∞, 3.1) = 3.1。</li>
+      <li data-line="9" data-set="alpha=0">α = exp(−∞ − 3.1) = 0：之前什么都没有，旧状态乘 0 也无妨，所以第一块不用特判。</li>
+      <li data-line="10" data-set="p=[0.1496,1,0.0672,0.3329]">以 3.1 为基准取指数：最大的那个分数正好得到 1，其余都小于 1，不会溢出。</li>
+      <li data-line="11" data-set="l=1.5496"><var class="lp-s2">ℓ</var> = α × 0 + 本块的指数和。</li>
+      <li data-line="12" data-set="acc=−0.6909"><var class="lp-s3">acc</var> = α × 0 + 本块的 Σ p·v。</li>
+      <li data-line="13" data-set="m=3.1">记下新的最大值，进入下一块。</li>
+      <li data-line="5" data-group="第 2 块">进入第 2 块：start = 4。</li>
+      <li data-line="6" data-set="s=[4.5,0.8,2.2,1]">这一块里出现了 4.5，比之前的最大值 3.1 还大。</li>
+      <li data-line="7">取出对应的 V。</li>
+      <li data-line="8" data-set="m_new=4.5">最大值刷新为 4.5。旧的 <var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都是以 3.1 为基准算的，要换算。</li>
+      <li data-line="9" data-set="alpha=0.2466">α = exp(3.1 − 4.5) ≈ 0.2466，就是把旧基准换到新基准的比例。</li>
+      <li data-line="10" data-set="p=[1,0.0247,0.1003,0.0302]">以 4.5 为基准取指数。</li>
+      <li data-line="11" data-set="l=1.5373">旧的 <var class="lp-s2">ℓ</var> 先乘 α 缩小，再加上本块的指数和。</li>
+      <li data-line="12" data-set="acc=1.4432"><var class="lp-s3">acc</var> 同样先乘 α，再加本块的 Σ p·v。</li>
+      <li data-line="13" data-set="m=4.5">记下新的最大值。</li>
+      <li data-line="5" data-group="第 3 块">进入第 3 块：start = 8。</li>
+      <li data-line="6" data-set="s=[3.9,5.6,0.3,2.7]">又出现了更大的 5.6。</li>
+      <li data-line="7">取出对应的 V。</li>
+      <li data-line="8" data-set="m_new=5.6">最大值刷新为 5.6。</li>
+      <li data-line="9" data-set="alpha=0.3329">α = exp(4.5 − 5.6) ≈ 0.3329。</li>
+      <li data-line="10" data-set="p=[0.1827,1,0.005,0.055]">以 5.6 为基准取指数。</li>
+      <li data-line="11" data-set="l=1.7544">缩放、再累加，<var class="lp-s2">ℓ</var> ≈ 1.7544。</li>
+      <li data-line="12" data-set="acc=1.1495"><var class="lp-s3">acc</var> ≈ 1.1495。</li>
+      <li data-line="13" data-set="m=5.6">三块都处理完了。</li>
+      <li data-line="5" data-group="结束">range 用完，循环结束。</li>
+      <li data-line="14" data-set="return=(0.6552,6.1621)">O = <var class="lp-s3">acc</var> ÷ <var class="lp-s2">ℓ</var> ≈ 0.6552，与一次看完整行的结果相同；同时返回 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var> ≈ 6.1621，留给反向。</li>
+    </ol>
+    <figcaption><b>图 3.8</b>用图 2.1 的 12 个分数调用这个函数，逐行回放；轨迹由 lesson_pages.py trace 记录。</figcaption>
+  </figure>
+</section>

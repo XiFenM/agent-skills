@@ -1,0 +1,59 @@
+/* lesson-pages 部件包：海报式开场 .lp-poster。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   上面一行引子，中间一两个超大数字（两个时并排，中间是倍数关系），能换算时下面一片格子画出倍数，最后一句本课要回答的矛盾。
+   有格子时，小的那个量和亮起的一格同色，大的量和整片同色。 */
+.lp-poster { --cell: color-mix(in srgb, var(--ink) 21%, var(--paper)); position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px 22px; margin: 44px 0 10px; padding: 26px 0 24px; border-top: 4px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.lp-poster.is-pair { grid-template-columns: minmax(0, auto) auto minmax(0, auto); justify-content: start; align-items: start; }
+.lp-main .lp-poster > p { margin: 0; }
+.lp-poster-kicker { grid-column: 1 / -1; margin-bottom: 8px !important; font-size: 15px; line-height: 1.6; letter-spacing: .03em; color: var(--ink-soft); }
+.lp-poster-num { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .28em; min-width: 0; }
+.lp-poster-num b { position: relative; font: 800 clamp(60px, 12vw, 128px)/.92 var(--font-sans); letter-spacing: -.045em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.lp-poster:not(.has-field) .lp-poster-num:not(.lp-poster-num ~ .lp-poster-num) b, .lp-poster-num.is-small b { color: var(--accent); }
+.lp-poster-num small { font: 700 clamp(18px, 2.8vw, 28px)/1 var(--font-sans); color: var(--ink-soft); }
+.lp-poster-num > span:not(.lp-visually-hidden) { flex-basis: 100%; margin-top: 10px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+.lp-poster-vs { margin-top: calc(clamp(60px, 12vw, 128px) * .46 - .5em); font: 700 clamp(26px, 4vw, 44px)/1 var(--font-sans); color: var(--ink-faint); }
+.lp-poster-say { grid-column: 1 / -1; margin-top: 18px !important; font-size: clamp(19px, 2.6vw, 25px); font-weight: 700; line-height: 1.5; text-wrap: balance; }
+.lp-poster.is-counting .lp-poster-num b { text-shadow: 0 0 28px color-mix(in srgb, var(--accent) 35%, transparent); }
+/* 倍数格子：每格边长 --pitch，格间 1px 露出纸色；整片按 --fill 自上而下铺开，铺满后亮起的一格落下、圈上 */
+.lp-poster-field { grid-column: 1 / -1; min-width: 0; margin-top: 22px; }
+.lp-poster-field.is-too-dense { display: none; }
+.lp-poster-key { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 18px; margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.lp-poster-key span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 7px; vertical-align: -1px; background: var(--cell); }
+.lp-poster-key span:first-child { font-weight: 600; color: var(--ink); }
+.lp-poster-key span:first-child::before { background: var(--accent); }
+.lp-poster-grid { position: relative; width: calc(var(--cols, 0) * var(--pitch, 5px)); }
+.lp-poster-grid > i { display: block; background: linear-gradient(90deg, transparent calc(var(--pitch, 5px) - 1px), var(--paper) 0) 0 0 / var(--pitch, 5px) var(--pitch, 5px), linear-gradient(transparent calc(var(--pitch, 5px) - 1px), var(--paper) 0) 0 0 / var(--pitch, 5px) var(--pitch, 5px), var(--cell); }
+.lp-poster-rows { height: calc(var(--rows, 0) * var(--pitch, 5px)); clip-path: inset(0 0 calc(100% - var(--fill, 1) * 100%) 0); }
+.lp-poster-rest { width: calc(var(--rest, 0) * var(--pitch, 5px)); height: var(--pitch, 5px); }
+.lp-poster-grid > .lp-poster-one { position: absolute; left: 0; top: 0; width: calc(var(--pitch, 5px) - 1px); height: calc(var(--pitch, 5px) - 1px); background: var(--accent); transition: opacity .3s ease, transform .5s var(--ease); }
+.lp-poster-one::after { content: ""; position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; border: 2px solid var(--accent); border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); transition: transform .5s var(--ease) .15s, opacity .3s ease .15s; }
+.lp-poster:is(.is-waiting, .is-counting) .lp-poster-rest { visibility: hidden; }
+.lp-poster:is(.is-waiting, .is-counting) .lp-poster-one { opacity: 0; transform: scale(4); }
+.lp-poster:is(.is-waiting, .is-counting) .lp-poster-one::after { opacity: 0; transform: scale(2.2); }
+@media (max-width: 639px) {
+  .lp-poster.is-pair { grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; }
+  .lp-poster.is-pair > .lp-poster-num:not(.lp-poster-num ~ .lp-poster-num) { grid-column: 1 / -1; }
+  .lp-poster-vs { margin-top: calc(clamp(60px, 12vw, 128px) * .46 - .5em); }
+}
+:root[data-look="blueprint"] .lp-poster { --cell: color-mix(in srgb, var(--ink) 17%, var(--paper)); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); box-shadow: inset 0 3px 0 var(--paper), inset 0 4px 0 var(--ink); }
+:root[data-look="blueprint"] .lp-poster-num b { font-family: var(--font-head); color: transparent; -webkit-text-stroke: 2px var(--ink); }
+:root[data-look="blueprint"] .lp-poster:not(.has-field) .lp-poster-num:not(.lp-poster-num ~ .lp-poster-num) b, :root[data-look="blueprint"] .lp-poster-num.is-small b { color: transparent; -webkit-text-stroke-color: var(--accent); }
+:root[data-look="blueprint"] :is(.lp-poster-num small, .lp-poster-kicker, .lp-poster-key) { font-family: var(--font-mono); }
+:root[data-look="blueprint"] .lp-poster-vs { font-family: var(--font-mono); color: var(--accent); }
+:root[data-look="blueprint"] .lp-poster-grid::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 5px; border: 1px solid var(--ink-faint); border-bottom: 0; }
+:root[data-look="blueprint"] .lp-poster-one::after { width: 20px; height: 20px; margin: -10px 0 0 -10px; border-width: 1.5px; border-radius: 0; box-shadow: none; }
+:root[data-look="vermilion"] .lp-poster { border-top: 3px double var(--ink); }
+:root[data-look="vermilion"] .lp-poster-num b { font-family: var(--font-brush); font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+:root[data-look="vermilion"] .lp-poster:not(.has-field) .lp-poster-num:not(.lp-poster-num ~ .lp-poster-num) b, :root[data-look="vermilion"] .lp-poster-num.is-small b { color: var(--ink); }
+:root[data-look="vermilion"] .lp-poster:not(.has-field) .lp-poster-num:not(.lp-poster-num ~ .lp-poster-num) b::after, :root[data-look="vermilion"] .lp-poster-num.is-small b::after { content: ""; position: absolute; inset: -.06em -.16em -.02em; border: 3px solid var(--accent); border-radius: 52% 46% 55% 44% / 58% 50% 48% 44%; transform: rotate(-3deg); }
+:root[data-look="vermilion"] .lp-poster-vs { font-family: var(--font-brush); color: var(--accent); }
+:root[data-look="vermilion"] .lp-poster-say { font-family: var(--font-serif); font-weight: 900; }
+:root[data-look="vermilion"] .lp-poster-key { font-family: var(--font-serif); }
+:root[data-look="vermilion"] .lp-poster-one::after { width: 30px; height: 22px; margin: -11px 0 0 -15px; border-width: 2.5px; border-radius: 52% 46% 55% 44% / 58% 50% 48% 44%; box-shadow: none; transform: rotate(-8deg); }
+:root[data-look="vermilion"] .lp-poster:is(.is-waiting, .is-counting) .lp-poster-one::after { transform: rotate(-8deg) scale(2.2); }
+@media print {
+  /* 打印默认不印背景色，格子全靠背景画成：这一块按屏幕颜色照印 */
+  .lp-poster-field, .lp-poster-field *, .lp-poster-key span::before { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .lp-poster-num b { text-shadow: none !important; }
+  .lp-poster-rows { clip-path: none !important; }
+  .lp-poster .lp-poster-rest, .lp-poster .lp-poster-one, .lp-poster .lp-poster-one::after { visibility: visible !important; opacity: 1 !important; transform: none !important; }
+}

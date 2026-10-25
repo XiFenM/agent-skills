@@ -116,7 +116,7 @@ sub, sup { line-height: 0; }
 .lp-headbar { display: flex; align-items: center; gap: 8px 16px; margin: 0 0 22px; }
 .lp-crumb { margin: 0; color: var(--band-soft); font-size: 14px; line-height: 1.5; }
 .lp-title { max-width: 22em; margin: 0; font-size: clamp(28px, 4.2vw, 42px); line-height: 1.22; font-weight: 700; letter-spacing: .01em; text-wrap: balance; }
-.lp-title::after { content: ""; display: block; width: 64px; height: 3px; margin-top: 20px; background: linear-gradient(90deg, var(--accent), var(--s3) 60%, var(--s1)); border-radius: 2px; transform-origin: left; }
+.lp-title::after { content: ""; display: block; width: 64px; height: 3px; margin-top: 20px; background: linear-gradient(90deg, var(--accent) 35%, color-mix(in srgb, var(--accent) 15%, transparent)); border-radius: 2px; transform-origin: left; }
 .lp-meta { display: flex; flex-wrap: wrap; gap: 2px 20px; margin: 16px 0 0; color: var(--band-soft); font-size: 14.5px; line-height: 1.6; }
 .lp-meta > p { margin: 0; }
 .lp-meta a { color: var(--band-ink); }
@@ -124,7 +124,7 @@ sub, sup { line-height: 0; }
 .lp-tools button { min-height: 30px; padding: 2px 12px; font: inherit; font-size: 13.5px; line-height: 1.6; color: var(--band-soft); background: transparent; border: 1px solid var(--band-rule); border-radius: 999px; cursor: pointer; transition: color .15s ease, border-color .15s ease, background-color .15s ease; }
 .lp-tools button:hover { color: var(--band-ink); border-color: var(--band-soft); }
 .lp-tools button[aria-pressed="true"] { color: var(--band); background: var(--band-ink); border-color: var(--band-ink); }
-.lp-updated { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2px; width: fit-content; max-width: 100%; margin: 20px 0 0; padding: 6px 14px; font-size: 14.5px; line-height: 1.65; color: var(--band-ink); background: rgba(255, 255, 255, .07); border: 1px solid var(--band-rule); border-radius: 12px; }
+.lp-updated { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2px; width: fit-content; max-width: 100%; margin: 20px 0 0; padding: 6px 14px; font-size: 14.5px; line-height: 1.65; color: var(--band-ink); background: color-mix(in srgb, var(--band-ink) 7%, transparent); border: 1px solid var(--band-rule); border-radius: 12px; }
 .lp-updated:empty { display: none; }
 .lp-updated::before { content: ""; align-self: center; width: 7px; height: 7px; margin-right: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 0 4px var(--glow-a); }
 .lp-updated a { font-weight: 600; color: var(--band-ink); text-decoration-color: var(--band-soft); }
@@ -141,7 +141,7 @@ sub, sup { line-height: 0; }
 .lp-toc-inline nav { margin-top: 8px; }
 
 /* 阅读进度与目录 */
-.lp-progress { position: fixed; z-index: 30; top: 0; left: 0; right: 0; height: 3px; pointer-events: none; background: linear-gradient(90deg, var(--accent), var(--s3), var(--s1)); transform: scaleX(var(--p, 0)); transform-origin: left; }
+.lp-progress { position: fixed; z-index: 30; top: 0; left: 0; right: 0; height: 3px; pointer-events: none; background: var(--accent); transform: scaleX(var(--p, 0)); transform-origin: left; }
 .lp-toc nav { position: sticky; top: 28px; max-height: calc(100vh - 28px); padding-top: 48px; overflow: auto; font-size: 14px; line-height: 1.5; }
 .lp-toc ol, .lp-toc-inline ol { position: relative; list-style: none; margin: 0; padding: 0; }
 .lp-toc a, .lp-toc-inline a { display: block; padding: 4px 0 4px 14px; color: var(--ink-faint); text-decoration: none; border-left: 1px solid var(--rule); text-wrap: pretty; }
@@ -289,7 +289,7 @@ html:not(.js) .lp-toggle [data-panel][data-label]::before { content: attr(data-l
 .lp-code-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-code-copy { margin-left: auto; min-height: 26px; padding: 0 10px; font: 12.5px/24px var(--font-sans); color: var(--ink-soft); background: transparent; border: 1px solid var(--rule); border-radius: 999px; cursor: pointer; transition: color .15s ease, border-color .15s ease; }
 .lp-code-copy:hover, .lp-code-copy.is-done { color: var(--ink); border-color: var(--ink-faint); }
-pre.lp-code { margin: 0 0 1.1em; padding: 14px 0; overflow-x: auto; font: 14px/1.6 var(--font-mono); tab-size: 4; color: var(--ink); background: linear-gradient(90deg, var(--paper) 40%, transparent) left / 28px 100% no-repeat local, linear-gradient(270deg, var(--paper) 40%, transparent) right / 28px 100% no-repeat local, radial-gradient(farthest-side at 0 50%, rgba(255, 255, 255, .3), transparent) left / 16px 100% no-repeat scroll, radial-gradient(farthest-side at 100% 50%, rgba(255, 255, 255, .3), transparent) right / 16px 100% no-repeat scroll, var(--paper); border-radius: var(--round); box-shadow: inset 0 0 0 1px var(--rule), var(--shadow); }
+pre.lp-code { margin: 0 0 1.1em; padding: 14px 0; overflow-x: auto; font: 14px/1.6 var(--font-mono); tab-size: 4; color: var(--ink); background: linear-gradient(90deg, var(--paper) 40%, transparent) left / 28px 100% no-repeat local, linear-gradient(270deg, var(--paper) 40%, transparent) right / 28px 100% no-repeat local, radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--ink) 30%, transparent), transparent) left / 16px 100% no-repeat scroll, radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--ink) 30%, transparent), transparent) right / 16px 100% no-repeat scroll, var(--paper); border-radius: var(--round); box-shadow: inset 0 0 0 1px var(--rule), var(--shadow); }
 .lp-code-head + pre.lp-code { border-radius: 0 0 var(--round) var(--round); }
 pre.lp-code code { display: block; min-width: max-content; padding: 0; font-size: inherit; color: inherit; background: none; }
 pre.lp-code .lp-line { position: relative; display: block; padding: 0 18px 0 14px; border-left: 2px solid transparent; transition: background-color .25s ease, opacity .25s ease; }
@@ -359,7 +359,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 [data-out] { transition: color .7s ease, text-shadow .7s ease; }
 [data-out].is-changed { color: var(--accent-ink); text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent); transition: none; }
 .lp-meter { display: block; height: 6px; margin-top: 5px; overflow: hidden; background: var(--raised); border-radius: 3px; }
-.lp-meter > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--s4)); border-radius: 3px; transition: width .45s var(--ease); }
+.lp-meter > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 50%, transparent), var(--accent)); border-radius: 3px; transition: width .45s var(--ease); }
 .lp-readout { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 16px 0 0; font-size: 15px; line-height: 1.55; }
 .lp-readout dt { color: var(--ink-soft); }
 .lp-readout dd { margin: 0; }
@@ -401,7 +401,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 
 /* 滚动出现：只在支持且允许动效时；没有脚本、打印、减少动态效果时全部直接可见 */
 .lp-motion .lp-reveal { transition: opacity .7s var(--ease), transform .7s var(--ease); }
-.lp-motion .lp-reveal:not(.is-in) { opacity: 0; transform: translateY(18px); }
+.lp-motion .lp-reveal:not(.is-in) { opacity: 0; transform: translateY(18px); scroll-margin-top: 42px; }
 @media (prefers-reduced-motion: no-preference) { .lp-toggle [data-panel]:not([hidden]) { animation: lp-fade .35s ease both; } }
 @keyframes lp-fade { from { opacity: 0; } }
 
@@ -411,7 +411,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 @keyframes lp-arrive { 0%, 30% { background: var(--mark); box-shadow: 0 0 0 6px var(--mark); } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
 .lp-timer { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; font-size: 14px; color: var(--ink-soft); }
 .lp-timer-bar { flex: 1; max-width: 220px; height: 6px; overflow: hidden; background: var(--rule); border-radius: 3px; }
-.lp-timer-bar > span { display: block; width: 0; height: 100%; background: linear-gradient(90deg, var(--s2), var(--s1)); }
+.lp-timer-bar > span { display: block; width: 0; height: 100%; background: var(--ink-soft); }
 .lp-timer.is-over .lp-timer-bar > span { background: var(--accent); }
 .lp-timer-time { min-width: 3.5em; font-variant-numeric: tabular-nums; }
 .lp-banner { position: fixed; left: 50%; bottom: 20px; z-index: 50; display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 18px; transform: translateX(-50%); font-size: 14.5px; color: var(--band-ink); background: var(--band); border: 1px solid var(--band-rule); border-radius: 999px; box-shadow: var(--shadow); }
@@ -467,7 +467,8 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   .lp-explorer .lp-controls { display: flex !important; }
   .lp-explorer [data-preset] { display: none; }
   .lp-toggle [data-panel][data-label]::before { content: attr(data-label); display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
-  .lp-stepper.is-ready .lp-steps > li { display: list-item !important; }
+  .lp-stepper.is-ready .lp-steps { display: block; }
+  .lp-stepper.is-ready .lp-steps > li { display: list-item !important; margin: 0 0 .4em; visibility: visible !important; animation: none !important; }
   .lp-stepper.is-ready [data-show] { opacity: 1 !important; visibility: visible !important; }
   .lp-toggle [data-panel][hidden] { display: block !important; margin-top: 12px; }
   .lp-page, .lp-cover-in { display: block; }
@@ -479,7 +480,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
   ol.lp-code-notes.is-side { position: static !important; width: auto !important; }
   ol.lp-code-notes.is-side > li { position: relative !important; top: auto !important; }
 }
-/* ===== 地铁线路骨架与站牌、迷雾、术语注音、可拖动的数字、圈注、学习地层 ===== */
+/* ===== 阅读辅助：各段开头有说明 ===== */
 :root {
   --line: var(--accent); --line-idle: var(--rule); --station: var(--paper);
   --fog: color-mix(in srgb, var(--paper) 72%, transparent);
@@ -541,7 +542,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 ruby { ruby-position: over; }
 rt { font-family: var(--font-sans); font-size: .5em; font-weight: 400; font-style: normal; line-height: 1; letter-spacing: .02em; color: var(--ink-faint); white-space: nowrap; }
 
-/* 可拖动的数字：可调段落带虚线框和“可调”标签；段里带 ‹ › 的数是小拨盘，左右拖、点按或用方向键换值 */
+/* 可拖动的数字：可调段落带虚线框和“可调”标签，段里带 ‹ › 的数是小拨盘 */
 .lp-live { --pad: 18px; position: relative; margin: 34px calc(-1 * var(--pad)) 26px; padding: 18px var(--pad) 12px; background: color-mix(in srgb, var(--accent-wash) 38%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 12px; }
 html:not(.js) .lp-live { margin: 0 0 1.1em; padding: 0; background: none; border: 0; }
 .lp-live-tag { position: absolute; top: 0; left: calc(var(--pad) - 8px); display: inline-flex; align-items: center; gap: .45em; padding: 0 .7em; font-size: 12.5px; font-weight: 600; line-height: 1.75; letter-spacing: .02em; color: var(--paper); background: var(--accent); border-radius: 999px; transform: translateY(-55%); white-space: nowrap; }
@@ -585,14 +586,16 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
 
 /* 学习地层：右侧一根地层柱，按内容加入的先后分层；图例里点一层只看这一层 */
 .lp-strata-col { position: absolute; top: 0; right: -30px; width: 10px; pointer-events: none; }
+/* 伸进批注栏的宽图压在地层柱上面：柱子不切过图里的内容，也不挡图里的点击 */
+.lp-strata .lp-main .lp-figure.is-wide { position: relative; z-index: 1; }
 .lp-strata-col > i { position: absolute; left: 0; right: 0; background: var(--layer); border-radius: 3px; box-shadow: 0 0 0 2px var(--paper); pointer-events: auto; }
 @media (max-width: 1099px) { .lp-strata-col { right: -13px; width: 6px; } }
 .lp-strata .lp-main [data-layer] { transition: opacity .3s ease; }
 .lp-strata .lp-main .is-layer-dim { opacity: .28; }
 .lp-strata .lp-main .is-layer-focus { outline: 2px solid var(--layer); outline-offset: 8px; border-radius: 6px; }
 .lp-strata-legend { position: fixed; z-index: 44; left: 20px; bottom: 20px; width: min(300px, calc(100vw - 40px)); max-height: 60vh; overflow: auto; padding: 12px 12px 10px; font-size: 13.5px; line-height: 1.5; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); }
-.lp-strata-legend h2 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px !important; font-size: 14px !important; }
-.lp-strata-legend h2 button { padding: 0 8px; font: inherit; font-size: 12.5px; color: var(--ink-soft); background: none; border: 1px solid var(--rule); border-radius: 999px; cursor: pointer; }
+.lp-strata-legend h2 { display: flex; align-items: center; justify-content: flex-start; margin: 0 0 8px !important; font-size: 14px !important; }
+.lp-strata-legend h2 button { margin-left: auto; padding: 0 8px; font: inherit; font-size: 12.5px; color: var(--ink-soft); background: none; border: 1px solid var(--rule); border-radius: 999px; cursor: pointer; }
 .lp-strata-legend ol { margin: 0 !important; padding: 0 !important; list-style: none; }
 .lp-strata-legend li { margin: 0 !important; }
 .lp-strata-legend li button { display: grid; grid-template-columns: 14px 1fr; gap: 0 10px; width: 100%; padding: 6px 6px; font: inherit; text-align: left; color: inherit; background: none; border: 0; border-radius: 8px; cursor: pointer; }
@@ -601,13 +604,66 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
 .lp-strata-legend b { font-weight: 600; }
 .lp-strata-legend small { color: var(--ink-soft); font-size: 12.5px; }
 @media (max-width: 639px) { .lp-strata-legend { left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 45vh; } }
+/* 宽屏左栏是目录和小地铁，图例放到右下角，不挡目录 */
+@media (min-width: 1280px) { .lp-strata-legend { left: auto; right: 20px; width: 280px; } }
+.lp-review .lp-strata-legend { bottom: 72px; }
+
+/* 时光机：图例顶上的滑块，轨道按层着色；拖到早先的一层时后来的块先藏起来 */
+@media screen { .lp-strata .lp-main .is-future { display: none !important; } }
+.lp-strata-time { margin: 0 0 10px; padding: 8px 10px 9px; background: var(--raised); border-radius: 8px; }
+.lp-strata-time label { display: grid; grid-template-columns: auto minmax(0, 1fr) 4.2em; align-items: center; gap: 10px; font-weight: 600; }
+.lp-strata-time input { --track: linear-gradient(90deg, transparent var(--p, 100%), color-mix(in srgb, var(--raised) 72%, transparent) 0), var(--strata); width: 100%; height: 20px; margin: 0; background: none; -webkit-appearance: none; appearance: none; }
+.lp-strata-time input::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--track); }
+.lp-strata-time input::-moz-range-track { height: 8px; border-radius: 4px; background: var(--track); }
+.lp-strata-time input::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -2px; background: var(--paper); border: 3px solid var(--ink); border-radius: 50%; -webkit-appearance: none; }
+.lp-strata-time input::-moz-range-thumb { width: 12px; height: 12px; background: var(--paper); border: 3px solid var(--ink); border-radius: 50%; }
+.lp-strata-legend li button.is-future { color: var(--ink-faint); }
+.lp-strata-legend li button.is-future::before { background: repeating-linear-gradient(-45deg, var(--paper) 0 2px, transparent 0 5px), var(--layer); opacity: .6; }
+.lp-strata-time output { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-soft); }
+.lp-travel .lp-strata-time output { color: var(--accent-ink); }
+.lp-strata-time small { display: block; margin-top: 3px; font-size: 12px; }
+@media (pointer: coarse) {
+  .lp-strata-legend h2 button { min-width: 44px; min-height: 44px; }
+  .lp-strata-time input { height: 44px; }
+  .lp-strata-time input::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -7px; }
+  .lp-strata-time input::-moz-range-thumb { width: 22px; height: 22px; }
+}
+.lp-travel .lp-strata-legend { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+
+/* 小地铁：宽屏目录栏顶上的竖线路，当前一节讲到的站亮起，之前的站算已经过 */
+.lp-minimetro { margin: 0 0 26px; font-size: 13px; line-height: 1.45; }
+.lp-minimetro > p { margin: 0 0 8px; font-size: 11.5px; letter-spacing: .1em; color: var(--ink-faint); }
+.lp-minimetro-line { position: relative; }
+.lp-minimetro ol { position: static; margin: 0; padding: 0 4px; list-style: none; }
+.lp-minimetro li { position: relative; margin: 0; padding: 4px 0 4px 24px; }
+.lp-minimetro li::before { content: ""; position: absolute; z-index: 1; left: 2px; top: calc(4px + .725em - 6px); width: 12px; height: 12px; background: var(--station); border: 3px solid var(--line); border-radius: 50%; transition: background-color .3s ease; }
+.lp-minimetro-line > i { position: absolute; left: 0; right: 0; top: 0; height: 0; background: color-mix(in srgb, var(--line) 13%, transparent); border-radius: 12px; transition: top .45s var(--ease), height .45s var(--ease); }
+.lp-minimetro li:not(:last-child)::after { content: ""; position: absolute; left: 6.5px; top: calc(4px + .725em); bottom: calc(-4px - .725em); border-left: 3px solid var(--line); }
+.lp-minimetro li.to-fog::after, .lp-minimetro li.is-fog::after { border-left-style: dashed; border-left-color: var(--line-idle); }
+.lp-minimetro li.is-fog::before { border-style: dashed; border-color: var(--line-idle); }
+.lp-minimetro a, .lp-minimetro span { display: block; padding: 0; overflow: hidden; color: var(--ink-faint); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; border: 0; }
+.lp-minimetro li.is-fog span { opacity: .7; }
+.lp-minimetro li.is-past a { color: var(--ink-soft); }
+.lp-minimetro a:hover { color: var(--ink); }
+.lp-minimetro li:is(.is-here, .is-past)::before { background: var(--line); }
+.lp-minimetro li.is-here a { font-weight: 600; color: var(--ink); }
+
+/* 深链聚光：四周暗下来，目标四周一圈光，上面一枚小标签 */
+.lp-spot { position: fixed; z-index: 48; left: 0; top: 0; border-radius: var(--round); pointer-events: none; box-shadow: 0 0 0 2px var(--accent), 0 0 0 9px color-mix(in srgb, var(--accent) 20%, transparent), 0 0 0 200vmax color-mix(in srgb, var(--stage) 40%, transparent); transition: opacity .6s ease; }
+.lp-spot.is-out { opacity: 0; }
+.lp-spot.is-tight > span { top: 8px; left: auto; right: 14px; transform: none; }
+.lp-spot > span { position: absolute; left: 14px; top: 0; transform: translateY(-50%); padding: 1px 10px; font-size: 12.5px; font-weight: 600; line-height: 1.7; color: var(--paper); white-space: nowrap; background: var(--accent); border-radius: var(--round); }
+@media (prefers-reduced-motion: no-preference) { .lp-spot { animation: lp-spot-in .7s var(--ease) both; } }
+@keyframes lp-spot-in { from { box-shadow: 0 0 0 2px transparent, 0 0 0 48px transparent, 0 0 0 200vmax transparent; } }
 
 /* 工具多了时换行 */
 .lp-headbar { flex-wrap: wrap; }
 .lp-tools { flex-wrap: wrap; justify-content: flex-end; }
 @media print {
-  .lp-strata-legend, .lp-strata-col, .lp-live-tag, .lp-live-reset, .lp-mist { display: none !important; }
+  .lp-strata-legend, .lp-strata-col, .lp-live-tag, .lp-live-reset, .lp-mist, .lp-spot, .lp-minimetro { display: none !important; }
   .lp-stages > li.is-fog > * { opacity: 1 !important; filter: none !important; }
+  .lp-strata .lp-main .is-layer-dim { opacity: 1; transition: none; }
+  .lp-strata .lp-main .is-layer-focus { outline: 0; }
   .lp-live { margin: 0 0 1.1em; padding: 0; background: none; border: 0; }
   .lp-knob { padding: 0; background: none; box-shadow: none; }
   .lp-knob::before, .lp-knob::after { content: none; }
@@ -655,7 +711,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   </main>
 </div>
 <script id="lp-runtime">
-/* lesson-pages runtime v2。页面不要修改本段；本页专用的部件逻辑写进带 data-lp-hook 的脚本。 */
+/* lesson-pages runtime v3。页面不要修改本段；本页专用的部件逻辑写进带 data-lp-hook 的脚本。 */
 (function () {
   "use strict";
   var root = document.documentElement;
@@ -687,6 +743,11 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
     return set;
   }
   function splitIds(text) { return String(text || "").split(/[\s,]+/).filter(Boolean); }
+  /* 锚点的 id：解不开的百分号编码按原文用，坏链接不在控制台报错。 */
+  function idOf(hash) {
+    var raw = String(hash || "").replace(/^#/, "");
+    try { return decodeURIComponent(raw); } catch (error) { return raw; }
+  }
   function plainText(node) {
     var clone = node.cloneNode(true);
     $all(".lp-new, .lp-oral-time, .katex-mathml, rt, rp, .lp-soon, .lp-xfer, .lp-mist, .lp-seal, .lp-live-tag", clone).forEach(function (child) { child.remove(); });
@@ -854,10 +915,10 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
     };
     document.addEventListener("click", function (event) {
       var link = event.target.closest && event.target.closest('a[href^="#"]');
-      if (link && root.classList.contains("lp-review") && hidden(decodeURIComponent(link.getAttribute("href").slice(1)))) set(false);
+      if (link && root.classList.contains("lp-review") && hidden(idOf(link.getAttribute("href")))) set(false);
     }, true);
     window.addEventListener("hashchange", function () {
-      var target = root.classList.contains("lp-review") && hidden(decodeURIComponent(window.location.hash.slice(1)));
+      var target = root.classList.contains("lp-review") && hidden(idOf(window.location.hash));
       if (target) { set(false); target.scrollIntoView(); }
     });
   }
@@ -991,6 +1052,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
         if (lastNode) lastNode.classList.remove("is-current");
         if (node) node.classList.add("is-current");
         lastNode = node;
+        document.dispatchEvent(new CustomEvent("lp:node", { detail: node }));
       }
     };
     var schedule = function () { if (!frame) frame = window.requestAnimationFrame(update); };
@@ -1103,6 +1165,42 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
       var anchor = node.querySelector(":scope > .lp-spine") || node.querySelector(":scope > h2");
       if (anchor) anchor.insertAdjacentElement("afterend", sign);
     });
+    /* 小地铁：宽屏目录栏顶上一条竖线路，读到哪一节，它讲的站就亮起来，之前的站算已经过。 */
+    var nav = document.querySelector(".lp-toc nav");
+    if (!nav) return;
+    var mini = document.createElement("div");
+    mini.className = "lp-minimetro";
+    mini.innerHTML = '<p>线路</p><div class="lp-minimetro-line"><i aria-hidden="true"></i><ol></ol></div>';
+    var list = mini.querySelector("ol"), pill = mini.querySelector(".lp-minimetro-line > i"), current = null;
+    var dots = stages.map(function (stage, i) {
+      var taught = taughtBy(stage), item = document.createElement("li"), hop = document.createElement(taught.length ? "a" : "span");
+      if (taught.length) hop.href = "#" + taught[0].id;
+      hop.textContent = nameOf(stage);
+      item.className = taught.length ? "is-open" : "is-fog";
+      if (stages[i + 1] && !taughtBy(stages[i + 1]).length) item.classList.add("to-fog");
+      item.appendChild(hop);
+      list.appendChild(item);
+      return item;
+    });
+    nav.insertBefore(mini, nav.firstChild);
+    var light = function (node) {
+      current = node;
+      var here = node ? splitIds(node.getAttribute("data-stages")) : [], first = -1, last = -1;
+      dots.forEach(function (dot, i) {
+        var on = here.indexOf(stages[i].id) >= 0;
+        if (on) { if (first < 0) first = i; last = i; }
+        dot.classList.toggle("is-here", on);
+        if (on) dot.firstChild.setAttribute("aria-current", "step"); else dot.firstChild.removeAttribute("aria-current");
+      });
+      dots.forEach(function (dot, i) { dot.classList.toggle("is-past", first > i); });
+      /* 本节讲的几站套进胶囊，换节时滑过去 */
+      pill.style.top = (first < 0 ? 0 : dots[first].offsetTop) + "px";
+      pill.style.height = (first < 0 ? 0 : dots[last].offsetTop + dots[last].offsetHeight - dots[first].offsetTop) + "px";
+    };
+    document.addEventListener("lp:node", function (event) { light(event.detail); });
+    light(document.querySelector(".lp-node.is-current"));
+    /* 窄屏时目录栏不显示，量出来是 0；变宽后重新量一次胶囊 */
+    if (window.ResizeObserver) new ResizeObserver(function () { light(current); }).observe(list);
   }
 
   /* 骨架阶段链按自身宽度均匀分行，行末不留悬空箭头；太窄时竖排。 */
@@ -1603,8 +1701,11 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
     }, { passive: true });
     /* 对话里的链接指向新块而当前页面还是旧版本时，重新加载。 */
     window.addEventListener("hashchange", function () {
-      var id = decodeURIComponent(window.location.hash.slice(1));
-      if (id && !document.getElementById(id)) window.location.reload();
+      var id = idOf(window.location.hash);
+      if (id && !document.getElementById(id)) {
+        try { window.sessionStorage.setItem("lesson-pages-spot", "1"); } catch (error) { /* 文件页可能禁用存储 */ }
+        window.location.reload();
+      }
     });
   }
 
@@ -1683,6 +1784,20 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
     });
   }
 
+  /* 正文里的 var：单个字母显示成数学斜体，符号表里有的标上可查释义。部件包后来画出的内容经 ui.decorate 补上。 */
+  function decorateVars(scope) {
+    var names = {};
+    $all("#glossary-list > div[id] > dt").forEach(function (term) {
+      term.textContent.split(/[、,，]\s*/).forEach(function (name) { name = name.trim(); if (name) names[name] = true; });
+    });
+    $all("var", scope).forEach(function (term) {
+      if (term.closest("pre, code, svg")) return;
+      var text = term.textContent.trim();
+      if (/^[A-Za-zα-ωΑ-Ωℓ]$/.test(text)) term.classList.add("is-math");
+      if (!term.closest("#glossary") && names[text]) term.classList.add("has-gloss");
+    });
+  }
+
   /* 符号互认：指向带符号色的符号时，全页同色的符号一起亮起；符号表里有的符号显示释义。 */
   function initSymbols() {
     if (!main) return;
@@ -1714,7 +1829,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
       if (!el || !el.closest || el.closest("#glossary, .lp-pop, .lp-controls")) return null;
       var link = el.closest('a[href^="#"]');
       if (link) {
-        var target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+        var target = document.getElementById(idOf(link.getAttribute("href")));
         var entry = target && target.closest("#glossary-list > div[id]");
         return entry ? { target: link, entry: entry } : null;
       }
@@ -1724,11 +1839,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
       if (symbol && byColor[symbol.n]) return { target: symbol.el, entry: byColor[symbol.n] };
       return null;
     };
-    $all("var", main).forEach(function (term) {
-      if (term.closest("pre, code, svg")) return;
-      if (/^[A-Za-zα-ωΑ-Ωℓ]$/.test(term.textContent.trim())) term.classList.add("is-math");
-      if (!term.closest("#glossary") && glossary[term.textContent.trim()]) term.classList.add("has-gloss");
-    });
+    decorateVars(main);
     document.addEventListener("mouseover", function (event) {
       var symbol = symbolOf(event.target);
       if (symbol) root.setAttribute("data-lp-sym", symbol.n); else root.removeAttribute("data-lp-sym");
@@ -1770,6 +1881,11 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
       });
     }, { rootMargin: "0px 0px -8% 0px", threshold: 0 });
     targets.concat(pens).concat(checks.filter(function (check) { return targets.indexOf(check) < 0; })).forEach(function (el) { observer.observe(el); });
+    /* 焦点进了还没淡入的块（也包括链接带到的图）：立刻显出，不过渡 */
+    document.addEventListener("focusin", function (event) {
+      var block = event.target.closest && event.target.closest(".lp-reveal:not(.is-in)");
+      if (block) { block.style.transition = "none"; block.classList.add("is-in"); observer.unobserve(block); }
+    });
     window.addEventListener("beforeprint", function () {
       targets.concat(checks).forEach(function (el) { el.classList.add("is-in"); });
       pens.forEach(function (pen) { pen.classList.add("is-drawn"); });
@@ -1976,7 +2092,19 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
       return { rev: r, names: names };
     });
     blocks.forEach(function (el) { el.setAttribute("data-layer", String(revOf(el))); el.style.setProperty("--layer", colorOf(revOf(el))); });
-    var column = null, legend = null, focus = null;
+    var column = null, legend = null, focus = null, range = null, readout = null, until = null;
+    /* 时光机：拖到早先的一层，之后加进来或改过的块先藏起来，看页面当时的样子。 */
+    var travel = function (r) {
+      until = r === revs[revs.length - 1] ? null : r;
+      if (focus !== null && until !== null && focus > until) setFocus(focus);
+      blocks.forEach(function (el) { el.classList.toggle("is-future", until !== null && revOf(el) > until); });
+      $all("li button", legend).forEach(function (button) { button.classList.toggle("is-future", until !== null && +button.getAttribute("data-rev") > until); });
+      if (range) range.style.setProperty("--p", until === null ? "100%" : (revs.indexOf(r) + .5) * 100 / Math.max(1, revs.length - 1) + "%");
+      root.classList.toggle("lp-travel", until !== null);
+      if (readout) readout.textContent = until === null ? "最新" : "第 " + r + " 层";
+      document.dispatchEvent(new CustomEvent("lp:layout"));
+      draw();
+    };
     var draw = function () {
       if (!column) return;
       column.textContent = "";
@@ -2000,14 +2128,14 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
       });
       $all("li button", legend).forEach(function (button) { button.setAttribute("aria-pressed", String(focus) === button.getAttribute("data-rev") ? "true" : "false"); });
       var first = blocks.filter(function (el) { return revOf(el) === focus && el.getClientRects().length; })[0];
-      if (first) first.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+      if (first) first.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
     };
     var set = function (on) {
       root.classList.toggle("lp-strata", on);
       buttons.forEach(function (button) { button.setAttribute("aria-pressed", on ? "true" : "false"); });
       if (on && !legend) {
         legend = document.createElement("aside");
-        legend.className = "lp-strata-legend"; legend.setAttribute("aria-label", "学习地层");
+        legend.className = "lp-strata-legend"; legend.setAttribute("aria-label", "学习地层"); legend.tabIndex = -1;
         legend.innerHTML = '<h2>学习地层<button type="button">关闭</button></h2><ol></ol>';
         layers.slice().reverse().forEach(function (layer) {
           var item = document.createElement("li"), button = document.createElement("button");
@@ -2016,19 +2144,37 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
           button.innerHTML = "<b></b><small></small>";
           button.firstChild.textContent = "第 " + layer.rev + " 层" + (layer.rev === rev ? " · 最新" : layer.rev === revs[0] ? " · 最早" : "");
           button.lastChild.textContent = layer.names.slice(0, 4).join("、") + (layer.names.length > 4 ? " 等 " + layer.names.length + " 处" : "");
-          button.addEventListener("click", function () { setFocus(layer.rev); });
+          button.addEventListener("click", function () {
+            /* 回看时点了更晚的一层：先把滑块拖到那一层，再只看它 */
+            if (until !== null && layer.rev > until) { range.value = String(revs.indexOf(layer.rev) + 1); travel(layer.rev); }
+            setFocus(layer.rev);
+          });
           item.appendChild(button);
           legend.querySelector("ol").appendChild(item);
         });
         legend.querySelector("h2 button").addEventListener("click", function () { set(false); });
-        document.body.appendChild(legend);
+        var time = document.createElement("div");
+        time.className = "lp-strata-time";
+        time.innerHTML = '<label><span>回看</span><input type="range" min="1" step="1" aria-label="回看到第几层"><output>最新</output></label><small>拖到早先的层，之后加进来或改过的块先藏起来。</small>';
+        range = time.querySelector("input"); readout = time.querySelector("output");
+        range.max = String(revs.length); range.value = range.max;
+        /* 轨道按层分段着色，滑块停在各段中点 */
+        var n = Math.max(1, revs.length - 1);
+        range.style.setProperty("--strata", "linear-gradient(90deg," + revs.map(function (r, i) { return colorOf(r) + " " + Math.max(0, i - .5) * 100 / n + "% " + Math.min(n, i + .5) * 100 / n + "%"; }) + ")");
+        range.addEventListener("input", function () { travel(revs[parseInt(range.value, 10) - 1]); });
+        legend.insertBefore(time, legend.querySelector("ol"));
+        /* 紧跟页眉，Tab 顺序接在页眉按钮后 */
+        var page = document.querySelector(".lp-page");
+        if (page) page.parentNode.insertBefore(legend, page); else document.body.appendChild(legend);
         column = document.createElement("div");
         column.className = "lp-strata-col"; column.setAttribute("aria-hidden", "true");
         main.appendChild(column);
       }
+      if (!on && legend && legend.contains(document.activeElement)) buttons[0].focus({ preventScroll: true });
       if (legend) { legend.hidden = !on; column.hidden = !on; }
       if (!on && focus !== null) setFocus(focus);
-      if (on) draw();
+      if (!on && range && range.value !== range.max) { range.value = range.max; travel(revs[revs.length - 1]); }
+      if (on) { draw(); legend.focus({ preventScroll: true }); }
     };
     buttons.forEach(function (button) {
       button.addEventListener("click", function () { set(!root.classList.contains("lp-strata")); });
@@ -2036,6 +2182,19 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && root.classList.contains("lp-strata") && !document.querySelector(".lp-pop")) set(false);
     });
+    /* 回看时跳去一个还藏着的块（页内链接或对话里的链接），先回到最新一层再定位，和只看要点一样。 */
+    var arrive = function (hash, scroll) {
+      var id = idOf(hash), target = until !== null && id && document.getElementById(id);
+      if (!target || !target.closest(".is-future")) return;
+      range.value = range.max;
+      travel(revs[revs.length - 1]);
+      if (scroll) target.scrollIntoView();
+    };
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest && event.target.closest('a[href^="#"]');
+      if (link) arrive(link.getAttribute("href"), false);
+    }, true);
+    window.addEventListener("hashchange", function () { arrive(window.location.hash, true); });
     var later = 0;
     var redraw = function () { window.clearTimeout(later); later = window.setTimeout(function () { if (root.classList.contains("lp-strata")) draw(); }, 80); };
     window.addEventListener("resize", redraw);
@@ -2080,10 +2239,104 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
     }
   }
 
+  /* 部件包：lesson_pages.py 只把页面用到的包写成 #lp-pack-* 样式与脚本；包把 { name, init } 放进
+     LessonPage.packs，这里依次调用 init(ui)，ui 是包能用的公共能力。 */
+  function inView(el, fn, margin) {
+    if (!("IntersectionObserver" in window)) { fn(); return; }
+    var watch = new IntersectionObserver(function (records) {
+      if (!records.some(function (record) { return record.isIntersecting; })) return;
+      watch.disconnect();
+      fn();
+    }, { rootMargin: margin || "0px 0px -15% 0px" });
+    watch.observe(el);
+  }
+  function initPacks() {
+    var ui = {
+      $all: $all, failed: failed, recovered: recovered, pop: showPop, unpop: hidePop, setNumber: setNumber, announce: announce,
+      copyText: copyText, plainText: plainText, parseRanges: parseRanges, inView: inView, reduceMotion: reduceMotion, decorate: decorateVars,
+      layout: function () { document.dispatchEvent(new CustomEvent("lp:layout")); }
+    };
+    (LP.packs || []).forEach(function (pack) {
+      try { pack.init(ui); } catch (error) { console.error("lesson-pages pack " + pack.name, error); }
+    });
+  }
+
+  /* 深链聚光：从对话里的链接打开页面（或已打开的页面被这样的链接带到别处）时，四周暗下来、目标亮起两秒多。
+     页内链接、前进后退和普通刷新都不触发，看过的历史记录记一笔。光圈画在浮层里，不改版面；按任意处提前收起。 */
+  function initSpot() {
+    var inPage = 0, ring = null, frame = 0, timer = 0;
+    var mark = function (key) {
+      try { var state = {}; state[key] = true; history.replaceState(Object.assign({}, history.state, state), ""); } catch (error) { /* 不能记就算了 */ }
+    };
+    var clear = function () {
+      window.cancelAnimationFrame(frame); window.clearTimeout(timer);
+      if (ring) { ring.remove(); ring = null; }
+    };
+    var fade = function () {
+      if (!ring) return;
+      ring.classList.add("is-out");
+      window.clearTimeout(timer);
+      timer = window.setTimeout(clear, reduceMotion ? 0 : 650);
+    };
+    var spot = function (restored) {
+      var id = idOf(window.location.hash), target = id && document.getElementById(id);
+      if (!target || !main || !main.contains(target) || !target.getClientRects().length) return;
+      /* 刷新后浏览器恢复的是旧的滚动位置：只有这时才把目标带进屏幕；平常的跳转由浏览器自己滚过去，不和它抢。 */
+      var box = target.getBoundingClientRect();
+      if (restored && (box.top < 20 || box.top > window.innerHeight - 48)) target.scrollIntoView({ block: "start", behavior: "instant" });
+      /* 高的节圈标题；标题不在屏幕里就圈整节 */
+      var head = target.matches("section") && box.height > window.innerHeight * 0.7 && target.querySelector(":scope > h2, :scope > h3");
+      var place = head && head.getBoundingClientRect();
+      if (place && place.top >= 0 && place.bottom <= window.innerHeight) target = head;
+      clear();
+      mark("lpSpotted");
+      ring = document.createElement("div");
+      ring.className = "lp-spot"; ring.setAttribute("aria-hidden", "true");
+      ring.innerHTML = "<span>链接指到这里</span>";
+      document.body.appendChild(ring);
+      var follow = function () {
+        var box = target.getBoundingClientRect();
+        ring.style.transform = "translate(" + (box.left - 10) + "px, " + (box.top - 8) + "px)";
+        ring.style.width = (box.width + 20) + "px";
+        ring.style.height = (box.height + 16) + "px";
+        ring.classList.toggle("is-tight", box.top < 20);
+        frame = window.requestAnimationFrame(follow);
+      };
+      follow();
+      timer = window.setTimeout(fade, 2600);
+    };
+    document.addEventListener("click", function (event) {
+      if (event.target.closest && event.target.closest('a[href^="#"]')) inPage = Date.now();
+    }, true);
+    document.addEventListener("pointerdown", fade, true);
+    /* 浏览器还在滚向锚点（或恢复刷新前的位置）：等滚动停稳再量，最多等两秒。 */
+    var settle = function (done) {
+      var last = -1, still = 0, began = Date.now();
+      var check = function () {
+        still = window.scrollY === last ? still + 1 : 0;
+        last = window.scrollY;
+        if (still >= 3 || Date.now() - began > 2000) done(); else window.setTimeout(check, 60);
+      };
+      check();
+    };
+    window.addEventListener("hashchange", function () {
+      if (Date.now() - inPage < 800) { mark("lpInPage"); return; }
+      if (history.state && (history.state.lpInPage || history.state.lpSpotted || history.state.lpSeen)) return;
+      settle(function () { spot(false); });
+    });
+    var arrival = window.performance && performance.getEntriesByType ? performance.getEntriesByType("navigation")[0] : null;
+    var wanted = false;
+    try { wanted = window.sessionStorage.getItem("lesson-pages-spot") === "1"; window.sessionStorage.removeItem("lesson-pages-spot"); } catch (error) { wanted = false; }
+    var fresh = !arrival || arrival.type === "navigate";
+    var seen = history.state && (history.state.lpSpotted || history.state.lpSeen);
+    if (window.location.hash && (wanted || (fresh && !seen))) window.setTimeout(function () { settle(function () { spot(wanted); }); }, 200);
+    else mark("lpSeen");
+  }
+
   function init() {
     $all(".lp-glossary").forEach(function (section) { if (!section.querySelector("dt")) section.hidden = true; });
     $all(".lp-sources").forEach(function (section) { if (!section.querySelector("li")) section.hidden = true; });
-    var steps = [initTheme, initReview, initFreshness, initLook, initToc, initWhere, initFlows, initCode, initMath, initNoBreak, initSteppers, initExplorers, initLive, initToggles, initTimers, initSymbols, initReveal, initProgress, initStrata, initNotes, initLiveUpdates, initScrollMemory];
+    var steps = [initTheme, initReview, initFreshness, initLook, initToc, initWhere, initFlows, initCode, initMath, initNoBreak, initSteppers, initExplorers, initLive, initPacks, initToggles, initTimers, initSymbols, initReveal, initProgress, initStrata, initNotes, initSpot, initLiveUpdates, initScrollMemory];
     steps.forEach(function (step) {
       try { step(); } catch (error) { console.error("lesson-pages " + step.name, error); }
     });

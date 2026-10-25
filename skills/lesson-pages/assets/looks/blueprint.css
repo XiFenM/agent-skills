@@ -35,13 +35,13 @@
   --rule: #3a6a9c; --accent: #ffb04a; --accent-ink: #ffc76f; --accent-wash: #33506b; --mark: #5b4f1d;
   --s1: #8fd6ff; --s2: #7ff0bf; --s3: #ffaad8; --s4: #ffd36b; --rim: transparent; --glow-a: transparent;
   --dot: rgba(255, 255, 255, .07);
-  --code-kw: #c9b6ff; --code-str: #a8f0a0; --code-num: #ffb47a; --code-fn: #8fd6ff; --code-type: #7fe7d9; --code-com: #a4bbd8; --code-meta: #ffd36b;
+  --code-kw: #c9b6ff; --code-str: #a8f0a0; --code-num: #ffb47a; --code-fn: #8fd6ff; --code-type: #7fe7d9; --code-com: #b4c8e2; --code-meta: #ffd36b;
 }
 :root[data-look="blueprint"] body { background-color: var(--paper); background-image: linear-gradient(var(--grid-major) 1px, transparent 1px), linear-gradient(90deg, var(--grid-major) 1px, transparent 1px), linear-gradient(var(--grid-minor) 1px, transparent 1px), linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px); background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px; }
 :root[data-look="blueprint"] :is(.lp-title, .lp-main h2, .lp-main h3) { font-family: var(--font-head); letter-spacing: .02em; }
 /* 封面：一张图纸，有图框、角标和标题栏 */
-:root[data-look="blueprint"] .lp-cover { border-bottom: 0; background-color: var(--band); background-image: linear-gradient(rgba(255, 255, 255, .1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .1) 1px, transparent 1px), linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px); background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px; }
-:root[data-look="blueprint"] .lp-cover::before { inset: 12px; background: none; border: 1px solid rgba(255, 255, 255, .55); box-shadow: inset 0 0 0 4px var(--band), inset 0 0 0 5px rgba(255, 255, 255, .3); }
+:root[data-look="blueprint"] .lp-cover { border-bottom: 0; background-color: var(--band); background-image: linear-gradient(color-mix(in srgb, var(--band-ink) 10%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--band-ink) 10%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--band-ink) 4.5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--band-ink) 4.5%, transparent) 1px, transparent 1px); background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px; }
+:root[data-look="blueprint"] .lp-cover::before { inset: 12px; background: none; border: 1px solid color-mix(in srgb, var(--band-ink) 55%, transparent); box-shadow: inset 0 0 0 4px var(--band), inset 0 0 0 5px color-mix(in srgb, var(--band-ink) 30%, transparent); }
 :root[data-look="blueprint"] .lp-cover::after { display: none; }
 :root[data-look="blueprint"] .lp-cover-in::before { display: none; }
 :root[data-look="blueprint"] .lp-cover-in { padding-top: 48px; padding-bottom: 40px; }
@@ -57,7 +57,7 @@
 :root[data-look="blueprint"] .lp-meta > p { padding: 6px 10px; border-right: 1px solid var(--band-rule); border-bottom: 1px solid var(--band-rule); }
 :root[data-look="blueprint"] .lp-meta > p[data-k]::before { content: attr(data-k); display: block; font-size: 11px; letter-spacing: .08em; color: var(--band-soft); }
 :root[data-look="blueprint"] .lp-meta-x { font-family: var(--font-mono); color: var(--band-ink); }
-:root[data-look="blueprint"] .lp-updated { border-radius: 0; background: rgba(255, 255, 255, .06); }
+:root[data-look="blueprint"] .lp-updated { border-radius: 0; background: color-mix(in srgb, var(--band-ink) 6%, transparent); }
 :root[data-look="blueprint"] .lp-tools button { border-radius: 0; }
 /* 正文：节号是圆圈引线，标题下是一条尺寸线 */
 :root[data-look="blueprint"] .lp-no { color: var(--ink); background: var(--paper); border: 1.5px solid var(--ink); border-radius: 50%; font-family: var(--font-mono); }
@@ -68,7 +68,7 @@
 :root[data-look="blueprint"] .lp-note::before { content: "注"; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
 :root[data-look="blueprint"] .lp-note { border-top: 1px solid var(--rule); padding-top: 4px; font-family: var(--font-sans); }
 /* 实验台：方角、白色细框和角标，像图纸上的一个视图 */
-:root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) { border-radius: 0; background-image: linear-gradient(var(--dot) 1px, transparent 1px), linear-gradient(90deg, var(--dot) 1px, transparent 1px); background-size: 20px 20px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45), inset 0 0 0 5px var(--stage), inset 0 0 0 6px rgba(255, 255, 255, .18); }
+:root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) { border-radius: 0; background-image: linear-gradient(var(--dot) 1px, transparent 1px), linear-gradient(90deg, var(--dot) 1px, transparent 1px); background-size: 20px 20px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent), inset 0 0 0 5px var(--stage), inset 0 0 0 6px color-mix(in srgb, var(--ink) 18%, transparent); }
 :root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) figcaption b::before { content: "视图 "; font-weight: 400; color: var(--ink-faint); }
 :root[data-look="blueprint"] pre.lp-code, :root[data-look="blueprint"] .lp-code-head { border-radius: 0 !important; }
 :root[data-look="blueprint"] .lp-canvas { border-radius: 0; border: 1px solid var(--rule); background: transparent; }
@@ -111,3 +111,15 @@
 :root[data-look="blueprint"] .lp-strata-col > i { border-radius: 0; }
 :root[data-look="blueprint"] .lp-glossary dt, :root[data-look="blueprint"] .lp-where a, :root[data-look="blueprint"] code, :root[data-look="blueprint"] .lp-tag { border-radius: 0; }
 @media print { :root[data-look] body { background-image: none; } }
+/* 打印：整页和实验台都换成本风格的浅色令牌（白纸、墨蓝字、浅底代码色），压过上面屏幕用的深色与蓝图台面 */
+@media print {
+  :root[data-look="blueprint"], :root[data-look="blueprint"][data-theme], :root[data-look="blueprint"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage, pre.lp-code, .lp-code-head) {
+    color-scheme: light;
+    --paper: #ffffff; --raised: #e6edf6; --ink: #0c2546; --ink-soft: #2e4767; --ink-faint: #566b88;
+    --rule: #c5d3e4; --accent: #c2410c; --accent-ink: #a3360a; --accent-wash: #fbe4d6;
+    --mark: #fdeeb0; --s1: #0b5fae; --s2: #00766a; --s3: #9d2f6e; --s4: #8a5a00;
+    --band: #ffffff; --band-ink: #0c2546; --band-soft: #2e4767; --band-rule: #c5d3e4;
+    --line: #0c2546; --line-idle: #9fb3cc; --station: #ffffff; --grid-minor: transparent; --grid-major: transparent; --dot: transparent;
+    --code-kw: #6f3fbf; --code-str: #3d7a1f; --code-num: #a8500c; --code-fn: #2453c2; --code-type: #0f736c; --code-com: #63676f; --code-meta: #7d5300;
+  }
+}

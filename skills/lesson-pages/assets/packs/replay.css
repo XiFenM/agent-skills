@@ -1,0 +1,82 @@
+/* lesson-pages 部件包：执行回放 .lp-replay。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   没有脚本和打印时轨迹是一张按步编号的列表；有脚本时是代码、变量表与时间轴组成的台面。 */
+ol.lp-trace { margin: 14px 0 0 !important; padding: 0 0 0 1.6em !important; font-size: 14.5px; line-height: 1.6; }
+ol.lp-trace > li { margin: 0 0 .3em; }
+ol.lp-trace > li::before { content: "第 " attr(data-line) " 行 · "; font-family: var(--font-mono); font-size: 13px; color: var(--ink-faint); }
+ol.lp-trace > li[data-set]::after { content: "（" attr(data-set) "）"; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
+.lp-replay.is-ready ol.lp-trace { display: none; }
+.lp-replay-main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.lp-replay-code, .lp-replay-side { min-width: 0; }
+/* 翻步时上面的行变高变矮，不让浏览器的滚动锚定把页面跟着挪，按钮留在指针下 */
+.lp-replay-side { overflow-anchor: none; }
+.lp-replay-code pre.lp-code { margin: 0 !important; }
+.lp-replay-vars { display: grid; gap: 7px; margin: 0 !important; }
+.lp-replay-vars > div { display: grid; grid-template-columns: minmax(3.4em, auto) minmax(0, 1fr) auto; align-items: baseline; gap: 0 10px; padding: 6px 10px; background: var(--raised); border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); transition: box-shadow .35s ease, opacity .3s ease; }
+.lp-replay:not(.is-narrow) .lp-replay-vars > div:not(.has-spark, .is-list) dd { grid-column: 2 / -1; }
+/* 一列数的变量：名字一行，小格占满下面一整行 */
+.lp-replay-vars > div.is-list { grid-template-columns: minmax(0, 1fr) auto; }
+.lp-replay-vars > div.is-list dd { grid-column: 1 / -1; }
+.lp-replay-vars > div.is-unset dd { opacity: .75; }
+.lp-replay-vars dt { font: 600 14px/1.3 var(--font-mono); }
+.lp-replay-vars dt var { font-size: inherit; }
+.lp-replay-vars dd { min-width: 0; margin: 0; }
+.lp-replay-vars dd b { display: block; overflow: hidden; font: 700 16.5px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.lp-replay-vars dd small { display: block; min-height: 1.35em; overflow: hidden; font: 11.5px/1.35 var(--font-mono); color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
+.lp-replay-vars > div.is-changed { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 22px -8px var(--accent); }
+.lp-replay-vars > div.is-changed dd small { color: var(--accent-ink); }
+@media (prefers-reduced-motion: no-preference) { .lp-replay-vars > div.is-changed dd b { animation: lp-replay-flash .6s var(--ease); } }
+@keyframes lp-replay-flash { from { color: var(--accent-ink); transform: translateY(-3px); } }
+.lp-replay .lp-replay-spark { align-self: center; width: 72px; height: 24px; overflow: visible; color: var(--ink-soft); }
+/* 一列数：一排等宽小格，格底的柱子按本列最大绝对值的比例升起 */
+.lp-replay-list { display: flex; flex-wrap: wrap; gap: 3px; padding-top: 2px; }
+.lp-replay-list i { flex: 1 0 auto; min-width: max-content; padding: 15px 4px 3px; font: 600 12.5px/1.25 var(--font-mono); font-style: normal; text-align: center; background: linear-gradient(to top, color-mix(in srgb, var(--ink) 20%, transparent) calc(var(--h, 0) * 100%), transparent 0) 0 0 / 100% 100% no-repeat, color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 3px; box-shadow: inset 0 -1.5px 0 color-mix(in srgb, var(--ink) 28%, transparent); transition: background-size .4s var(--ease); }
+.lp-replay-vars > div.is-changed .lp-replay-list i { box-shadow: inset 0 -1.5px 0 var(--accent); }
+.lp-replay-at { display: inline-block; margin-right: .6em; padding: 0 .5em; font: 600 12px/1.7 var(--font-mono); color: var(--accent-ink); vertical-align: .1em; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 4px; }
+.lp-replay-spark path { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.lp-replay-spark .lp-spark-all { stroke: var(--rule); }
+.lp-replay-spark .lp-spark-past { stroke: currentColor; }
+.lp-replay-spark circle { fill: currentColor; }
+.lp-replay-say { min-height: 4.9em; margin: 14px 2px 0 !important; font-size: 15px; line-height: 1.65; }
+.lp-replay-now { display: block; padding-left: 12px; border-left: 2px solid var(--accent); }
+.lp-replay pre.lp-code .lp-line.is-run { background: var(--accent-wash); border-left-color: var(--accent); }
+.lp-replay pre.lp-code .lp-line.is-run::after { content: "▶"; position: absolute; left: 3px; top: 0; font-size: 9px; color: var(--accent); }
+.lp-replay pre.lp-code .lp-line.is-ran { background: color-mix(in srgb, var(--accent-wash) 40%, transparent); }
+.lp-replay pre.lp-code .lp-line:is(.is-run, .is-ran)::before { color: var(--ink-soft); }
+.lp-replay-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 16px; }
+.lp-replay-bar .lp-btn[data-act="prev"], .lp-replay-bar .lp-btn[data-act="next"] { width: 38px; padding: 0; font-size: 20px; line-height: 1; }
+.lp-replay-bar .lp-btn[data-act="play"] { min-width: 4.6em; }
+.lp-replay-track { position: relative; flex: 1 1 220px; min-width: 0; padding-top: 22px; }
+.lp-replay-groups { position: absolute; left: 0; right: 0; top: 0; height: 18px; }
+.lp-replay-groups span { position: absolute; top: 0; height: 18px; padding: 0 6px; overflow: hidden; font-size: 11.5px; line-height: 18px; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; border-left: 1px solid var(--rule); transition: color .2s ease; }
+.lp-replay-groups span.is-now { font-weight: 600; color: var(--accent-ink); border-left-color: var(--accent); }
+.lp-replay-groups span.is-tight { color: transparent; }
+.lp-replay-track input[type="range"] { display: block; width: 100%; margin: 0; }
+.lp-replay-count { min-width: 4.6em; font-size: 13.5px; text-align: right; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+/* 图本身窄于 760 像素时（手机、没伸进批注栏的图）：变量表排到代码下面，两列 */
+.lp-replay.is-narrow .lp-replay-main { grid-template-columns: minmax(0, 1fr); }
+.lp-replay.is-narrow .lp-replay-vars { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lp-replay.is-narrow .lp-replay-vars > div { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name spark" "value value"; }
+.lp-replay.is-narrow .lp-replay-vars > div.is-list { grid-column: 1 / -1; }
+.lp-replay.is-narrow .lp-replay-vars dt { grid-area: name; }
+.lp-replay.is-narrow .lp-replay-vars dd { grid-area: value; }
+.lp-replay.is-narrow .lp-replay-spark { grid-area: spark; width: 54px; }
+.lp-replay.is-narrow .lp-replay-say { min-height: 3.4em; }
+@media (max-width: 760px) {
+  .lp-replay-track { order: 5; flex-basis: 100%; }
+  .lp-replay-count { margin-left: auto; }
+}
+/* 触屏：滑块的可按高度够 44 像素，分组名跟着下移、不挡手指 */
+@media (pointer: coarse) {
+  .lp-replay-groups { top: 13px; pointer-events: none; }
+  .lp-replay-track input[type="range"] { height: 44px; }
+}
+:root[data-look="blueprint"] .lp-replay-vars > div { border-radius: 0; }
+:root[data-look="blueprint"] .lp-replay-vars > div.is-changed { box-shadow: inset 0 0 0 1.5px var(--accent); }
+:root[data-look="vermilion"] .lp-replay-vars > div { border-radius: 3px; }
+:root[data-look="blueprint"] :is(.lp-replay-list i, .lp-replay-at) { border-radius: 0; }
+:root[data-look="vermilion"] .lp-replay-at { color: var(--paper); background: var(--accent); border-color: var(--accent); border-radius: 2px; }
+@media print {
+  .lp-replay-bar, .lp-replay-side { display: none !important; }
+  .lp-replay.is-ready ol.lp-trace { display: block !important; }
+  .lp-replay-main { display: block; }
+}

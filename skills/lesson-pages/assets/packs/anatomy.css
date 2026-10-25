@@ -1,0 +1,65 @@
+/* lesson-pages 部件包：公式解剖 .lp-anatomy。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   各项头上是编号，说明是同号的列表；宽屏时说明浮在公式上下，引线滚到时画出。 */
+.lp-anatomy div.tex { padding: 22px 8px 12px; }
+.lp-anatomy .katex-html :is(.lp-t1, .lp-t2, .lp-t3, .lp-t4, .lp-t5, .lp-t6) { position: relative; pointer-events: auto; border-radius: 4px; transition: background-color .2s ease, box-shadow .2s ease; }
+.js .lp-anatomy .katex-html :is(.lp-t1, .lp-t2, .lp-t3, .lp-t4, .lp-t5, .lp-t6) { cursor: pointer; }
+.lp-anatomy .katex-html :is(.lp-t1, .lp-t2, .lp-t3, .lp-t4, .lp-t5, .lp-t6)::after { position: absolute; left: 50%; top: -18px; display: grid; place-items: center; width: 15px; height: 15px; margin-left: -7.5px; font: 700 10px/1 var(--font-sans); font-style: normal; color: var(--paper); background: var(--accent); border-radius: 50%; }
+.lp-anatomy .katex-html .lp-t1::after { content: "1"; }
+.lp-anatomy .katex-html .lp-t2::after { content: "2"; }
+.lp-anatomy .katex-html .lp-t3::after { content: "3"; }
+.lp-anatomy .katex-html .lp-t4::after { content: "4"; }
+.lp-anatomy .katex-html .lp-t5::after { content: "5"; }
+.lp-anatomy .katex-html .lp-t6::after { content: "6"; }
+.lp-anatomy .katex-html .is-on { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+ol.lp-terms { margin: 6px 0 0 !important; padding: 0 !important; list-style: none; counter-reset: lp-term; }
+ol.lp-terms > li { position: relative; margin: 0; padding: 6px 10px 6px 34px; font-size: 15px; line-height: 1.6; border-radius: 10px; counter-increment: lp-term; transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease; }
+ol.lp-terms > li::before { content: counter(lp-term); position: absolute; left: 8px; top: .6em; display: grid; place-items: center; width: 18px; height: 18px; font: 700 11px/1 var(--font-sans); color: var(--paper); background: var(--accent); border-radius: 50%; }
+.js ol.lp-terms > li { cursor: pointer; }
+ol.lp-terms > li.is-on { background: var(--raised); }
+ol.lp-terms > li.is-pinned { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.lp-anatomy-stage { position: relative; }
+.lp-anatomy-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.lp-anatomy:not(.is-mapped) .lp-anatomy-lines { display: none; }
+.lp-anatomy.is-mapped div.tex { margin: 0; overflow: visible; background: none; }
+:root .lp-anatomy.is-mapped div.tex > .katex-display > .katex { font-size: 1.85em; }
+.lp-anatomy.is-mapped .katex-html :is(.lp-t1, .lp-t2, .lp-t3, .lp-t4, .lp-t5, .lp-t6)::after { display: none; }
+.lp-anatomy.is-mapped ol.lp-terms { margin: 0 !important; }
+.lp-anatomy.is-mapped ol.lp-terms > li { position: absolute; width: max-content; max-width: min(15em, 46%); padding: 6px 11px 7px 32px; font-size: 14px; line-height: 1.5; background: var(--paper); border: 1px solid var(--rule); }
+.lp-anatomy.is-mapped ol.lp-terms > li::before { left: 8px; top: .55em; }
+.lp-anatomy.is-mapped ol.lp-terms > li.is-on { background: var(--paper); border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.lp-anatomy-num circle { fill: var(--paper); stroke: var(--ink-faint); stroke-width: 1.3; transition: fill .2s ease, stroke .2s ease; }
+.lp-anatomy-num text { font: 700 10.5px var(--font-sans); fill: var(--ink-soft); transition: fill .2s ease; }
+.lp-anatomy-num.is-on circle { fill: var(--accent); stroke: var(--accent); }
+.lp-anatomy-num.is-on text { fill: var(--paper); }
+.lp-anatomy-num { transition: opacity .3s ease; }
+.lp-motion .lp-anatomy.lp-reveal:not(.is-in) .lp-anatomy-num { opacity: 0; }
+.lp-anatomy.has-on .lp-anatomy-num:not(.is-on) { opacity: .5; }
+.lp-anatomy-line { fill: none; stroke: var(--ink-faint); stroke-width: 1.3; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; transition: stroke .2s ease, stroke-width .2s ease, opacity .2s ease, stroke-dashoffset 1s var(--ease) .2s; }
+.lp-anatomy-line.is-on { stroke: var(--accent); stroke-width: 2; }
+.lp-anatomy.has-on .lp-anatomy-line:not(.is-on) { opacity: .4; }
+.lp-motion .lp-anatomy.lp-reveal:not(.is-in) .lp-anatomy-line { stroke-dashoffset: 1; }
+:root[data-look="blueprint"] .lp-anatomy.is-mapped ol.lp-terms > li { border-color: var(--ink-faint); border-radius: 0; box-shadow: none; font-family: var(--font-sans); }
+:root[data-look="blueprint"] ol.lp-terms > li::before { color: var(--ink); background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--ink); font-family: var(--font-mono); }
+:root[data-look="blueprint"] ol.lp-terms > li.is-on::before { color: var(--paper); background: var(--accent); box-shadow: none; }
+:root[data-look="blueprint"] .lp-anatomy-line { stroke: var(--ink); stroke-width: 1; }
+:root[data-look="blueprint"] .lp-anatomy-num circle { stroke: var(--ink); stroke-width: 1; }
+:root[data-look="blueprint"] .lp-anatomy-num text { font-family: var(--font-mono); fill: var(--ink); }
+:root[data-look="blueprint"] .lp-anatomy .katex-html :is(.lp-t1, .lp-t2, .lp-t3, .lp-t4, .lp-t5, .lp-t6) { border-radius: 0; }
+:root[data-look="vermilion"] .lp-anatomy.is-mapped ol.lp-terms > li { padding-left: 28px; font-family: var(--font-brush); font-size: 15px; color: var(--accent-ink); background: color-mix(in srgb, var(--paper) 88%, transparent); border-color: transparent; box-shadow: none; }
+:root[data-look="vermilion"] .lp-anatomy.is-mapped ol.lp-terms > li.is-on { border-color: var(--accent); }
+:root[data-look="vermilion"] ol.lp-terms > li::before { color: var(--accent); background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent); font-family: var(--font-brush); }
+:root[data-look="vermilion"] .lp-anatomy-line { stroke: var(--accent); stroke-width: 1.2; opacity: .75; }
+:root[data-look="vermilion"] .lp-anatomy-line.is-on { opacity: 1; stroke-width: 2; }
+:root[data-look="vermilion"] .lp-anatomy-num circle { stroke: var(--accent); }
+:root[data-look="vermilion"] .lp-anatomy-num text { font-family: var(--font-brush); fill: var(--accent); }
+/* 亮起的圆牌在三种风格里都是朱红底、纸色字，压过上面各风格的描边和字色 */
+:root[data-look] .lp-anatomy-num.is-on circle { fill: var(--accent); stroke: var(--accent); }
+:root[data-look] .lp-anatomy-num.is-on text { fill: var(--paper); }
+@media (pointer: coarse) { ol.lp-terms > li { min-height: 44px; } }
+@media print {
+  .lp-anatomy-lines { display: none !important; }
+  /* 打印默认不印背景色：编号改成朱红描边圈里的朱红字 */
+  .lp-anatomy .katex-html :is(.lp-t1, .lp-t2, .lp-t3, .lp-t4, .lp-t5, .lp-t6)::after, .lp-anatomy ol.lp-terms > li::before { color: var(--accent) !important; background: none !important; box-shadow: inset 0 0 0 1.5px var(--accent) !important; }
+  .lp-anatomy ol.lp-terms > li { position: relative !important; left: auto !important; top: auto !important; max-width: none !important; box-shadow: none !important; }
+  .lp-anatomy .lp-anatomy-stage { padding: 0 !important; }
+}

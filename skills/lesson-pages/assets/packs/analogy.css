@@ -1,0 +1,51 @@
+/* lesson-pages 部件包：类比卡 .lp-analogy。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   “≈ 类比”写在卡上，右上角一个大“≈”；正文里的对应画成“≈ 实物”的小签；“≠ 不成立的地方”在一道撕开的裂口下面。
+   卡片只用中性色，符号色留给符号。 */
+.lp-analogy { position: relative; margin: 36px 0; padding: 40px 24px 18px; background: var(--raised); border-radius: var(--round); }
+.lp-analogy::before { content: "≈ 类比"; position: absolute; left: 24px; top: 13px; font-size: 12.5px; font-weight: 700; line-height: 1.6; letter-spacing: .08em; color: var(--ink-soft); }
+.lp-analogy::after { content: "≈"; position: absolute; right: 20px; top: -12px; font: 400 64px/1 var(--font-math); color: color-mix(in srgb, var(--ink) 11%, transparent); pointer-events: none; }
+.lp-analogy-map { display: inline-block; margin: 0 .25em; padding: 0 .5em; font-size: .8em; font-weight: 600; line-height: 1.6; text-indent: 0; white-space: nowrap; color: var(--ink-soft); vertical-align: .1em; background: var(--paper); border: 1px solid var(--rule); border-radius: 999px; }
+.lp-analogy-map::before { content: "≈ "; content: "≈ " / ""; font-weight: 400; color: var(--ink-faint); }
+.lp-analogy > p { margin: 0 0 .7em !important; }
+.lp-analogy-open { display: inline-flex; align-items: center; gap: .4em; min-height: 34px; margin: 4px 0 2px; padding: 3px 14px; font: inherit; font-size: 14px; font-weight: 600; color: var(--accent-ink); background: var(--paper); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--rule)); border-radius: 999px; cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
+.lp-analogy-open::before { content: "≠"; font-size: 1.15em; line-height: 1; }
+.lp-analogy-open:hover { border-color: var(--accent); }
+.lp-analogy.is-open .lp-analogy-open { color: var(--ink-soft); border-color: var(--rule); }
+.lp-analogy.is-open .lp-analogy-open::before { content: "↑"; }
+.lp-analogy-limit { position: relative; margin: 18px -24px -18px !important; padding: 40px 24px 18px; background: var(--paper); border-radius: 0 0 var(--round) var(--round); box-shadow: inset 0 0 0 1px var(--rule); }
+.lp-analogy-limit::before { content: "≠ 类比到这里不成立"; position: absolute; left: 24px; top: 13px; font-size: 12.5px; font-weight: 700; line-height: 1.6; letter-spacing: .08em; color: var(--accent-ink); }
+.lp-analogy-limit { position: relative; z-index: 1; }
+.lp-analogy-limit::after { content: ""; position: absolute; left: 0; right: 0; top: -9px; height: 10px; background: var(--paper); clip-path: polygon(0 100%, 3% 30%, 7% 90%, 11% 10%, 16% 80%, 21% 0, 26% 85%, 31% 20%, 37% 95%, 43% 5%, 49% 75%, 55% 15%, 61% 90%, 67% 0, 73% 80%, 79% 20%, 85% 95%, 91% 10%, 96% 70%, 100% 100%); }
+.lp-analogy-limit > p { margin: 0 0 .6em !important; }
+.lp-analogy-limit > :last-child { margin-bottom: 0 !important; }
+@media (prefers-reduced-motion: no-preference) { .lp-analogy.is-open .lp-analogy-limit { animation: lp-tear .55s var(--ease) both; transform-origin: top; } }
+@keyframes lp-tear { from { opacity: 0; transform: translateY(-10px) rotate(-.6deg); } }
+html:not(.js) .lp-analogy-limit { margin-top: 14px !important; }
+@media (max-width: 639px) {
+  .lp-analogy { padding: 38px 16px 16px; margin-left: -6px; margin-right: -6px; }
+  .lp-analogy::before, .lp-analogy-limit::before { left: 16px; }
+  .lp-analogy-limit { margin: 16px -16px -16px !important; padding: 38px 16px 16px; }
+}
+:root[data-look="blueprint"] .lp-analogy { border-radius: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--ink-faint); }
+:root[data-look="blueprint"] .lp-analogy::before { font-family: var(--font-mono); }
+:root[data-look="blueprint"] .lp-analogy-limit { border-radius: 0; background: var(--raised); box-shadow: inset 0 0 0 1px var(--ink-faint); }
+:root[data-look="blueprint"] .lp-analogy-limit::before { font-family: var(--font-mono); }
+:root[data-look="blueprint"] .lp-analogy-limit::after { background: var(--raised); }
+:root[data-look="blueprint"] .lp-analogy-open { border-radius: 2px; }
+:root[data-look="blueprint"] .lp-analogy-map { font-family: var(--font-mono); font-weight: 500; border-style: dashed; border-color: var(--ink-faint); border-radius: 0; background: transparent; }
+:root[data-look="blueprint"] .lp-analogy::after { font-family: var(--font-mono); font-size: 52px; top: -6px; }
+:root[data-look="vermilion"] .lp-analogy { border-radius: 2px; background: color-mix(in srgb, var(--paper) 60%, var(--raised)); box-shadow: inset 0 0 0 1px var(--rule); }
+:root[data-look="vermilion"] .lp-analogy::before, :root[data-look="vermilion"] .lp-analogy-limit::before { font-family: var(--font-brush); font-size: 15px; font-weight: 400; letter-spacing: .02em; }
+:root[data-look="vermilion"] .lp-analogy::before { color: var(--ink-soft); }
+:root[data-look="vermilion"] .lp-analogy-limit { border-radius: 0 0 2px 2px; }
+:root[data-look="vermilion"] .lp-analogy-limit::before { content: "批：类比到这里不成立"; color: var(--accent); }
+:root[data-look="vermilion"] .lp-analogy-open { border-radius: 3px; font-family: var(--font-sans); }
+:root[data-look="vermilion"] .lp-analogy-map { padding: 0 .2em; font-family: var(--font-brush); font-size: .9em; font-weight: 400; color: var(--accent); background: none; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 0; }
+:root[data-look="vermilion"] .lp-analogy-map::before { color: var(--accent); }
+:root[data-look="vermilion"] .lp-analogy::after { font-family: var(--font-brush); color: color-mix(in srgb, var(--accent) 14%, transparent); }
+@media (pointer: coarse) { .lp-analogy-open { min-height: 44px; } }
+@media print {
+  .lp-analogy-open { display: none !important; }
+  .lp-analogy-limit[hidden] { display: block !important; }
+  .lp-analogy { break-inside: avoid; }
+}

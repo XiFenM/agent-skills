@@ -11,12 +11,14 @@ committed or published.
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import datetime as _dt
 import functools
 import hashlib
 import html
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
@@ -81,7 +83,18 @@ EXPLICIT_END_TAGS = frozenset(
 )
 FORBIDDEN_TAGS = frozenset("base embed frame frameset iframe object".split())
 FRAGMENT_FORBIDDEN_TAGS = FORBIDDEN_TAGS | frozenset("html head body meta link title".split())
-WIDGET_CLASSES = frozenset({"lp-stepper", "lp-explorer", "lp-toggle", "lp-timer", "lp-live"})
+PACKS_DIR = SKILL_ROOT / "assets" / "packs"
+PACK_PREFIX = "lp-pack-"
+# Widget packs: a page carries a pack's style and script only while some element uses the class lp-<name>.
+PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "zoom")
+PACK_RUNTIME = 3  # the first "lesson-pages runtime vN" that starts widget packs
+JS_NUMBER = re.compile(r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")  # what the browser's Number() reads
+POSTER_NUMBER = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?")
+# A replay trace separates name=value pairs with ASCII whitespace only; trace writes spaces inside values as U+00A0.
+TRACE_GAP = re.compile(r"[ \t\n\r\f]+")
+TRACE_PAIR = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=[^ \t\n\r\f]*")  # an empty string value is written as name=
+WIDGET_CLASSES = frozenset({"lp-stepper", "lp-explorer", "lp-toggle", "lp-timer", "lp-live",
+                            "lp-analogy", "lp-anatomy", "lp-derive", "lp-replay", "lp-scale", "lp-zoom"})
 CONTROL_TAGS = frozenset({"input", "select", "textarea", "button"})
 EMOJI_PATTERN = re.compile(
     "[\U0001F300-\U0001FAFF\U00002600-\U000026FF\U00002700-\U000027BF\U0001F000-\U0001F2FF]"
@@ -391,6 +404,77 @@ class Report:
         }
 
 
+def _pack_markup(name: str, element: Element, code_lines: Any) -> list[str]:
+    """What is wrong with one widget's structure, in the terms references/widget-packs.md uses."""
+    kids = element.children
+    items = lambda parent, tag="li": [child for child in parent.children if child.tag == tag]  # noqa: E731
+    if name == "poster":
+        nums = [child for child in kids if "lp-poster-num" in child.classes]
+        if not 1 <= len(nums) <= 2:
+            return ["a poster needs one or two p.lp-poster-num"]
+        if any(not items(num, "b") or not POSTER_NUMBER.fullmatch(items(num, "b")[0].text().strip()) for num in nums):
+            return ["each .lp-poster-num needs a <b> holding only a number such as 512 or 2,700, with the unit in <small>"]
+    elif name == "scale":
+        lists = items(element, "ol")
+        entries = items(lists[0]) if len(lists) == 1 else []
+        raw = [entry.attrs.get("data-value", "").strip() for entry in entries]
+        values = [float(text) if JS_NUMBER.fullmatch(text) else math.nan for text in raw]
+        if len(entries) < 2 or not all(value > 0 and math.isfinite(value) for value in values):
+            return ["a log scale needs one <ol> with at least two <li data-value> holding positive numbers"]
+    elif name == "myth":
+        if sum("lp-myth-wrong" in child.classes for child in kids) != 1 or sum("lp-myth-right" in child.classes for child in kids) != 1:
+            return ["a myth card needs one .lp-myth-wrong and one .lp-myth-right"]
+    elif name == "analogy":
+        if sum("lp-analogy-limit" in child.classes for child in kids) != 1:
+            return ["an analogy card needs one .lp-analogy-limit saying where the analogy breaks"]
+    elif name == "anatomy":
+        formulas = [node for node in element.iter() if node.tag == "div" and "tex" in node.classes]
+        notes = [node for node in element.iter() if node.tag == "ol" and "lp-terms" in node.classes]
+        count = len(items(notes[0])) if len(notes) == 1 else 0
+        if len(formulas) != 1 or not 1 <= count <= 6:
+            return ["formula anatomy needs one div.tex and one ol.lp-terms with one to six notes"]
+        rendered = any("katex" in node.classes for node in formulas[0].iter())
+        terms = {cls for node in formulas[0].iter() for cls in node.classes if re.fullmatch(r"lp-t[1-6]", cls)}
+        if rendered and terms != {f"lp-t{n}" for n in range(1, count + 1)}:
+            return [f"the formula marks {len(terms)} terms with \\tA–\\tF but ol.lp-terms has {count} notes; mark one term per note, in order"]
+    elif name == "derive":
+        lists = items(element, "ol")
+        steps = items(lists[0]) if len(lists) == 1 else []
+        if len(steps) < 2 or any(not any(node.tag == "div" and "tex" in node.classes for node in step.iter()) for step in steps):
+            return ["a derivation needs one <ol> of at least two steps, each with a div.tex"]
+    elif name == "replay":
+        blocks = [node for node in element.iter() if node.tag == "pre" and "lp-code" in node.classes]
+        traces = [node for node in element.iter() if node.tag == "ol" and "lp-trace" in node.classes]
+        if len(blocks) != 1 or len(traces) != 1:
+            return ["an execution replay needs one pre.lp-code and one ol.lp-trace"]
+        lines, steps, problems = code_lines(blocks[0]), items(traces[0]), []
+        if len(steps) < 2:
+            problems.append("an execution replay needs at least two trace steps")
+        if any(not KNOB_NAME.fullmatch(var) for var in traces[0].attrs.get("data-vars", "").split()):
+            problems.append("data-vars lists identifiers separated by spaces")
+        for step in steps:
+            raw = step.attrs.get("data-line", "")
+            if not REV_PATTERN.fullmatch(raw) or int(raw) not in lines:
+                problems.append(f"trace step data-line={raw!r} is not a line of its code ({min(lines)}–{max(lines)})")
+                break
+            if any(not TRACE_PAIR.fullmatch(pair) for pair in TRACE_GAP.split(step.attrs.get("data-set", "")) if pair):
+                problems.append("data-set holds name=value pairs separated by spaces; spaces inside a value are written as U+00A0, as trace does")
+                break
+        return problems
+    elif name == "zoom":
+        lists = items(element, "ul")
+        tops = items(lists[0]) if len(lists) == 1 else []
+        problems = []
+        if len(tops) != 1:
+            problems.append("a system diagram needs one <ul> whose single <li> is the whole system")
+        elif any(not items(node, "b") for node in element.iter() if node.tag == "li"):
+            problems.append("every part of a system diagram needs its name in a <b>")
+        if element.attrs.get("data-domain") not in (None, "hardware", "software"):
+            problems.append("data-domain is hardware or software, or left out")
+        return problems
+    return []
+
+
 def _template_blocks() -> dict[str, str]:
     try:
         source = TEMPLATE.read_text(encoding="utf-8")
@@ -561,6 +645,23 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
         report.error("look.css", f"<style id=\"{LOOK_STYLE_ID}\"> belongs to a look, but <html> has no data-look; set looks with the look command")
     elif look is not None and look_styles[0].text().replace("\r\n", "\n").strip("\n") != _look_style(look):
         report.warn("runtime.drift", f"#{LOOK_STYLE_ID} differs from the {look} look; refresh it with look --to {look}", look_styles[0].line)
+    used_packs = _used_packs(page)
+    for node in _pack_blocks(page):
+        node_id = node.attrs["id"]
+        name, kind = _pack_of(node)
+        if name is None:
+            report.error("pack.unknown", f"#{node_id} is not a widget pack block; new, add, state and render write packs", node.line)
+        elif name not in used_packs:
+            report.warn("pack.unused", f"#{node_id} belongs to the {name} pack, which nothing on the page uses; render removes it", node.line)
+        elif node.text().replace("\r\n", "\n").strip("\n") != _pack_part(name, kind):
+            report.warn("runtime.drift", f"#{node_id} differs from the {name} pack; render refreshes it", node.line)
+    runtime_version = re.search(r"lesson-pages runtime v([0-9]+)", _block(source, "script", "lp-runtime") or "")
+    if used_packs and (runtime_version is None or int(runtime_version.group(1)) < PACK_RUNTIME):
+        report.error("pack.runtime", "this page's runtime predates widget packs, so its widgets would never start; put new widgets on a page made with the current template")
+    for name in used_packs:
+        for kind, tag, block_id in (("css", "style", PACK_PREFIX + name), ("js", "script", PACK_PREFIX + name + "-js")):
+            if _pack_part(name, kind) is not None and not any(node.tag == tag for node in page.by_id.get(block_id, [])):
+                report.error("pack.missing", f".lp-{name} needs <{tag} id=\"{block_id}\">; write widgets with add, or run render after a hand edit")
 
     # Resources and scripts.
     for element in page.elements:
@@ -588,7 +689,8 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
         if element.tag == "script":
             if "src" in element.attrs or "href" in element.attrs or "xlink:href" in element.attrs:
                 report.error("script.src", "scripts must be inline; <script src> is not allowed", element.line)
-            elif element.attrs.get("id") not in {"lp-boot", "lp-runtime"} and "data-lp-hook" not in element.attrs:
+            elif (element.attrs.get("id") not in {"lp-boot", "lp-runtime"} and not element.attrs.get("id", "").startswith(PACK_PREFIX)
+                  and "data-lp-hook" not in element.attrs):
                 report.error("script.hook", "page scripts must carry data-lp-hook", element.line)
         if element.tag == "style" or "style" in element.attrs:
             css = element.text() if element.tag == "style" else element.attrs.get("style", "")
@@ -739,7 +841,8 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
                     report.warn("svg.label-size", f"SVG label renders below 11px at phone width (font-size {size.group(1)} in a {numbers[2]:g}-wide viewBox)", text_node.line)
                     break
     for element in page.elements:
-        if element.tag == "style" and element.attrs.get("id") in {"lp-base", KATEX_STYLE_ID, LOOK_STYLE_ID}:
+        if element.tag == "style" and (element.attrs.get("id") in {"lp-base", KATEX_STYLE_ID, LOOK_STYLE_ID}
+                                       or element.attrs.get("id", "").startswith(PACK_PREFIX)):
             continue
         css = element.text() if element.tag == "style" else element.attrs.get("style", "") if not any(a.tag == "svg" for a in [element, *element.ancestors()]) else ""
         css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
@@ -835,6 +938,11 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
     for element in page.elements:
         if "data-knob" in element.attrs and not any("lp-live" in node.classes for node in element.ancestors()):
             report.error("live.knob", "[data-knob] works only inside a .lp-live paragraph", element.line)
+    for element in page.elements:
+        names = [cls[3:] for cls in sorted(element.classes) if cls.startswith("lp-") and cls[3:] in PACKS]
+        if names and not any(node.tag in {"head", "template", "script", "style"} for node in element.ancestors()):
+            for message in _pack_markup(names[0], element, code_lines):
+                report.error("pack.markup", f"{element.attrs.get('id') or '.lp-' + names[0]}: {message}", element.line)
     for figure in page.find("figure"):
         if not any(child.tag == "figcaption" for child in figure.children):
             report.warn("figure.caption", f"figure {figure.attrs.get('id', '')} has no <figcaption>", figure.line)
@@ -1303,6 +1411,68 @@ def _apply_look(text: str, look: str) -> str:
     return text[:roots[0].start] + edited + text[roots[0].start_end:]
 
 
+@functools.lru_cache(maxsize=None)
+def _pack_part(name: str, kind: str) -> str | None:
+    path = PACKS_DIR / f"{name}.{kind}"
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n").strip("\n") if path.is_file() else None
+
+
+def _used_packs(page: Page) -> list[str]:
+    """Packs whose widget class appears in the page body, in name order."""
+    used: set[str] = set()
+    for element in page.elements:
+        names = {cls[3:] for cls in element.classes if cls.startswith("lp-")} & set(PACKS)
+        if names and not any(node.tag in {"head", "template", "script", "style"} for node in element.ancestors()):
+            used |= names
+    return sorted(used)
+
+
+def _pack_blocks(page: Page) -> list[Element]:
+    return sorted((node for node_id, nodes in page.by_id.items() if node_id.startswith(PACK_PREFIX)
+                   for node in nodes if node.tag in {"style", "script"}), key=lambda node: node.start)
+
+
+def _pack_of(node: Element) -> tuple[str | None, str]:
+    """(pack name, "css" or "js") for a pack block, or (None, kind) when the id names no pack."""
+    stem = node.attrs.get("id", "")[len(PACK_PREFIX):]
+    if node.tag == "script":
+        return (stem[:-3] if stem.endswith("-js") and stem[:-3] in PACKS else None), "js"
+    return (stem if stem in PACKS else None), "css"
+
+
+def _ensure_packs(text: str) -> str:
+    """Give the page the style and script of each widget pack it uses, refresh stale copies and drop unused ones.
+
+    Styles go after #lp-look (or #lp-base), scripts right before #lp-runtime, both in pack-name order,
+    so a page that already has the right packs comes back unchanged.
+    """
+    page = Page(text)
+    newline = "\r\n" if "\r\n" in text else "\n"
+    for node in reversed(_pack_blocks(page)):
+        if _pack_of(node)[0] is None:
+            continue
+        assert node.end is not None
+        end = node.end + (len(newline) if text.startswith(newline, node.end) else 0)
+        text = text[:node.start] + text[end:]
+    page = Page(text)
+    used = _used_packs(page)
+    block = lambda tag, block_id, body: f'<{tag} id="{block_id}">{newline}{body.replace(chr(10), newline)}{newline}</{tag}>'  # noqa: E731
+    styles = [block("style", PACK_PREFIX + name, css) for name in used if (css := _pack_part(name, "css")) is not None]
+    scripts = [block("script", PACK_PREFIX + name + "-js", js) for name in used if (js := _pack_part(name, "js")) is not None]
+    if styles:
+        anchor = next((node for node in [*page.by_id.get(LOOK_STYLE_ID, []), *page.by_id.get("lp-base", [])] if node.tag == "style"), None)
+        if anchor is None or anchor.end is None:
+            raise UsageError("page has no #lp-base to put widget styles after")
+        text = text[:anchor.end] + newline + newline.join(styles) + text[anchor.end:]
+        page = Page(text)
+    if scripts:
+        runtime = next((node for node in page.by_id.get("lp-runtime", []) if node.tag == "script"), None)
+        if runtime is None:
+            raise UsageError("page has no #lp-runtime to put widget scripts before")
+        text = text[:runtime.start] + newline.join(scripts) + newline + text[runtime.start:]
+    return text
+
+
 def _prepare_fragment(fragment: str, page: Page, rev: int) -> tuple[str, list[tuple[str, str]], list[str], dict[str, Any]]:
     """Validate a fragment, render its formulas and code, and stamp its blocks with ``rev``.
 
@@ -1564,8 +1734,10 @@ def outline_source(source: str) -> dict[str, Any]:
             if "lp-check" in element.classes:
                 entry["state"] = element.attrs.get("data-state", "")
                 entry["has_reference_points"] = any("lp-answer" in node.classes for node in element.iter())
+            pack_of = lambda node: next((pack for pack in PACKS if "lp-" + pack in node.classes), None)  # noqa: E731
             figures = [
                 {"id": node.attrs.get("id", ""), **({"kind": "live"} if node.tag != "figure" else {}),
+                 **({"kind": pack_of(node)} if node.tag == "figure" and pack_of(node) else {}),
                  **({"reveals": node.attrs["data-reveals"]} if "data-reveals" in node.attrs else {})}
                 for node in element.iter() if node.tag == "figure" or "lp-live" in node.classes
             ]
@@ -1589,6 +1761,7 @@ def outline_source(source: str) -> dict[str, Any]:
         "updated": marker.attrs.get("data-updated", "") if marker else "",
         "bytes": len(source.encode("utf-8")),
         "look": (page.find("html")[0].attrs.get("data-look") if page.find("html") else None) or "handout",
+        "packs": _used_packs(page),
         "head_style_lines": lines(style[0]) if style else None,
         "page_code": page_code,
         "append_marker_line": line_of(source.index(APPEND_MARKER)) if APPEND_MARKER in source else None,
@@ -1645,7 +1818,7 @@ def command_new(args: argparse.Namespace) -> dict[str, Any]:
     else:
         rendered = {"tex": 0, "code": 0}
     text = text.replace(CONTENT_MARKER + "\n", "").replace(CONTENT_MARKER, "")
-    text = _apply_look(text, args.look)
+    text = _ensure_packs(_apply_look(text, args.look))
     report, scripts = full_check(text, path)
     if report.errors:
         raise UsageError(
@@ -1670,7 +1843,7 @@ def command_add(args: argparse.Namespace) -> dict[str, Any]:
     path, source, data, page, rev = _load_page(repo, args.page, args.id)
     new_rev = rev + 1
     main, routed, ids, rendered = _prepare_fragment(_read_fragment(args.fragment), page, new_rev)
-    text = _ensure_katex(_insert(source, page, main, routed, marker=APPEND_MARKER, into=args.into, after=args.after))
+    text = _ensure_packs(_ensure_katex(_insert(source, page, main, routed, marker=APPEND_MARKER, into=args.into, after=args.after)))
     text = _bump(text, Page(text), new_rev, _today(args.date))
     return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
                    extra={"inserted_ids": ids, "anchors": ["#" + element_id for element_id in ids], "rendered": rendered,
@@ -1694,7 +1867,7 @@ def command_state(args: argparse.Namespace) -> dict[str, Any]:
             raise UsageError("--fragment adds reference points, so it only goes with --to closed")
         edited = Page(text)
         main, routed, ids, _rendered = _prepare_fragment(_read_fragment(args.fragment), edited, new_rev)
-        text = _ensure_katex(_insert(text, edited, main, routed, marker=APPEND_MARKER, into=args.question))
+        text = _ensure_packs(_ensure_katex(_insert(text, edited, main, routed, marker=APPEND_MARKER, into=args.question)))
     text = _bump(text, Page(text), new_rev, _today(args.date))
     return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
                    extra={"question": args.question, "state": args.to, "inserted_ids": ids})
@@ -1706,7 +1879,7 @@ def command_render(args: argparse.Namespace) -> dict[str, Any]:
     blocks = [node for node in page.by_id.get(KATEX_STYLE_ID, []) if node.tag == "style"]
     outdated = bool(blocks) and _katex_block_version(blocks[0].text()) != KATEX_VERSION
     text, rendered = _render_fragment(source, page, force=outdated)
-    text = _ensure_katex(text, redrawn=outdated)
+    text = _ensure_packs(_ensure_katex(text, redrawn=outdated))
     if text == source:
         return {"page": path.relative_to(repo).as_posix(), "rev": rev, "rendered": rendered, "changed": False}
     new_rev = rev + 1
@@ -1725,6 +1898,139 @@ def command_look(args: argparse.Namespace) -> dict[str, Any]:
     text = _bump(text, Page(text), new_rev, _today(args.date))
     return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
                    extra={"look": args.to, "changed": True})
+
+
+# The replay trace is recorded by running the example in a separate isolated Python process.
+TRACER = r'''
+import json, math, sys
+request = json.loads(sys.stdin.read())
+names, function, limit = request["vars"], request["function"], request["limit"]
+SKIP = {"<genexpr>", "<listcomp>", "<dictcomp>", "<setcomp>", "<lambda>"}
+GENERATOR = 0x20 | 0x80 | 0x200
+events, calls, serial = [], {}, [0]
+class Stop(Exception):
+    pass
+def show(value):
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float):
+        if value != value:
+            return "NaN"
+        if value in (math.inf, -math.inf):
+            return ("−" if value < 0 else "") + "∞"
+        if value == 0:
+            return "0"
+        # Four decimals; below 0.001 (and from 1e10 up) four significant digits instead, so no small value prints as 0.
+        if abs(value) < 1e-3 or abs(value) >= 1e10:
+            text = "%.4g" % value
+        else:
+            text = ("%.4f" % value).rstrip("0").rstrip(".")
+        if "e" in text:
+            mantissa, power = text.split("e")
+            text = mantissa + "e" + str(int(power))
+        return text.replace("-", "−")
+    if isinstance(value, int):
+        return str(value).replace("-", "−")
+    if isinstance(value, (list, tuple)):
+        inner = ",".join(show(item) for item in value)
+        return "[" + inner + "]" if isinstance(value, list) else "(" + inner + ")"
+    return "".join("\u00a0" if ch.isspace() else ch for ch in str(value))
+def tracer(frame, event, arg):
+    code = frame.f_code
+    if code.co_filename != "<lesson-trace>" or code.co_name in SKIP or (function and code.co_name != function):
+        return tracer
+    # CPython reuses a finished frame's id, so each call gets its own number; generator frames are kept so a resumed
+    # generator keeps its number.
+    known = calls.get(id(frame))
+    if known is None or known[0] is not frame:
+        serial[0] += 1
+        known = calls[id(frame)] = (frame, serial[0])
+    if event in ("line", "return"):
+        state = {name: show(frame.f_locals[name]) for name in names if name in frame.f_locals}
+        if event == "return" and "return" in names:
+            state["return"] = show(arg)
+        events.append([event, frame.f_lineno, known[1], state])
+        if event == "return" and not code.co_flags & GENERATOR:
+            del calls[id(frame)]
+        if len(events) > limit:
+            raise Stop()
+    return tracer
+error = None
+compiled = compile(request["source"], "<lesson-trace>", "exec")
+sys.settrace(tracer)
+try:
+    exec(compiled, {"__name__": "__lesson_trace__"})
+except Stop:
+    error = "limit"
+except BaseException as exc:
+    error = "%s: %s" % (type(exc).__name__, exc)
+finally:
+    sys.settrace(None)
+print(json.dumps({"events": events, "error": error}, ensure_ascii=False))
+'''
+
+
+def _crowded_loops(source: str) -> set[int]:
+    """Lines where a loop body sits on the line each pass comes back to: the for line, or the line of the while test."""
+    return {node.body[0].lineno for node in ast.walk(ast.parse(source))
+            if (isinstance(node, (ast.For, ast.AsyncFor)) and node.body[0].lineno == node.lineno)
+            or (isinstance(node, ast.While) and node.body[0].lineno == node.test.lineno)}
+
+
+def command_trace(args: argparse.Namespace) -> dict[str, Any]:
+    """Run a short example and list, line by line, what each executed line changed among the chosen variables."""
+    names = args.vars.split()
+    if not names or any(not KNOB_NAME.fullmatch(name) for name in names):
+        raise UsageError('--vars must list identifiers separated by spaces, e.g. "m l acc" (add return for the return value)')
+    source = _lf(Path(args.code).read_text(encoding="utf-8-sig"))
+    try:
+        result = subprocess.run([sys.executable, "-I", "-c", TRACER], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                input=json.dumps({"source": source, "vars": names, "function": args.function, "limit": args.max_steps}),
+                                check=False, timeout=30)
+    except subprocess.TimeoutExpired as exc:
+        raise UsageError("the example ran longer than 30 seconds; trace a smaller case") from exc
+    try:
+        report = json.loads(result.stdout)
+    except ValueError as exc:
+        raise UsageError("the example could not be traced: " + (result.stderr.strip().splitlines() or ["no output"])[-1]) from exc
+    if report["error"] and report["error"] != "limit":
+        raise UsageError(f"the example raised {report['error']}; fix it before recording a trace")
+    events = report["events"]
+    # Such a line is reported again on every pass and a repeated line merges into one step below, so the replay would
+    # skip the whole loop. The source compiled in the run, so it parses here.
+    crowded = sorted(_crowded_loops(source) & {line for event, line, _frame, _state in events if event == "line"})
+    if crowded:
+        raise UsageError("a loop body shares a line with its for/while header (line " + ", ".join(map(str, crowded))
+                         + "), so the whole loop would replay as one step; put the body on its own line")
+    steps: list[dict[str, Any]] = []
+    entered: set[int] = set()
+    for index, (event, line, frame, before) in enumerate(events):
+        if event != "line":
+            continue
+        later_index = next((n for n in range(index + 1, len(events)) if events[n][2] == frame), None)
+        if later_index is not None and any(events[n][2] != frame for n in range(index + 1, later_index)):
+            raise UsageError("a traced line runs another traced frame (recursion, or module code calling the function), so the steps "
+                             "would come out of order; trace one function that does not call itself, with --function")
+        after = events[later_index][3] if later_index is not None else before
+        call = 0
+        if frame not in entered:
+            # Arguments are already bound when the frame starts; report them on its first line. From the second call on,
+            # the step is numbered so the replay clears what the earlier call left in the table.
+            entered.add(frame)
+            before = {}
+            call = len(entered) if steps else 0
+        # A line reported several times in a row (an inlined comprehension) is one step.
+        if steps and steps[-1]["line"] == line and steps[-1]["frame"] == frame:
+            merged = steps.pop()
+            before, call = merged["before"], merged["call"]
+        steps.append({"line": line, "frame": frame, "before": before, "call": call,
+                      "set": {name: value for name, value in after.items() if before.get(name) != value}})
+    rows = [{"line": step["line"], **({"call": step["call"]} if step["call"] else {}), "set": step["set"]} for step in steps]
+    html_rows = [f'<li data-line="{row["line"]}"' + (f' data-call="{row["call"]}"' if "call" in row else "")
+                 + (' data-set="' + html.escape(" ".join(f"{k}={v}" for k, v in row["set"].items())) + '"' if row["set"] else "")
+                 + "></li>" for row in rows]
+    return {"steps": rows, "count": len(rows), "truncated": report["error"] == "limit", "code_lines": len(source.rstrip("\n").split("\n")),
+            "html": "\n".join(html_rows)}
 
 
 def command_check(args: argparse.Namespace) -> dict[str, Any]:
@@ -1972,6 +2278,12 @@ def _parser() -> argparse.ArgumentParser:
     look.add_argument("--to", required=True, choices=LOOKS)
     look.add_argument("--date", help=argparse.SUPPRESS)
 
+    trace = sub.add_parser("trace", help="run a short Python example and list what each executed line changed, for an execution replay")
+    trace.add_argument("--code", required=True, help="the example file; put the same text in the replay's pre.lp-code")
+    trace.add_argument("--vars", required=True, help='variables to record, space-separated, e.g. "m l acc"; add return for the return value')
+    trace.add_argument("--function", help="record only the lines run inside this function")
+    trace.add_argument("--max-steps", type=int, default=400, help="stop recording after this many executed lines (default: 400)")
+
     check = sub.add_parser("check", help="validate one page")
     common(check)
     check.add_argument("--page", required=True)
@@ -2002,6 +2314,7 @@ COMMANDS = {
     "state": command_state,
     "render": command_render,
     "look": command_look,
+    "trace": command_trace,
     "check": command_check,
     "outline": command_outline,
     "find": command_find,

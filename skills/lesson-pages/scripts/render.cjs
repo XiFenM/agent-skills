@@ -12,7 +12,7 @@ const vendor = path.join(__dirname, "..", "assets", "vendor");
 const katex = require(path.join(vendor, "katex", "katex.min.js"));
 const hljs = require(path.join(vendor, "highlight", "highlight.min.js"));
 
-const CLASS_LIST = /^(?:lp-s[1-4]|lp-hl)$/;
+const CLASS_LIST = /^(?:lp-s[1-4]|lp-hl|lp-t[1-6])$/;
 const STEP_LIST = /^[0-9]+(?:-[0-9]+)?$/;
 const INLINE_COLOR = /(?:^|[;"\s])(?:background-|border-)?color:\s*([^;"]+)/g;
 // KaTeX paints commands it may not run in errorColor instead of throwing, even inside \phantom; this value marks them.
@@ -26,11 +26,17 @@ function macros() {
     "\\sC": "\\htmlClass{lp-s3}{#1}",
     "\\sD": "\\htmlClass{lp-s4}{#1}",
     "\\hl": "\\htmlClass{lp-hl}{#1}",
+    "\\tA": "\\htmlClass{lp-t1}{#1}",
+    "\\tB": "\\htmlClass{lp-t2}{#1}",
+    "\\tC": "\\htmlClass{lp-t3}{#1}",
+    "\\tD": "\\htmlClass{lp-t4}{#1}",
+    "\\tE": "\\htmlClass{lp-t5}{#1}",
+    "\\tF": "\\htmlClass{lp-t6}{#1}",
     "\\step": "\\htmlData{show=#1}{#2}",
   };
 }
 
-// Only the symbol and highlight classes and step lists may reach the HTML; no links, ids, styles or other data attributes.
+// Only the symbol, highlight and anatomy-term classes and step lists may reach the HTML; no links, ids, styles or other data attributes.
 function trust(context) {
   if (context.command === "\\htmlClass") return CLASS_LIST.test(context.class || "");
   if (context.command === "\\htmlData") {

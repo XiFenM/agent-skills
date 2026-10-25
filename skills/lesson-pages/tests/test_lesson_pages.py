@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import importlib.util
 import json
 import os
@@ -1234,3 +1235,284 @@ def test_template_offers_strata_and_no_look_switcher() -> None:
     for look in lp.LOOKS[1:]:
         style = (ROOT / "assets" / "looks" / f"{look}.css").read_text(encoding="utf-8")
         assert f':root[data-look="{look}"]' in style and not re.search(r"https?://|@import|url\(", style)
+
+
+# ---------------------------------------------------------------- widget packs
+
+
+MYTH = '<div class="lp-myth"><p class="lp-myth-wrong">分块会少算一部分分数。</p><p class="lp-myth-right">每个分数都算了，少的是显存读写。</p></div>'
+SCALE = ('<figure class="lp-figure lp-scale" id="fig-9-1" data-unit="B/s"><ol><li data-value="1.5e12"><b>HBM</b>1.5 TB/s</li>'
+         '<li data-value="1.9e13"><b>SRAM</b>19 TB/s</li></ol><figcaption><b>图 9.1</b>两级存储的带宽。</figcaption></figure>')
+
+
+def _pack(name: str, kind: str) -> str:
+    return (ROOT / "assets" / "packs" / f"{name}.{kind}").read_text(encoding="utf-8").strip("\n")
+
+
+def test_widgets_bring_their_own_pack_and_no_other(built: Path, tmp_path: Path, capsys) -> None:
+    source = _source(built)
+    assert 'id="lp-pack-' not in source and lp.outline_source(source)["packs"] == []
+    code, result = _add(capsys, built, tmp_path, MYTH)
+    assert code == 0 and result["check"]["ok"] and result["check"]["warnings"] == [], result
+    source = _source(built)
+    assert f'<style id="lp-pack-myth">\n{_pack("myth", "css")}\n</style>' in source
+    assert f'<script id="lp-pack-myth-js">\n{_pack("myth", "js")}\n</script>\n<script id="lp-runtime">' in source
+    assert source.count('id="lp-pack-') == 2
+    code, result = _add(capsys, built, tmp_path, SCALE, "--into", "node-1")
+    assert code == 0 and result["check"]["warnings"] == [], result
+    source = _source(built)
+    assert source.index('id="lp-base"') < source.index('id="lp-pack-myth"') < source.index('id="lp-pack-scale"') < source.index('id="lp-katex"')
+    assert source.index('id="lp-pack-myth-js"') < source.index('id="lp-pack-scale-js"') < source.index('id="lp-runtime"')
+    outline = lp.outline_source(source)
+    assert outline["packs"] == ["myth", "scale"]
+    assert {"id": "fig-9-1", "kind": "scale"} in next(block for block in outline["blocks"] if block["id"] == "node-1")["figures"]
+
+
+def test_packs_stay_after_the_look_and_writes_do_not_churn_them(built: Path, tmp_path: Path, capsys) -> None:
+    _add(capsys, built, tmp_path, MYTH)
+    handout = _source(built)
+    assert lp._ensure_packs(handout) == handout
+    code, result = _look(capsys, built, "vermilion")
+    assert code == 0 and result["check"]["warnings"] == [], result
+    source = _source(built)
+    assert source.index('id="lp-base"') < source.index('id="lp-look"') < source.index('id="lp-pack-myth"')
+    assert lp._ensure_packs(source) == source
+    _look(capsys, built, "handout")
+    assert _stable(_source(built)) == _stable(handout)
+    crlf = handout.replace("\n", "\r\n")
+    assert lp._ensure_packs(crlf) == crlf
+
+
+def test_render_refreshes_stale_packs_and_drops_unused_ones(built: Path, tmp_path: Path, capsys) -> None:
+    _add(capsys, built, tmp_path, MYTH)
+    edited = _with(_source(built), '<style id="lp-pack-myth">\n', '<style id="lp-pack-myth">\n.lp-myth { border: 0; }\n')
+    built.write_text(edited, encoding="utf-8")
+    assert [item["code"] for item in lp.check_source(edited, built).as_dict()["warnings"]] == ["runtime.drift"]
+    render = lambda: _run(capsys, "render", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID, "--date", "2026-10-24")  # noqa: E731
+    code, result = render()
+    assert code == 0 and result["changed"] and result["check"]["warnings"] == [], result
+    assert ".lp-myth { border: 0; }" not in _source(built)
+    unused = re.sub(r'<div class="lp-myth" data-rev="\d+">.*?</div>\n', "", _source(built), flags=re.S)
+    built.write_text(unused, encoding="utf-8")
+    assert {item["code"] for item in lp.check_source(unused, built).as_dict()["warnings"]} == {"pack.unused"}
+    code, result = render()
+    assert code == 0 and result["changed"] and result["check"]["warnings"] == [], result
+    assert 'id="lp-pack-' not in _source(built)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "code"),
+    [
+        ('<style id="lp-pack-myth">', '<style id="lp-pack-myth-gone">', "pack.missing"),
+        ('<script id="lp-pack-myth-js">', '<script id="lp-pack-myth-gone">', "pack.missing"),
+        ('<style id="lp-page-style">', '<style id="lp-pack-neon">.x { margin: 0; }</style>\n<style id="lp-page-style">', "pack.unknown"),
+        ('<script id="lp-runtime">', '<script id="lp-pack-myth">void 0;</script>\n<script id="lp-runtime">', "pack.unknown"),
+    ],
+)
+def test_check_flags_missing_and_unknown_packs(built: Path, tmp_path: Path, capsys, old: str, new: str, code: str) -> None:
+    _add(capsys, built, tmp_path, MYTH)
+    source = _source(built)
+    assert code not in _error_codes(source, built)
+    assert code in _error_codes(_with(source, old, new), built)
+
+
+def test_interactive_packs_count_as_widgets_next_to_open_questions(built: Path, tmp_path: Path, capsys) -> None:
+    code, result = _add(capsys, built, tmp_path, SCALE, "--after", "q-1")
+    assert code == 2 and "check.leak" in result["error"]
+    code, result = _add(capsys, built, tmp_path, MYTH, "--after", "q-1")
+    assert code == 0, result
+
+
+@needs_node
+def test_anatomy_terms_render_with_their_own_classes(built: Path, tmp_path: Path, capsys) -> None:
+    figure = ('<figure class="lp-figure lp-anatomy" id="fig-9-2"><div class="tex">y = \\tA{a}\\,\\tB{x} + \\tC{b}</div>'
+              '<ol class="lp-terms"><li>斜率</li><li>输入</li><li>截距</li></ol><figcaption><b>图 9.2</b>直线。</figcaption></figure>')
+    code, result = _add(capsys, built, tmp_path, figure, "--into", "node-2")
+    assert code == 0 and result["check"]["warnings"] == [], result
+    source = _source(built)
+    for n in (1, 2, 3):
+        assert re.search(rf'class="enclosing lp-t{n}"', source)
+    assert 'id="lp-pack-anatomy"' in source and 'id="lp-pack-anatomy-js"' in source
+    code, result = _add(capsys, built, tmp_path, '<div class="tex">\\htmlClass{lp-t7}{x}</div>', "--into", "node-2")
+    assert code == 2 and "not allowed" in result["error"]
+
+
+def test_every_pack_registers_itself_and_stays_offline() -> None:
+    folder = ROOT / "assets" / "packs"
+    assert sorted({path.stem for path in folder.iterdir()}) == sorted(lp.PACKS)
+    for name in lp.PACKS:
+        css, js = _pack(name, "css"), _pack(name, "js")
+        assert f".lp-{name}" in css and not re.search(r"https?://|@import|url\(", css)
+        assert f'push({{ name: "{name}", init: function (ui) {{' in js
+        assert not re.search(r"https?://(?!www\.w3\.org/2000/svg)|fetch\(|XMLHttpRequest|eval\(", js)
+        assert not re.search(r"#[0-9a-fA-F]{3,8}\b", re.sub(r"/\*.*?\*/", "", css, flags=re.S)), name
+
+
+def test_trace_records_what_each_line_changes(tmp_path: Path, capsys) -> None:
+    example = tmp_path / "running_max.py"
+    example.write_text("def running_max(xs):\n    best = -float('inf')\n    for x in xs:\n        best = max(best, x)\n"
+                       "    squares = [x * x for x in xs]\n    return best\n\nrunning_max([2.5, -1, 4])\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "best x squares return", "--function", "running_max")
+    assert code == 0, result
+    assert [row["line"] for row in result["steps"]] == [2, 3, 4, 3, 4, 3, 4, 3, 5, 6]
+    assert result["steps"][0]["set"] == {"best": "−∞"}
+    assert result["steps"][2]["set"] == {"best": "2.5"}
+    assert result["steps"][8]["set"] == {"squares": "[6.25,1,16]"}
+    assert result["steps"][-1]["set"] == {"return": "4"}
+    assert result["html"].splitlines()[0] == '<li data-line="2" data-set="best=−∞"></li>'
+    assert not result["truncated"] and result["code_lines"] == 8
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "best", "--function", "running_max", "--max-steps", "3")
+    assert code == 0 and result["truncated"]
+
+
+def test_trace_reports_arguments_and_refuses_nested_frames(tmp_path: Path, capsys) -> None:
+    example = tmp_path / "scale.py"
+    example.write_text("def scale(xs, k):\n    out = [x * k for x in xs]\n    return out\n\nscale([1, 2], 3)\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "xs k out", "--function", "scale")
+    assert code == 0, result
+    assert result["steps"][0] == {"line": 2, "set": {"xs": "[1,2]", "k": "3", "out": "[3,6]"}}
+    recursive = tmp_path / "fact.py"
+    recursive.write_text("def fact(n):\n    if n <= 1:\n        return 1\n    return n * fact(n - 1)\n\nfact(3)\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(recursive), "--vars", "n return", "--function", "fact")
+    assert code == 2 and "out of order" in result["error"]
+
+
+def test_trace_keeps_calls_apart_and_small_values_visible(tmp_path: Path, capsys) -> None:
+    # CPython hands a finished frame's id to the next call; each call must still report its own arguments.
+    example = tmp_path / "calls.py"
+    example.write_text("import math\n\ndef sq(x): return x * x\n\ndef total(xs, start=0):\n    s = start\n    for x in xs:\n"
+                       "        s += x\n    return s\n\ndef rescale(m, m_new):\n    return math.exp(m - m_new)\n\n"
+                       "def count(n):\n    i = 0\n    while i < n:\n        yield i\n        i += 1\n\n"
+                       "sq(3)\nsq(4)\ntotal([1, 2])\ntotal([4], 100)\nrescale(1.0, 13.0)\nlist(count(2))\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "x return", "--function", "sq")
+    assert code == 0 and result["steps"] == [{"line": 3, "set": {"x": "3", "return": "9"}},
+                                             {"line": 3, "call": 2, "set": {"x": "4", "return": "16"}}]
+    # From the second call on, the first step is numbered so the replay clears what the earlier call left in the table.
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "xs start s x", "--function", "total")
+    starts = [row for row in result["steps"] if row["line"] == 6]
+    assert starts == [{"line": 6, "set": {"xs": "[1,2]", "start": "0", "s": "0"}},
+                      {"line": 6, "call": 2, "set": {"xs": "[4]", "start": "100", "s": "100"}}]
+    assert result["html"].count("data-call") == 1 and '<li data-line="6" data-call="2" data-set="xs=[4]' in result["html"]
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "return", "--function", "rescale")
+    assert result["steps"][-1]["set"] == {"return": "6.144e−6"}
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "i n", "--function", "count")
+    assert [row["set"] for row in result["steps"]][:5] == [{"i": "0", "n": "2"}, {}, {}, {"i": "1"}, {}]
+
+
+@pytest.mark.parametrize(
+    "figure",
+    [
+        '<figure class="lp-figure lp-anatomy" id="fig-9-4"><div class="tex">y = ax + b</div>'
+        '<ol class="lp-terms"><li>斜率</li></ol><figcaption><b>图 9.4</b>直线。</figcaption></figure>',
+        '<figure class="lp-figure lp-scale" id="fig-9-5"><ol><li data-value="\uff11e10">a</li><li data-value="1e12">b</li></ol>'
+        '<figcaption><b>图 9.5</b>两个量。</figcaption></figure>',
+    ],
+)
+def test_check_refuses_widgets_the_browser_cannot_start(built: Path, tmp_path: Path, capsys, figure: str) -> None:
+    code, result = _add(capsys, built, tmp_path, figure, "--into", "node-2")
+    assert code == 2 and "pack.markup" in result["error"], result
+
+
+def test_trace_refuses_bad_names_and_failing_examples(tmp_path: Path, capsys) -> None:
+    example = tmp_path / "broken.py"
+    example.write_text("def f():\n    return 1 / 0\n\nf()\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "x-y")
+    assert code == 2 and "identifiers" in result["error"]
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "x")
+    assert code == 2 and "ZeroDivisionError" in result["error"]
+
+
+def test_trace_refuses_a_loop_body_on_its_header_line(tmp_path: Path, capsys) -> None:
+    # Every pass reports that line again and a repeated line is one step, so the whole loop would replay as one step.
+    example = tmp_path / "total.py"
+    for loop, line in [("for x in xs: s += x", 3), ("while s < 9: s += 4", 3), ("while \\\n            s < 9: s += 4", 4)]:
+        example.write_text(f"def total(xs):\n    s = 0\n    {loop}\n    return s\n\ntotal([3, 5])\n", encoding="utf-8")
+        code, result = _run(capsys, "trace", "--code", str(example), "--vars", "s", "--function", "total")
+        assert code == 2 and f"header (line {line})" in result["error"], result
+    # A header broken over lines still alternates with its body, and code outside --function is not replayed.
+    example.write_text("def total(xs):\n    s = 0\n    for x in [3,\n              5]: s += x\n    return s\n\n"
+                       "for xs in [[3, 5]]: total(xs)\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "s", "--function", "total")
+    assert code == 0 and [row["line"] for row in result["steps"]] == [2, 3, 4, 3, 4, 3, 5], result
+
+
+@needs_node
+def test_every_widget_pack_builds_from_the_fixture(built: Path, capsys) -> None:
+    fixture = str(ROOT / "tests" / "fixtures" / "widget-packs.html")
+    code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
+                        "--fragment", fixture, "--date", "2026-10-24")
+    assert code == 0 and result["check"]["ok"], result
+    assert {item["code"] for item in result["check"]["warnings"]} <= {"page.size-soft"}
+    source = _source(built)
+    assert lp.outline_source(source)["packs"] == sorted(lp.PACKS)
+    for name in lp.PACKS:
+        assert source.count(f'<style id="lp-pack-{name}">') == 1 and source.count(f'<script id="lp-pack-{name}-js">') == 1
+
+
+@pytest.mark.parametrize("look", ["handout", "blueprint", "vermilion"])
+def test_sample_pages_are_valid_pages_in_each_look(look: str) -> None:
+    # Snapshots of the second visual round for people to open in a browser; they do not follow later template changes.
+    source = (ROOT / "references" / "sample-pages" / f"attn-03-{look}.html").read_text(encoding="utf-8")
+    assert not lp.check_source(source, None).errors
+    assert (lp.Page(source).find("html")[0].attrs.get("data-look") or "handout") == look
+
+
+def test_fixture_replay_is_a_real_run(tmp_path: Path, capsys) -> None:
+    text = (ROOT / "tests" / "fixtures" / "widget-packs.html").read_text(encoding="utf-8")
+    example = tmp_path / "online_softmax.py"
+    example.write_text(html.unescape(re.search(r"<code>(.*?)</code></pre>", text, re.S).group(1)) + "\n\n"
+                       "attention_row([1.2, 3.1, 0.4, 2.0, 4.5, 0.8, 2.2, 1.0, 3.9, 5.6, 0.3, 2.7],\n"
+                       "              [0.5, -1.0, 2.0, 0.3, 1.5, -0.4, 0.9, 1.1, -0.7, 0.8, 1.6, -0.2])\n", encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "s m m_new alpha p l acc return", "--function", "attention_row")
+    assert code == 0, result
+    shown = [(int(match.group(1)), dict(pair.split("=", 1) for pair in (match.group(2) or "").split()))
+             for match in re.finditer(r'<li data-line="(\d+)"(?: data-set="([^"]*)")?', text)]
+    assert shown == [(row["line"], row["set"]) for row in result["steps"]]
+
+
+def _with_fixture(built: Path, capsys) -> str:
+    code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
+                        "--fragment", str(ROOT / "tests" / "fixtures" / "widget-packs.html"), "--date", "2026-10-24")
+    assert code == 0, result
+    return _source(built)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ('<p class="lp-poster-num"><b>512</b>', '<p class="lp-poster-num"><b>512 MiB</b>'),
+        ('<li data-value="1.28e10">', '<li data-value="fast">'),
+        ('<p class="lp-myth-right">', '<p class="lp-myth-other">'),
+        ('<div class="lp-analogy-limit">', '<div class="lp-analogy-more">'),
+        ("<li>本块的指数和，直接以新的最大值为基准。</li>", ""),
+        ('id="fig-3-5">\n    <ol>\n      <li><div class="tex"', 'id="fig-3-5">\n    <ol>\n      <li><div class="formula"'),
+        ('data-line="14"', 'data-line="44"'),
+        ('data-set="m=−∞ l=0 acc=0"', 'data-set="m = −∞"'),
+        ('id="fig-3-3" data-domain="software"', 'id="fig-3-3" data-domain="network"'),
+    ],
+)
+def test_check_flags_broken_widget_markup(built: Path, capsys, old: str, new: str) -> None:
+    source = _with_fixture(built, capsys)
+    assert "pack.markup" not in _error_codes(source, built)
+    assert "pack.markup" in _error_codes(_with(source, old, new), built)
+
+
+def test_widgets_need_the_runtime_that_starts_them(built: Path, tmp_path: Path, capsys) -> None:
+    _add(capsys, built, tmp_path, MYTH)
+    source = _source(built)
+    assert "pack.runtime" not in _error_codes(source, built)
+    old = _with(source, "lesson-pages runtime v3", "lesson-pages runtime v2")
+    assert "pack.runtime" in _error_codes(old, built)
+    assert "pack.runtime" not in _error_codes(re.sub(r'<div class="lp-myth".*?</div>\n', "", old, flags=re.S), built)
+
+
+def test_traced_values_with_spaces_pass_check_unchanged(built: Path, tmp_path: Path, capsys) -> None:
+    example = tmp_path / "greet.py"
+    example.write_text('def greet(name):\n    msg = ""\n    msg = "hi " + name\n    return msg\n\ngreet("bob")\n', encoding="utf-8")
+    code, result = _run(capsys, "trace", "--code", str(example), "--vars", "msg return", "--function", "greet")
+    assert code == 0 and 'data-set="msg="' in result["html"] and 'data-set="msg=hi\u00a0bob"' in result["html"], result
+    figure = ('<figure class="lp-figure is-stage lp-replay" id="fig-9-3"><pre class="lp-code" data-lang="python"><code>'
+              'def greet(name):\n    msg = ""\n    msg = "hi " + name\n    return msg</code></pre>\n<ol class="lp-trace">'
+              + result["html"] + '</ol><figcaption><b>图 9.3</b>拼接字符串。</figcaption></figure>')
+    code, result = _add(capsys, built, tmp_path, figure, "--into", "node-1")
+    assert code == 0 and result["check"]["warnings"] == [], result

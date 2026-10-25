@@ -1,0 +1,50 @@
+/* lesson-pages 部件包：逐行推导 .lp-derive。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   左边一串编号连成竖线，中间是这一步的式子（左对齐），右边一句理由；窄屏时理由在式子下面。 */
+.lp-derive > ol { margin: 0 !important; padding: 0 !important; list-style: none; counter-reset: lp-derive; }
+.lp-derive > ol > li { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 11.5em); gap: 0 20px; align-items: center; margin: 0; padding: 8px 0 8px 48px; counter-increment: lp-derive; }
+.lp-derive > ol > li::before { content: counter(lp-derive); position: absolute; z-index: 1; left: 2px; top: 50%; display: grid; place-items: center; width: 28px; height: 28px; margin-top: -14px; font: 700 12.5px/1 var(--font-mono); color: var(--ink-soft); background: var(--paper); border: 1.5px solid var(--rule); border-radius: 50%; transition: color .3s ease, background-color .3s ease, border-color .3s ease; }
+.lp-derive > ol > li:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 50%; height: 100%; border-left: 2px solid var(--rule); }
+.lp-derive div.tex { margin: 0; padding: 4px 2px; text-align: left; }
+.lp-derive div.tex .katex-display, :root .lp-derive div.tex .katex-display > .katex { text-align: left; }
+:root .lp-derive div.tex > .katex-display > .katex { font-size: 1.16em; }
+/* 最后一步是结论：式子装进一个框里，像演算纸上框出的答案 */
+:root .lp-derive > ol > li:last-child div.tex > .katex-display > .katex { display: inline-block; margin: 2px 0; padding: 5px 12px 6px; border-radius: 6px; box-shadow: inset 0 0 0 1.5px var(--ink), 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent); }
+.lp-derive li > p { margin: 0 !important; padding-left: 12px; font-size: 14px; line-height: 1.6; color: var(--ink-soft); border-left: 2px solid var(--rule); }
+.lp-derive > ol > li:last-child::before { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+.lp-derive > ol > li.is-fresh::before { color: var(--paper); background: var(--accent); border-color: var(--accent); }
+.lp-derive-controls { margin-top: 10px; }
+/* 推导里的每一步只是半个式子，单独复制用处不大；行间公式的“复制 TeX”在这里不出现，免得盖住式子末尾 */
+.lp-derive .lp-copy-tex { display: none; }
+.lp-derive-count { font-size: 14px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  .lp-derive > ol > li.is-fresh { animation: lp-rise .45s var(--ease) both; }
+  .lp-derive > ol > li.is-fresh .lp-hl { animation: lp-derive-mark 1.8s ease-out .2s both; }
+}
+@keyframes lp-derive-mark { 0%, 30% { background: color-mix(in srgb, var(--accent) 40%, var(--mark)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); } }
+@media (max-width: 639px) {
+  .lp-derive > ol > li { grid-template-columns: minmax(0, 1fr); padding-left: 40px; }
+  .lp-derive > ol > li::before { top: 14px; margin-top: 0; width: 26px; height: 26px; }
+  .lp-derive > ol > li:not(:last-child)::after { left: 14px; top: 14px; }
+  .lp-derive li > p { margin-top: 2px !important; }
+}
+:root[data-look="blueprint"] .lp-derive > ol > li::before { border-color: var(--ink); color: var(--ink); }
+:root[data-look="blueprint"] .lp-derive > ol > li:not(:last-child)::after { border-left: 1px solid var(--ink-faint); }
+:root[data-look="blueprint"] .lp-derive li > p { font-family: var(--font-sans); border-left: 1px dashed var(--ink-faint); }
+:root[data-look="blueprint"] .lp-derive > ol > li:last-child::before { color: var(--paper); background: var(--accent); border-color: var(--accent); }
+:root[data-look="blueprint"] .lp-derive > ol > li:last-child div.tex > .katex-display > .katex { border-radius: 0; box-shadow: inset 0 0 0 1px var(--ink), inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--ink); }
+:root[data-look="vermilion"] .lp-derive > ol > li::before { font-family: var(--font-brush); font-size: 14px; color: var(--accent); border-color: var(--accent); border-radius: 3px; }
+:root[data-look="vermilion"] .lp-derive li > p { font-family: var(--font-brush); font-size: 15px; color: var(--accent-ink); border-left-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+:root[data-look="vermilion"] .lp-derive > ol > li:last-child::before { color: var(--paper); background: var(--accent); border-color: var(--accent); }
+/* 新出现的一步：编号牌在三种风格里都是朱红底、纸色字 */
+:root[data-look] .lp-derive > ol > li.is-fresh::before { color: var(--paper); background: var(--accent); border-color: var(--accent); }
+:root[data-look="vermilion"] .lp-derive > ol > li:last-child div.tex > .katex-display > .katex { border-radius: 46% 52% 44% 55% / 30% 26% 34% 28%; box-shadow: inset 0 0 0 2px var(--accent); padding: 6px 18px 7px; }
+/* 还没展开的步先留出位置：编号是虚线圈，式子和理由先不显示，按钮就不会被一步步往下推 */
+:root .lp-derive.is-ready > ol > li.is-hidden::before { color: var(--ink-faint); background: var(--paper); border: 1.5px dashed var(--rule); }
+.lp-derive.is-ready > ol > li.is-hidden > * { visibility: hidden; }
+.lp-derive.is-ready:not(.is-done) > ol > li:is(.is-hidden, :has(+ li.is-hidden)):not(:last-child)::after { border-left-style: dashed; }
+@media print {
+  .lp-derive-controls { display: none !important; }
+  .lp-derive > ol > li::before { color: var(--accent) !important; background: none !important; border-color: var(--accent) !important; border-style: solid !important; }
+  .lp-derive.is-ready > ol > li.is-hidden > * { visibility: visible !important; }
+  .lp-derive > ol > li:not(:last-child)::after { height: 100% !important; border-left-style: solid !important; }
+}

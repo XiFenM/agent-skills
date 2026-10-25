@@ -1,0 +1,40 @@
+/* lesson-pages 部件包：误区对照 .lp-myth。由 lesson_pages.py 写进用到它的页面，页面不要修改本段。
+   左边是常见误解（被朱红划掉，字退成淡色），右边是实际情况；窄屏上下排。只用中性色和朱红，符号色留给符号。 */
+.lp-myth { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin: 36px 0; border-radius: var(--round); box-shadow: inset 0 0 0 1px var(--rule); }
+.lp-myth > p { position: relative; margin: 0 !important; padding: 42px 26px 20px; }
+.lp-myth > p::before { position: absolute; left: 26px; top: 14px; font-size: 12.5px; font-weight: 700; line-height: 1.6; letter-spacing: .08em; }
+.lp-myth-wrong { font-size: 15.5px; color: var(--ink-soft); background: color-mix(in srgb, var(--accent-wash) 60%, transparent); border-radius: var(--round) 0 0 var(--round); }
+.lp-myth-wrong::before { content: "✕ 常见误解"; color: var(--accent-ink); }
+.lp-myth-right { font-weight: 500; }
+.lp-myth-right::before { content: "✓ 实际上"; color: var(--ink); }
+/* 箭头挂在“实际上”这一半的起点：并排时在竖缝正中，上下排时在横缝正中，不会压到任何一边的字 */
+.lp-myth-right::after { content: "→"; position: absolute; z-index: 1; left: 0; top: 50%; display: grid; place-items: center; width: 34px; height: 34px; font-weight: 700; color: var(--ink-soft); background: var(--paper); border-radius: 50%; box-shadow: 0 0 0 1px var(--rule), var(--shadow); transform: translate(-50%, -50%); }
+.lp-myth-strike { padding: 0 .05em; background: linear-gradient(var(--accent), var(--accent)) 0 58% / 100% 2px no-repeat; -webkit-box-decoration-break: clone; box-decoration-break: clone; transition: background-size .9s var(--ease); }
+.lp-motion .lp-myth:not(.is-struck) .lp-myth-strike { background-size: 0 2px; }
+html:not(.js) .lp-myth-wrong { text-decoration: line-through; text-decoration-color: var(--accent); }
+@media (max-width: 639px) {
+  .lp-myth { grid-template-columns: minmax(0, 1fr); }
+  .lp-myth > p { padding: 40px 18px 18px; }
+  .lp-myth > p::before { left: 18px; }
+  .lp-myth-wrong { border-radius: var(--round) var(--round) 0 0; }
+  .lp-myth-right::after { content: "↓"; left: 50%; top: 0; }
+  .lp-myth-right { padding-top: 46px; }
+}
+:root[data-look="blueprint"] .lp-myth, :root[data-look="blueprint"] .lp-myth-wrong { border-radius: 0; }
+:root[data-look="blueprint"] .lp-myth { box-shadow: inset 0 0 0 1px var(--ink-faint); }
+:root[data-look="blueprint"] .lp-myth-wrong { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--accent) 9%, transparent) 0 1px, transparent 1px 8px); }
+:root[data-look="blueprint"] .lp-myth-wrong::before { content: "✕ 作废"; font-family: var(--font-mono); }
+:root[data-look="blueprint"] .lp-myth-right::before { content: "✓ 修订"; font-family: var(--font-mono); }
+:root[data-look="blueprint"] .lp-myth-right::after { border-radius: 0; box-shadow: 0 0 0 1px var(--ink-faint); }
+:root[data-look="vermilion"] .lp-myth { border-radius: 2px; box-shadow: inset 0 0 0 1px var(--ink-faint); }
+:root[data-look="vermilion"] .lp-myth-wrong { background: transparent; border-radius: 0; }
+:root[data-look="vermilion"] .lp-myth > p::before { font-family: var(--font-brush); font-size: 15px; font-weight: 400; letter-spacing: .02em; }
+:root[data-look="vermilion"] .lp-myth-wrong::before { content: "误"; display: grid; place-items: center; width: 1.7em; height: 1.7em; padding: 0; color: var(--accent); border: 2px solid var(--accent); border-radius: 50%; transform: rotate(-12deg); }
+:root[data-look="vermilion"] .lp-myth-right::before { content: "正"; display: grid; place-items: center; width: 1.7em; height: 1.7em; color: var(--paper); background: var(--accent); border-radius: 3px; }
+:root[data-look="vermilion"] .lp-myth-strike { background-size: 100% 3px; }
+:root[data-look="vermilion"] .lp-myth-right::after { content: "→"; color: var(--accent); font-family: var(--font-brush); }
+@media (max-width: 639px) { :root[data-look="vermilion"] .lp-myth-right::after { content: "↓"; } }
+@media print {
+  .lp-myth-strike { background-size: 100% 2px !important; }
+  .lp-myth { break-inside: avoid; }
+}

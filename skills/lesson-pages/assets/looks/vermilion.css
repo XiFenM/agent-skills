@@ -69,8 +69,8 @@
 :root[data-look="vermilion"] blockquote.lp-oral::before { content: "「"; font-family: var(--font-brush); font-size: 3em; left: 18px; top: 6px; }
 :root[data-look="vermilion"] .lp-ring::after { border-width: 2.4px; }
 /* 实验台：装裱过的墨色板，泥金细框 */
-:root[data-look="vermilion"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) { border-radius: 4px; background-image: none; box-shadow: inset 0 0 0 1px var(--gold), inset 0 0 0 5px var(--stage), inset 0 0 0 6px color-mix(in srgb, var(--gold) 55%, transparent), 0 18px 36px -22px rgba(30, 20, 10, .55); }
-:root[data-look="vermilion"] pre.lp-code { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 70%, transparent), 0 18px 36px -22px rgba(30, 20, 10, .55); }
+:root[data-look="vermilion"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) { border-radius: 4px; background-image: none; box-shadow: inset 0 0 0 1px var(--gold), inset 0 0 0 5px var(--stage), inset 0 0 0 6px color-mix(in srgb, var(--gold) 55%, transparent), 0 18px 36px -22px color-mix(in srgb, var(--stage) 60%, transparent); }
+:root[data-look="vermilion"] pre.lp-code { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 70%, transparent), 0 18px 36px -22px color-mix(in srgb, var(--stage) 60%, transparent); }
 :root[data-look="vermilion"] .lp-code-head { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 70%, transparent); }
 :root[data-look="vermilion"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage) figcaption { font-family: var(--font-sans); }
 /* 检查题：试卷框，右上角钤印表示状态 */
@@ -105,3 +105,15 @@
 :root[data-look="vermilion"] .lp-knob { border-radius: 3px; }
 @media (max-width: 639px) { :root[data-look="vermilion"] .lp-cover { background-image: repeating-linear-gradient(90deg, transparent 0 31px, color-mix(in srgb, var(--accent) 22%, transparent) 31px 32px); } }
 @media print { :root[data-look] body { background-image: none; } }
+/* 打印：整页和实验台都换成本风格的浅色令牌（白纸、墨字、朱砂、浅底代码色），压过上面屏幕用的深色与墨色台面 */
+@media print {
+  :root[data-look="vermilion"], :root[data-look="vermilion"][data-theme], :root[data-look="vermilion"] :is(.lp-stepper, .lp-explorer, .lp-toggle, .lp-figure.is-stage, pre.lp-code, .lp-code-head) {
+    color-scheme: light;
+    --paper: #ffffff; --raised: #ece4d1; --ink: #211c16; --ink-soft: #4d4438; --ink-faint: #6f6455;
+    --rule: #d8ccb2; --accent: #b3311d; --accent-ink: #982817; --accent-wash: #f4dccf;
+    --mark: #f3e1a0; --s1: #1d5b88; --s2: #2c684c; --s3: #7a3570; --s4: #835500;
+    --band: #ffffff; --band-ink: #211c16; --band-soft: #5e5446; --band-rule: #cbbd9f;
+    --line: #211c16; --line-idle: #b9ab8f; --station: #ffffff;
+    --code-kw: #6f3fbf; --code-str: #3d7a1f; --code-num: #a8500c; --code-fn: #2453c2; --code-type: #0f736c; --code-com: #63676f; --code-meta: #7d5300;
+  }
+}
