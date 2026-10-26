@@ -47,8 +47,10 @@ PAGES_REFERENCE_FILES = {
     "example-segment.html",
     "files-and-viewing.md",
     "interactive-widgets.md",
+    "opening.md",
     "page-design.md",
     "page-structure.md",
+    "upkeep.md",
     "widget-packs.md",
 }
 PAGES_PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "zoom")
@@ -88,7 +90,11 @@ EXPECTED_PAGES_FILES = {
     *(f"references/sample-pages/attn-03-{look}.html" for look in ("handout", "blueprint", "vermilion")),
 }
 PAGES_MAIN_MAX_LINES = 150
-PAGES_TEXT_MAX_BYTES = 67_000
+# SKILL.md loads whenever the skill runs and page-structure.md is read before every fragment, so they get the
+# tightest caps; every other reference is read only when its moment comes and is capped on its own.
+PAGES_MAIN_MAX_BYTES = 12_000
+PAGES_EVERY_WRITE_MAX_BYTES = 11_500
+PAGES_REFERENCE_MAX_BYTES = 12_000
 PAGES_TEMPLATE_MAX_BYTES = 170_000
 PAGES_LOOK_MAX_BYTES = 16_000
 PAGES_PACK_MAX_BYTES = 16_000
@@ -362,8 +368,11 @@ def test_lesson_pages_frontmatter_main_and_budgets_stay_compact() -> None:
     keys = {line.split(":", 1)[0].strip() for line in match.group("body").splitlines() if line.strip()}
     assert keys == {"name", "description"}
     assert len(text.splitlines()) <= PAGES_MAIN_MAX_LINES
-    documents = [PAGES_ROOT / "SKILL.md", *sorted((PAGES_ROOT / "references").glob("*.md"))]
-    assert sum(len(path.read_bytes()) for path in documents) <= PAGES_TEXT_MAX_BYTES
+    assert len((PAGES_ROOT / "SKILL.md").read_bytes()) <= PAGES_MAIN_MAX_BYTES
+    assert len((PAGES_ROOT / "references" / "page-structure.md").read_bytes()) <= PAGES_EVERY_WRITE_MAX_BYTES
+    for reference in (PAGES_ROOT / "references").glob("*.md"):
+        if reference.name != "page-structure.md":
+            assert len(reference.read_bytes()) <= PAGES_REFERENCE_MAX_BYTES, reference.name
     assert len((PAGES_ROOT / "assets" / "lesson-template.html").read_bytes()) <= PAGES_TEMPLATE_MAX_BYTES
     for look in (PAGES_ROOT / "assets" / "looks").glob("*.css"):
         assert len(look.read_bytes()) <= PAGES_LOOK_MAX_BYTES, look.name

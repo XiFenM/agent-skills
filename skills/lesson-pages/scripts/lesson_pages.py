@@ -3,8 +3,8 @@
 
 A lesson page is a derived reading surface for a guide-learning lesson. This
 tool never decides what to teach and never records progress, evidence or
-mastery. Every write touches only the one page named on the command line,
-refuses symbolic links, refuses to produce a page that fails ``check``, and
+mastery. Every write touches only the one page named on the command line
+(``continue`` also links the new part from that page), refuses symbolic links, refuses to produce a page that fails ``check``, and
 refuses to replace a page that changed after it was read. Nothing is staged,
 committed or published.
 """
@@ -41,9 +41,20 @@ SLOT_NAMES = ("lang", "id", "key", "date", "title_full", "title", "crumb", "spin
 TEMPLATE_SLOTS = tuple("{{lp:" + name + "}}" for name in SLOT_NAMES)
 SLOT_PATTERN = re.compile(r"\{\{lp:(" + "|".join(SLOT_NAMES) + r")\}\}")
 MAX_PAGE_BYTES = 2 * 1024 * 1024
-SOFT_PAGE_BYTES = 400 * 1024
+SOFT_PAGE_BYTES = 1536 * 1024
 MAX_FRAGMENT_BYTES = 256 * 1024
 MAX_FIND_BYTES = 4 * 1024 * 1024
+# A long lesson continues on <ID>-part2.html, <ID>-part3.html, ... Minutes are content reading minutes as the
+# page counts them (about normal reading speed; studying takes longer).
+SPLIT_DUE_MINUTES = 30  # from here the next teaching segment starts a new part, unless it finishes the skeleton
+SPLIT_LIMIT_MINUTES = 45  # no teaching segment takes a part past this
+SPLIT_FILE_BYTES = 1024 * 1024  # a file this large starts a new part at the next segment, whatever the minutes
+MAX_PARTS = 9
+PART_ID = re.compile(r"^(.+)-part([2-9])$")
+PART_LINK_IDS = ("part-prev", "next-part")  # written only by continue
+# Ids that chat cites stay unique across all parts of a lesson.
+CITABLE_ID = re.compile(r"^(?:node-[0-9]+|q-a?[0-9]+|add-[0-9]+-[0-9]+|fig-[1-9][0-9]*-[A-Za-z0-9_-]+|synthesis|acceptance|practice|recap)$")
+ID_ATTRIBUTE = re.compile(r"""\sid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))""")
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 ELEMENT_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 DATE_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
@@ -508,6 +519,20 @@ def _srcset_urls(value: str) -> list[str]:
     return [part.strip().split()[0] for part in value.split(",") if part.strip()]
 
 
+def _machine_path(url: str) -> bool:
+    """A link that only works on this machine: file:, a drive letter, a /-rooted path or a network path (//host)."""
+    local = _normalize_url(url)
+    return bool(re.match(r"(?i)file:", local) or re.match(r"[A-Za-z]:/", local) or local.startswith("/"))
+
+
+def _fragment_target(href: str) -> str | None:
+    """The id a same-page link like "#node-2" points to, decoded as a browser does; None for other links."""
+    from urllib.parse import unquote
+
+    url = _normalize_url(href)
+    return unquote(url[1:]) if url.startswith("#") and len(url) > 1 else None
+
+
 def _local_target(page_path: Path | None, url: str) -> Path | None:
     from urllib.parse import unquote
 
@@ -578,7 +603,7 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
     if size > MAX_PAGE_BYTES:
         report.error("page.size", f"page is {size} bytes; the hard limit is {MAX_PAGE_BYTES}")
     elif size > SOFT_PAGE_BYTES:
-        report.warn("page.size-soft", f"page is {size} bytes; continue the lesson in a part-2 page")
+        report.warn("page.size-soft", f"page is {size} bytes, close to the {MAX_PAGE_BYTES}-byte limit; keep later additions to it short")
     page = Page(source)
 
     if not page.doctype:
@@ -702,7 +727,14 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
                 report.error("resource.external", "CSS @import is not allowed; keep every style inline", element.line)
             if re.search(r"(?:https?:)?//[A-Za-z0-9.-]+\.[A-Za-z]{2,}", re.sub(r"/\*.*?\*/", "", css, flags=re.S)):
                 report.error("resource.external", "CSS contains an absolute URL; pages must open offline", element.line)
-        if element.tag in {"img", "source", "video", "audio"} and element.attrs.get("src") and not _is_external(element.attrs["src"]):
+        machine = [url for attribute in ("src", "poster", "href", "xlink:href", "srcset", "imagesrcset")
+                   if attribute in element.attrs and element.tag != "a"
+                   for url in (_srcset_urls(element.attrs[attribute]) if attribute.endswith("srcset") else [element.attrs[attribute]])
+                   if _machine_path(url)]
+        if machine:
+            report.error("link.absolute", f"<{element.tag}> uses {machine[0]!r}, which points into this machine's file system; "
+                         "inline it or use a relative path", element.line)
+        elif element.tag in {"img", "source", "video", "audio"} and element.attrs.get("src") and not _is_external(element.attrs["src"]):
             target = _local_target(page_path, element.attrs["src"])
             if target is not None and not target.is_file():
                 report.error("resource.missing", f"{element.attrs['src']!r} does not exist next to the page", element.line)
@@ -715,15 +747,28 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
             report.error("id.duplicate", f"id {element_id!r} is used {len(nodes)} times", nodes[1].line)
     for element in page.find("a"):
         href = element.attrs.get("href", "")
-        if href.startswith("#"):
-            from urllib.parse import unquote
-
-            if len(href) > 1 and unquote(href[1:]) not in page.by_id:
+        value = href or element.attrs.get("xlink:href", "")
+        local = _normalize_url(value)
+        if _machine_path(local):
+            report.error("link.absolute", f"link {value!r} points into this machine's file system; use a relative link (or "
+                         "https:// for the web) so the pages still open after the folder moves", element.line)
+            continue
+        if local.startswith("#"):
+            target_id = _fragment_target(href)
+            if target_id and target_id not in page.by_id:
                 report.error("anchor.missing", f"link {href!r} has no target", element.line)
         elif href and not _is_external(href) and not href.startswith(("mailto:", "data:")):
             target = _local_target(page_path, href)
             if target is not None and not target.exists():
                 report.error("link.missing", f"relative link {href!r} does not resolve from the page", element.line)
+            elif target is not None and "#" in href:
+                from urllib.parse import unquote
+
+                anchor = unquote(href.split("#", 1)[1])
+                same = page_path is not None and target.resolve() == page_path.resolve()
+                ids = set(page.by_id) if same else _page_ids(target)
+                if anchor and ids is not None and anchor not in ids:
+                    report.error("link.anchor", f"link {href!r}: {target.name} has no element with id {anchor!r}", element.line)
 
     # Accessibility basics.
     labelled = {node.attrs.get("for") for node in page.find("label") if node.attrs.get("for")}
@@ -759,6 +804,15 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
             if not REV_PATTERN.fullmatch(stamp) or (rev and int(stamp) > rev):
                 report.error("rev.future", f"data-rev={stamp!r} is not a revision of this page (current {rev})", element.line)
 
+    # A split lesson's page directory still matches the other pages (a hand fix to a title leaves it behind).
+    if page_path is not None and marker is not None and page.one("lp-pager") is not None:
+        try:
+            _lesson, number, parts = _lesson_parts(page_path, marker.attrs.get("data-id", ""))
+            if len(parts) > 1 and _pager_only(source, _pager_html(_lesson_directory(parts, {page_path: (source, page)}), number)) != source:
+                report.warn("pager.stale", "the page directory in the header is out of date; run render on this page")
+        except UsageError:
+            pass
+
     # Questions: one canonical text, no answers, widgets or hints while open.
     questions: dict[str, str] = {}
     for element in page.find(cls="lp-check"):
@@ -790,13 +844,21 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
                     if "lp-timer" in child.classes:
                         continue
                     report.error("check.leak", f"{element_id} is {state}; it may not contain an interactive widget", child.line)
+    elsewhere: dict[str, tuple[str, str]] | None = None
     for element in page.elements:
         target = element.attrs.get("data-reveals")
         if target is None:
             continue
         for question in [part.strip() for part in target.split(",") if part.strip()]:
             if question not in questions:
-                report.error("check.reveal", f"data-reveals names unknown question {question!r}", element.line)
+                if elsewhere is None:
+                    # A widget may reveal a question that was asked and closed on an earlier page of the lesson.
+                    elsewhere = _lesson_questions(page_path, marker.attrs.get("data-id", "")) if page_path and marker else {}
+                found = elsewhere.get(question)
+                if found is None:
+                    report.error("check.reveal", f"data-reveals names unknown question {question!r}", element.line)
+                elif found[1] != "closed":
+                    report.error("check.reveal", f"this widget reveals {question} on {found[0]}, which is still {found[1]}", element.line)
             elif questions[question] != "closed":
                 report.error("check.reveal", f"this widget reveals {question}, which is still {questions[question]}", element.line)
 
@@ -1088,6 +1150,7 @@ def _replace(path: Path, original: bytes, text: str) -> None:
 # --------------------------------------------------------------------------
 
 
+ATTRIBUTE_IN_TAG = re.compile(r"""(\s+)([^\s"'=<>/]+)(\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?""")
 ATTRIBUTE_TOKEN = re.compile(
     r"""\s*([^\s"'>/=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+))?""",
 )
@@ -1473,12 +1536,17 @@ def _ensure_packs(text: str) -> str:
     return text
 
 
-def _prepare_fragment(fragment: str, page: Page, rev: int) -> tuple[str, list[tuple[str, str]], list[str], dict[str, Any]]:
+def _prepare_fragment(fragment: str, page: Page, rev: int, elsewhere: dict[str, str] | None = None, *,
+                      reserved: Iterable[str] = PART_LINK_IDS) -> tuple[str, list[tuple[str, str]], list[str], dict[str, Any], list[str]]:
     """Validate a fragment, render its formulas and code, and stamp its blocks with ``rev``.
 
-    Returns the main HTML, the parts routed with ``<template data-lp-into>``
-    as ``(target id, html)`` pairs, every new element id, and what was rendered.
+    ``elsewhere`` maps the ids on the lesson's other parts to their files: cited
+    ids may not repeat there, and ``href="#id"`` pointing to one of them is
+    rewritten to ``file#id``. Returns the main HTML, the parts routed with
+    ``<template data-lp-into>`` as ``(target id, html)`` pairs, every new element
+    id, what was rendered, and the links rewritten.
     """
+    elsewhere = elsewhere or {}
     if len(fragment.encode("utf-8")) > MAX_FRAGMENT_BYTES:
         raise UsageError(f"fragment is larger than {MAX_FRAGMENT_BYTES} bytes; add it in smaller parts")
     parsed = Page(fragment)
@@ -1509,6 +1577,18 @@ def _prepare_fragment(fragment: str, page: Page, rev: int) -> tuple[str, list[tu
     if rendered["tex"] or rendered["code"]:
         parsed = Page(fragment)
         top = parsed.root.children
+    # A link to a block on an earlier page of the lesson names that page's file.
+    own = {element.attrs["id"] for element in parsed.elements if "id" in element.attrs}
+    targets = {node.start: _fragment_target(node.attrs.get("href", "")) for node in parsed.find("a")}
+    moved = [node for node in parsed.find("a") if targets[node.start] and targets[node.start] not in page.by_id
+             and targets[node.start] not in own and targets[node.start] in elsewhere]
+    relinked = sorted({f"{node.attrs['href']} -> {elsewhere[targets[node.start]]}#{targets[node.start]}" for node in moved})
+    if moved:
+        fragment = _edit_start_tags(fragment, {
+            node.start: (node.start_end, {"href": f"{elsewhere[targets[node.start]]}#{targets[node.start]}"}) for node in moved
+        })
+        parsed = Page(fragment)
+        top = parsed.root.children
     blocks: list[Element] = []
     for element in top:
         if element.tag == "template":
@@ -1525,6 +1605,13 @@ def _prepare_fragment(fragment: str, page: Page, rev: int) -> tuple[str, list[tu
     duplicates = sorted({element_id for element_id in new_ids if new_ids.count(element_id) > 1 or element_id in page.by_id})
     if duplicates:
         raise UsageError("ids already used: " + ", ".join(duplicates))
+    taken = sorted({element_id for element_id in new_ids if CITABLE_ID.fullmatch(element_id) and element_id in elsewhere})
+    if taken:
+        raise UsageError("ids already used on other pages of this lesson: "
+                         + ", ".join(f"{element_id} ({elsewhere[element_id]})" for element_id in taken))
+    generated = sorted(set(new_ids) & set(reserved))
+    if generated:
+        raise UsageError(", ".join(generated) + " link the pages of a long lesson; continue writes them")
     stamped = _edit_start_tags(
         fragment, {element.start: (element.start_end, {"data-rev": str(rev)}) for element in blocks}
     )
@@ -1538,7 +1625,7 @@ def _prepare_fragment(fragment: str, page: Page, rev: int) -> tuple[str, list[tu
         else:
             assert element.end is not None
             main.append(stamped[element.start:element.end])
-    return "\n".join(main), routed, new_ids, rendered
+    return "\n".join(main), routed, new_ids, rendered, relinked
 
 
 def _container(page: Page, target_id: str) -> Element:
@@ -1678,11 +1765,28 @@ def _visible_text(element: Element) -> str:
     return "".join(parts)
 
 
-def reading_minutes(html_text: str) -> int:
-    text = _visible_text(Page(html_text).root)
+def _text_minutes(text: str) -> float:
     cjk = len(re.findall(r"[\u3400-\u9fff]", text))
     words = len(re.findall(r"[A-Za-z0-9_]+", re.sub(r"[\u3400-\u9fff]", " ", text)))
-    return max(1, round(cjk / 320 + words / 180))
+    return cjk / 320 + words / 180
+
+
+def reading_minutes(html_text: str) -> int:
+    return max(1, round(_text_minutes(_visible_text(Page(html_text).root))))
+
+
+def _content_minutes(blocks: Iterable[Element]) -> float:
+    """Unrounded reading minutes of lesson content: not the glossary, sources, contents or the links between parts."""
+    return sum(
+        _text_minutes(_visible_text(block)) for block in blocks
+        if block.tag not in {"style", "script", "template"} and "lp-toc-inline" not in block.classes
+        and block.attrs.get("id") not in {"glossary", "sources", *PART_LINK_IDS}
+    )
+
+
+def page_minutes(page: Page) -> float:
+    mains = [node for node in page.find("main") if "lp-main" in node.classes]
+    return _content_minutes(mains[0].children) if mains else 0.0
 
 
 def _title(heading: Element) -> str:
@@ -1760,6 +1864,7 @@ def outline_source(source: str) -> dict[str, Any]:
         "rev": marker.attrs.get("data-rev", "") if marker else "",
         "updated": marker.attrs.get("data-updated", "") if marker else "",
         "bytes": len(source.encode("utf-8")),
+        "page_minutes": round(page_minutes(page)),
         "look": (page.find("html")[0].attrs.get("data-look") if page.find("html") else None) or "handout",
         "packs": _used_packs(page),
         "head_style_lines": lines(style[0]) if style else None,
@@ -1767,6 +1872,405 @@ def outline_source(source: str) -> dict[str, Any]:
         "append_marker_line": line_of(source.index(APPEND_MARKER)) if APPEND_MARKER in source else None,
         "blocks": blocks,
     }
+
+
+# --------------------------------------------------------------------------
+# Parts: a long lesson continues on <ID>-part2.html, <ID>-part3.html, ...
+# --------------------------------------------------------------------------
+
+
+def _marker_id(path: Path) -> str | None:
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        attributes = _marker_attributes(_head(path))
+    except OSError:
+        return None
+    return attributes.get("data-id") if attributes else None
+
+
+def _part_path(path: Path, lesson: str, number: int) -> Path:
+    return path.parent / (f"{lesson}.html" if number == 1 else f"{lesson}-part{number}.html")
+
+
+def _part_of(path: Path, page_id: str) -> tuple[str, int]:
+    """The lesson a page belongs to and its part number; <ID>-partN.html continues <ID>.html in the same folder."""
+    match = PART_ID.fullmatch(page_id)
+    if match and _marker_id(path.parent / f"{match.group(1)}.html") == match.group(1):
+        lesson, number = match.group(1), int(match.group(2))
+        try:
+            facts = _facts(path)
+        except (OSError, UnicodeDecodeError):
+            facts = None
+        if facts is not None and facts[1] == _part_path(path, lesson, number - 1).name:
+            return lesson, number
+    return page_id, 1
+
+
+def _lesson_parts(path: Path, page_id: str) -> tuple[str, int, list[tuple[int, Path]]]:
+    """(lesson id, this page's part number, every part of the lesson in order). Parts are numbered without gaps."""
+    lesson, number = _part_of(path, page_id)
+    if path.name != _part_path(path, lesson, number).name:
+        return lesson, number, [(number, path)]  # a copy under another name stands alone
+    parts: list[tuple[int, Path]] = []
+    for n in range(1, MAX_PARTS + 1):
+        candidate = _part_path(path, lesson, n)
+        expected = lesson if n == 1 else f"{lesson}-part{n}"
+        if candidate.resolve() == path.resolve() or (_marker_id(candidate) == expected and (n == 1 or _part_of(candidate, expected) == (lesson, n))):
+            parts.append((n, candidate))
+        elif n > 1:
+            break
+    return lesson, number, parts
+
+
+@functools.lru_cache(maxsize=32)
+def _parsed_facts(path: str, _mtime: int, _size: int) -> tuple[frozenset[str], str | None, tuple[tuple[str, str, str, str], ...]] | None:
+    source = Path(path).read_bytes().decode("utf-8", errors="replace")  # writing it reports a broken encoding
+    if _marker_attributes(source[:16384]) is None:
+        return None
+    page = Page(source)
+    back = page.one("part-prev")
+    previous = next((node.attrs.get("href") for node in (back.iter() if back else [])
+                     if node.tag == "a" and node.attrs.get("rel") == "prev"), None)
+    return frozenset(page.by_id), previous, tuple(_directory_entries(page, source))
+
+
+def _facts(path: Path) -> tuple[frozenset[str], str | None, tuple[tuple[str, str, str, str], ...]] | None:
+    """(ids, link back to the previous part, directory entries) of another lesson page; None when it is not one.
+    Raises OSError or UnicodeDecodeError when the file cannot be read."""
+    if path.suffix.lower() != ".html" or path.is_symlink() or not path.is_file():
+        return None
+    status = path.stat()
+    if status.st_size > MAX_PAGE_BYTES:
+        return None
+    return _parsed_facts(str(path.resolve()), status.st_mtime_ns, status.st_size)
+
+
+def _page_ids(path: Path) -> frozenset[str] | None:
+    """Every element id of another lesson page, or None when the file is not a lesson page."""
+    try:
+        facts = _facts(path)
+    except (OSError, UnicodeDecodeError):
+        return None
+    return facts[0] if facts else None
+
+
+def _elsewhere(path: Path, parts: list[tuple[int, Path]]) -> dict[str, str]:
+    """Ids on the lesson's other parts, mapped to the first file that has them."""
+    found: dict[str, str] = {}
+    for _number, other in parts:
+        if other.resolve() == path.resolve():
+            continue
+        for element_id in sorted(_page_ids(other) or ()):
+            found.setdefault(element_id, other.name)
+    return found
+
+
+def _lesson_questions(page_path: Path, page_id: str) -> dict[str, tuple[str, str]]:
+    """Question states on the lesson's other parts: id -> (file, state)."""
+    _lesson, _number, parts = _lesson_parts(page_path, page_id)
+    found: dict[str, tuple[str, str]] = {}
+    for _n, other in parts:
+        if other.resolve() == page_path.resolve():
+            continue
+        try:
+            source, _data = _read(other)
+        except (OSError, UsageError):
+            continue
+        for element in Page(source).find(cls="lp-check"):
+            if element.attrs.get("id"):
+                found.setdefault(element.attrs["id"], (other.name, element.attrs.get("data-state", "")))
+    return found
+
+
+def _split_ids(value: str) -> set[str]:
+    return {part for part in re.split(r"[\s,]+", value) if part}
+
+
+def _finishes_skeleton(page: Page, nodes: list[Element]) -> bool:
+    """True when these nodes teach every skeleton stage that no earlier node (here or on an earlier part) taught."""
+    stages = {node.attrs["id"] for node in page.find("li") if "id" in node.attrs
+              and node.parent is not None and "lp-stages" in node.parent.classes}
+    earlier = [*page.find(cls="lp-node"), *_other_page_links(page)]
+    taught = set().union(*(_split_ids(node.attrs.get("data-stages", "")) for node in earlier))
+    remaining = stages - taught
+    return bool(remaining) and remaining <= set().union(*(_split_ids(node.attrs.get("data-stages", "")) for node in nodes))
+
+
+def _split_reason(page: Page, size: int, segment: str) -> str | None:
+    """Why a teaching segment appended to this part belongs on a new part, or None when it fits here."""
+    fragment = Page(segment)
+    nodes = fragment.find(cls="lp-node")
+    adding = _content_minutes(fragment.root.children)
+    if nodes and adding > SPLIT_LIMIT_MINUTES:
+        raise UsageError(f"this segment alone reads about {round(adding)} minutes, past the {SPLIT_LIMIT_MINUTES}-minute limit "
+                         "of a page; nothing was written. Write it in smaller segments, one add each")
+    if not nodes or not page.find(cls="lp-node"):
+        return None
+    current = page_minutes(page)
+    if size >= SPLIT_FILE_BYTES:
+        return f"this page is already {size} bytes"
+    if current + adding > SPLIT_LIMIT_MINUTES:
+        return (f"this page holds about {round(current)} reading minutes and this segment adds about {round(adding)}, "
+                f"past the {SPLIT_LIMIT_MINUTES}-minute limit")
+    if current >= SPLIT_DUE_MINUTES and not _finishes_skeleton(page, nodes):
+        return f"this page already holds about {round(current)} reading minutes"
+    return None
+
+
+def _no_split(path: Path, page_id: str, page: Page, lesson: str, number: int) -> str | None:
+    """Why this page cannot continue on another page, or None when it can."""
+    if number == 1 and lesson.startswith("qa-") and page.one("intro") is None:
+        return "a Q&A page stays one page"
+    if path.name != _part_path(path, lesson, number).name:
+        return f"this page is not named {_part_path(path, lesson, number).name}, so no later page could find it"
+    if number >= MAX_PARTS:
+        return f"this lesson is at its {MAX_PARTS}-page limit; ask the learner whether to split the lesson itself"
+    return None
+
+
+def _node_label(element: Element, source: str) -> tuple[str, str]:
+    """A node's number and its heading as inline HTML (formulas and code kept; number, badges, links and ids left out)."""
+    heading = next((child for child in element.children if child.tag == "h2"), None)
+    if heading is None or heading.end_start is None:
+        return "", html.escape(element.attrs.get("id", ""))
+    number = next((node for node in heading.iter() if "lp-no" in node.classes), None)
+    cut = sorted((node.start, node.end or node.start) for node in heading.iter() if {"lp-no", "lp-new", "lp-kind"} & node.classes)
+    pieces, cursor = [], heading.start_end
+    for begin, finish in cut:
+        if begin >= cursor:
+            pieces.append(source[cursor:begin])
+            cursor = finish
+    pieces.append(source[cursor:heading.end_start])
+    inline = re.sub(r"</?a\b[^>]*>", "", "".join(pieces))
+    drop = lambda attribute: "" if attribute.group(2).lower() in {"id", "data-rev"} else attribute.group(0)  # noqa: E731
+    inline = re.sub(r"<[A-Za-z][^>]*>", lambda tag: ATTRIBUTE_IN_TAG.sub(drop, tag.group(0)), inline)
+    return (number.text().strip() if number is not None else ""), re.sub(r"\s+", " ", inline).strip()
+
+
+def _main_of(page: Page) -> Element | None:
+    return next((node for node in page.find("main") if "lp-main" in node.classes), None)
+
+
+def _nodes_of(page: Page) -> list[Element]:
+    main = _main_of(page)
+    return [node for node in (main.iter() if main else []) if "lp-node" in node.classes and node.attrs.get("id")]
+
+
+def _without_revs(markup: str) -> str:
+    return re.sub(r'\sdata-rev="[0-9]*"', "", markup)
+
+
+def _style_classes(css: str) -> set[str]:
+    return set(re.findall(r"\.([A-Za-z_][\w-]*)", re.sub(r"/\*.*?\*/", "", css, flags=re.S)))
+
+
+def _carried_styles(parts: list[tuple[str, str, Page]], classes: set[str], present: set[str]) -> list[str]:
+    """Fragment styles written on earlier pages (not their copies) that define one of ``classes`` and are not here yet."""
+    found: dict[str, str] = {}
+    for name, source, page in parts:
+        main = _main_of(page)
+        for style in (node for node in (main.iter() if main else []) if node.tag == "style" and "data-lp-style" in node.attrs):
+            css = style.text().strip()
+            if "data-lp-copy" not in style.attrs and css not in present and classes & _style_classes(css):
+                found.setdefault(css, _copy_of(source, style, name))
+    return list(found.values())
+
+
+def _with_carried_styles(path: Path, source: str, page: Page, parts: list[tuple[int, Path]], number: int,
+                         fragment: str) -> tuple[str, int]:
+    """On a later page, put in front of the fragment the earlier pages' styles for the classes it uses."""
+    parsed = Page(fragment)
+    if number < 2 or not any(node.tag != "template" for node in parsed.root.children):
+        return fragment, 0
+    used = {name for node in parsed.elements for name in node.classes if not name.startswith("lp-")}
+    present = {node.text().strip() for node in [*page.find("style"), *parsed.find("style")] if "data-lp-style" in node.attrs}
+    carried = _carried_styles(_earlier_parts(path, source, page, parts, number - 1), used, present) if used else []
+    return "\n".join([*carried, fragment]), len(carried)
+
+
+def _copy_of(source: str, entry: Element, name: str) -> str:
+    """An entry copied from ``name``, marked so later copies are taken from the original, not from this copy."""
+    start = _set_attribute(source[entry.start:entry.start_end], "data-lp-copy", name)
+    return _without_revs(start + source[entry.start_end:entry.end])
+
+
+def _opening(parts: list[tuple[str, str, Page]], number: int, first_no: str, classes: set[str], defined: set[str],
+             present: set[str]) -> str:
+    """The generated start of part ``number``: a link back, the skeleton and the earlier nodes, plus copies of the
+    glossary entries and sources (taken from the pages that wrote them) and of the fragment styles defining ``classes``."""
+    previous = parts[-1][0]
+    first_name, first_source, first_page = parts[0]
+    lines = ['<section class="lp-narrative" id="part-prev">', f"  <h2>接第 {number - 1} 页</h2>"]
+    spine = f'资料怎样配合着读见第 1 页的<a href="{first_name}#spine">资料指路</a>。' if first_page.one("spine") is not None else ""
+    start = f"从节点 {html.escape(first_no)} 讲起" if first_no else "接着讲"
+    lines.append(f'  <p>这是本课的第 {number} 页，接着<a rel="prev" href="{previous}">第 {number - 1} 页</a>{start}。'
+                 f"前面各页讲了什么，展开页头的分页目录就能看到并跳过去。{spine}</p>")
+    skeleton = first_page.one("fig-0")
+    stages = next((child for child in skeleton.children if child.tag == "ol" and "lp-stages" in child.classes), None) if skeleton else None
+    if skeleton is not None and stages is not None:
+        caption = next((child for child in skeleton.children if child.tag == "figcaption"), None)
+        lines.append("  " + _without_revs(first_source[skeleton.start:skeleton.start_end]))
+        lines.append("    " + _without_revs(first_source[stages.start:stages.end]))
+        if caption is not None:
+            lines.append("    " + _without_revs(first_source[caption.start:caption.end]))
+        lines.append("  </figure>")
+    lines.append("</section>")
+    # Copies come from the page that wrote each entry, so a fix made there reaches every later copy.
+    glossary: dict[str, str] = {}
+    sources: dict[str, str] = {}
+    for name, source, page in parts:
+        listing = page.one("glossary-list")
+        for entry in (listing.children if listing is not None else []):
+            if entry.attrs.get("id") and "data-lp-copy" not in entry.attrs and entry.attrs["id"] not in defined:
+                glossary[entry.attrs["id"]] = _copy_of(source, entry, name)
+        listing = page.one("sources-list")
+        for entry in (listing.children if listing is not None else []):
+            if entry.tag == "li" and "data-lp-copy" not in entry.attrs:
+                sources.setdefault(re.sub(r"\s+", " ", entry.text()).strip(), _copy_of(source, entry, name))
+    if glossary:
+        lines += ['<template data-lp-into="glossary-list">', *glossary.values(), "</template>"]
+    if sources:
+        lines += ['<template data-lp-into="sources-list">', *sources.values(), "</template>"]
+    return "\n".join([*_carried_styles(parts, classes, present), *lines])
+
+
+def _next_part_block(name: str, number: int, first: Element, source: str) -> str:
+    no, title = _node_label(first, source)
+    return (f'<section class="lp-narrative" id="next-part">\n  <h2>接第 {number} 页</h2>\n'
+            f'  <p>这一课在<a rel="next" href="{name}#{first.attrs["id"]}">第 {number} 页</a>接着讲，'
+            f"从{f'节点 {html.escape(no)}' if no else ''}「{title}」开始。</p>\n</section>")
+
+
+def _directory_entries(page: Page, source: str) -> list[tuple[str, str, str, str]]:
+    """(id, number, title as inline HTML, data-stages) of what a page directory lists: nodes, synthesis and acceptance."""
+    main = _main_of(page)
+    return [(node.attrs["id"], *_node_label(node, source), node.attrs.get("data-stages", ""))
+            for node in (main.iter() if main else [])
+            if node.attrs.get("id") and ("lp-node" in node.classes or node.attrs["id"] in {"synthesis", "acceptance"})]
+
+
+def _lesson_directory(parts: list[tuple[int, Path]], current: dict[Path, tuple[str, Page]]) -> list[tuple[str, list[tuple[str, str, str, str]]]]:
+    """Each page's file name and entries; pages being written are taken from ``current`` (path -> (source, page))."""
+    directory = []
+    for _n, part in parts:
+        written = next((value for key, value in current.items() if key.resolve() == part.resolve()), None)
+        if written is not None:
+            entries = _directory_entries(written[1], written[0])
+        else:
+            try:
+                facts = _facts(part)
+            except (OSError, UnicodeDecodeError) as exc:
+                raise UsageError(f"{part.name}, another page of this lesson, cannot be read ({type(exc).__name__}); fix or move it, "
+                                 "then retry") from exc
+            if facts is None:
+                raise UsageError(f"{part.name} is not a lesson page any more; restore it, then retry")
+            entries = list(facts[2])
+        directory.append((part.name, entries))
+    return directory
+
+
+def _pager_html(directory: list[tuple[str, list[tuple[str, str, str, str]]]], number: int) -> str:
+    """Page ``number``'s directory block: previous and next page, and every page with what it teaches. Links are relative."""
+    total = len(directory)
+    row = []
+    if number > 1:
+        row.append(f'<a rel="prev" href="{directory[number - 2][0]}">‹ 第 {number - 1} 页</a>')
+    row.append(f"<span>第 {number} 页，共 {total} 页</span>")
+    if number < total:
+        row.append(f'<a rel="next" href="{directory[number][0]}">第 {number + 1} 页 ›</a>')
+    lines = ['<nav class="lp-pager" id="lp-pager" aria-label="本课分页">', f'  <p class="lp-pager-row">{"".join(row)}</p>',
+             '  <details class="lp-pager-list">', "    <summary>分页目录：各页讲了什么</summary>", "    <ol>"]
+    for k, (name, entries) in enumerate(directory, start=1):
+        here = k == number
+        items = "".join(
+            f'<li><a href="{"" if here else name}#{element_id}"'
+            + (f' data-stages="{html.escape(stages)}"' if stages else "")
+            + f"><b>{html.escape(no)}</b><span>{title}</span></a></li>"
+            for element_id, no, title, stages in entries)
+        current = ' aria-current="page"' if here else ""
+        listing = f"<ol>{items}</ol>" if items else ""
+        lines.append(f'      <li{current}><a href="{"#top" if here else name}">第 {k} 页</a>{listing}</li>')
+    lines += ["    </ol>", "  </details>", "</nav>"]
+    return "\n".join(lines)
+
+
+@functools.lru_cache(maxsize=1)
+def _pager_css() -> str:
+    lines = [line for line in (_template_blocks().get("lp-base") or "").splitlines() if line.startswith(".lp-pager")]
+    return "\n".join([*lines, ".lp-cover :focus-visible { outline-color: var(--band-ink); }",
+                      "@media print { .lp-pager-list { display: none !important; } }"])
+
+
+def _pager_of(source: str) -> Element | None:
+    found = Page(source).one("lp-pager")
+    return found if found is not None and found.tag == "nav" and found.end is not None else None
+
+
+def _with_pager(source: str, pager: str) -> str:
+    """The page with its directory block replaced (see _pager_only), plus the KaTeX fonts its titles need."""
+    return _ensure_katex(_pager_only(source, pager))
+
+
+def _pager_only(source: str, pager: str) -> str:
+    """The page with its directory block replaced, or put under the header's meta line; a page whose stylesheet predates
+    the directory gets the directory's styles inside the block."""
+    if ".lp-pager-row" not in (_block(source, "style", "lp-base") or ""):
+        pager = pager.replace(">", f">\n  <style data-lp-style>\n{_pager_css()}\n  </style>", 1)
+    newline = "\r\n" if "\r\n" in source else "\n"
+    pager = pager.replace("\n", newline)
+    current = _pager_of(source)
+    if current is not None:
+        return source[:current.start] + pager + source[current.end:]
+    meta = next((node for node in Page(source).find("div", cls="lp-meta") if any(a.tag == "header" for a in node.ancestors())), None)
+    if meta is None or meta.end is None:
+        raise UsageError("the page header has no .lp-meta line to put the page directory under")
+    return source[:meta.end] + newline + "      " + pager + source[meta.end:]
+
+
+def _other_page_links(page: Page) -> list[Element]:
+    """The directory's links to nodes on the lesson's other pages."""
+    pager = page.one("lp-pager")
+    items = [node for node in (pager.iter() if pager else []) if node.tag == "li" and node.parent is not None
+             and node.parent.parent is not None and "lp-pager-list" in node.parent.parent.classes]
+    return [link for item in items if "aria-current" not in item.attrs for link in item.iter() if link.tag == "a" and link.attrs.get("data-stages")]
+
+
+def _refresh_pagers(repo: Path, parts: list[tuple[int, Path]], directory: list[tuple[str, list[tuple[str, str, str, str]]]],
+                    skip: set[Path], date: str) -> tuple[list[str], list[str]]:
+    """Bring the directory on the lesson's other pages up to date; returns (pages refreshed, pages that could not be)."""
+    refreshed, stale = [], []
+    skipped = {item.resolve() for item in skip}
+    for number, part in parts:
+        if part.resolve() in skipped:
+            continue
+        try:
+            source, data = _read(part)
+            text = _with_pager(source, _pager_html(directory, number))
+            if text == source:
+                continue
+            # Only the navigation changed, so the page keeps its revision, date and 本次新增.
+            report, _scripts = full_check(text, part)
+            if report.errors:
+                raise UsageError("the result would fail check: " + "; ".join(f"{item['code']}: {item['message']}" for item in report.errors[:3]))
+            _replace(part, data, text)
+            refreshed.append(part.relative_to(repo).as_posix())
+        except (UsageError, OSError, ValueError) as exc:
+            stale.append(f"{part.relative_to(repo).as_posix()}: {exc}; run render on that page to retry")
+    return refreshed, stale
+
+
+def _refresh_runtime(source: str) -> str | None:
+    """The page with the current template's tool-owned blocks, when its runtime is of the same generation; else None."""
+    version = re.search(r"lesson-pages runtime v([0-9]+)", _block(source, "script", "lp-runtime") or "")
+    if version is None or int(version.group(1)) < PACK_RUNTIME:
+        return None
+    newline = "\r\n" if "\r\n" in source else "\n"
+    for tag, element_id in (("style", "lp-base"), ("script", "lp-boot"), ("script", "lp-runtime")):
+        fresh = _template_blocks()[element_id].replace("\n", newline)
+        source = re.sub(rf'(<{tag}\b[^>]*\bid="{element_id}"[^>]*>)(.*?)(</{tag}>)',
+                        lambda match: match.group(1) + fresh + match.group(3), source, count=1, flags=re.S)
+    return source
 
 
 # --------------------------------------------------------------------------
@@ -1778,9 +2282,14 @@ def command_new(args: argparse.Namespace) -> dict[str, Any]:
     repo = _repo(args.repo)
     if not ID_PATTERN.fullmatch(args.id) or len(args.id) > 64:
         raise UsageError("--id must be a lowercase hyphen id of at most 64 characters")
+    if PART_ID.fullmatch(args.id):
+        raise UsageError("ids ending in -part2 to -part9 are kept for the later pages of a long lesson; choose another id "
+                         "(for example -p2) and say so in the lesson confirmation")
     if not LANG_PATTERN.fullmatch(args.lang):
         raise UsageError("--lang must be a language tag such as zh-CN")
     path = _page_path(repo, args.page, must_exist=False, writing=True)
+    if path.name != f"{args.id}.html":
+        raise UsageError(f"the file name is the page id: name the page {args.id}.html")
     if path.exists():
         raise UsageError(f"{args.page} already exists; continue it with add")
     if not path.parent.is_dir():
@@ -1813,7 +2322,7 @@ def command_new(args: argparse.Namespace) -> dict[str, Any]:
         text = re.sub(r'\s*<p class="lp-crumb"></p>', "", text)
     if args.fragment:
         shell = Page(text)
-        main, routed, fragment_ids, rendered = _prepare_fragment(_read_fragment(args.fragment), shell, 1)
+        main, routed, fragment_ids, rendered, _relinked = _prepare_fragment(_read_fragment(args.fragment), shell, 1)
         text = _ensure_katex(_insert(text, shell, main, routed, marker=CONTENT_MARKER))
     else:
         rendered = {"tex": 0, "code": 0}
@@ -1833,26 +2342,268 @@ def command_new(args: argparse.Namespace) -> dict[str, Any]:
         "inserted_ids": fragment_ids,
         "rendered": rendered,
         "reading_minutes": reading_minutes(text.split('<main', 1)[-1]),
+        "page_minutes": round(page_minutes(Page(text))),
         "check": report.as_dict(),
         "scripts": scripts,
     }
 
 
+def _on_other_part(page: Page, element_id: str | None, elsewhere: dict[str, str], command: str) -> None:
+    if element_id and page.one(element_id) is None and element_id in elsewhere:
+        raise UsageError(f"#{element_id} is on {elsewhere[element_id]}, another page of this lesson; run {command} on that page")
+
+
+def _not_a_copy(page: Page, element_id: str | None) -> None:
+    """Glossary entries and sources copied from an earlier page are supplemented where they were written."""
+    element = page.one(element_id) if element_id else None
+    copy = next((node for node in ([element, *element.ancestors()] if element else []) if node.attrs.get("data-lp-copy")), None)
+    if copy is not None:
+        raise UsageError(f"#{copy.attrs.get('id', element_id)} on this page is a copy of the entry on {copy.attrs['data-lp-copy']}; "
+                         "supplement it there, and pages made later copy it from there")
+
+
+def _routed_targets(fragment: str) -> list[str]:
+    return [node.attrs.get("data-lp-into", "") for node in Page(fragment).root.children if node.tag == "template"]
+
+
+def _earlier_parts(path: Path, source: str, page: Page, parts: list[tuple[int, Path]], upto: int) -> list[tuple[str, str, Page]]:
+    """(file name, source, parsed page) of parts 1 to ``upto``; ``path`` is the page already read as ``source``."""
+    earlier = []
+    for n, part in parts:
+        if n > upto:
+            break
+        if part.resolve() == path.resolve():
+            earlier.append((part.name, source, page))
+        else:
+            part_source = _read(part)[0]
+            earlier.append((part.name, part_source, Page(part_source)))
+    return earlier
+
+
 def command_add(args: argparse.Namespace) -> dict[str, Any]:
     repo = _repo(args.repo)
     path, source, data, page, rev = _load_page(repo, args.page, args.id)
+    lesson, number, parts = _lesson_parts(path, args.id)
+    elsewhere = _elsewhere(path, parts)
+    fragment = _read_fragment(args.fragment)
+    targets = _routed_targets(fragment)
+    for target in (args.into or args.after, *targets):
+        _on_other_part(page, target, elsewhere, "add")
+        _not_a_copy(page, target)
+    appends = args.into is None and args.after is None
+    has_main = any(node.tag != "template" for node in Page(fragment).root.children)
+    if appends and number < len(parts) and has_main:
+        raise UsageError(f"{path.name} continues on {parts[number][1].name}; append new blocks to the last page, "
+                         f"{parts[-1][1].name}, and put supplements into their node with --into")
+    fragment, carried = _with_carried_styles(path, source, page, parts, number, fragment)
     new_rev = rev + 1
-    main, routed, ids, rendered = _prepare_fragment(_read_fragment(args.fragment), page, new_rev)
+    main, routed, ids, rendered, relinked = _prepare_fragment(fragment, page, new_rev, elsewhere)
+    reason = _split_reason(page, len(data), main) if main and appends else None
+    blocked = _no_split(path, args.id, page, lesson, number) if reason else None
+    if reason and not blocked:
+        following = _part_path(path, lesson, number + 1).relative_to(repo).as_posix()
+        message = (f"{reason}, so this teaching segment starts a new page; nothing was written. Run the same command "
+                   f"with continue in place of add; it creates {following}")
+        local = [target for target in targets if target not in {"glossary-list", "sources-list"}]
+        if local:
+            message += (f". The fragment also routes parts into {', '.join('#' + target for target in local)} on this page: "
+                        "add those parts here first, then continue with the rest")
+        broken = full_check(source, path)[0].errors
+        if broken:
+            message += ". This page already fails check, which would also stop continue: " + "; ".join(
+                f"{item['code']}: {item['message']}" for item in broken[:3])
+        raise UsageError(message)
     text = _ensure_packs(_ensure_katex(_insert(source, page, main, routed, marker=APPEND_MARKER, into=args.into, after=args.after)))
-    text = _bump(text, Page(text), new_rev, _today(args.date))
-    return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
+    written = Page(text)
+    directory = _lesson_directory(parts, {path: (text, written)}) if len(parts) > 1 else []
+    if directory:
+        text = _with_pager(text, _pager_html(directory, number))
+        written = Page(text)
+    text = _bump(text, written, new_rev, _today(args.date))
+    result = _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
                    extra={"inserted_ids": ids, "anchors": ["#" + element_id for element_id in ids], "rendered": rendered,
-                          "reading_minutes": reading_minutes(main + "".join(part for _target, part in routed))})
+                          **({"relinked": relinked} if relinked else {}),
+                          **({"carried_styles": carried} if carried else {}),
+                          **({"note": f"{reason}, but {blocked}; the segment stays on this page"} if blocked else {}),
+                          "reading_minutes": reading_minutes(main + "".join(part for _target, part in routed)),
+                          "page_minutes": round(page_minutes(written))})
+    return _with_refreshed(result, repo, parts, directory, {path}, _today(args.date))
+
+
+def _with_refreshed(result: dict[str, Any], repo: Path, parts: list[tuple[int, Path]],
+                    directory: list[tuple[str, list[tuple[str, str, str, str]]]], skip: set[Path], date: str) -> dict[str, Any]:
+    if not directory:
+        return result
+    refreshed, stale = _refresh_pagers(repo, parts, directory, skip, date)
+    return {**result, **({"directory_refreshed": refreshed} if refreshed else {}), **({"directory_stale": stale} if stale else {})}
+
+
+def _linked_text(path: Path, source: str, page: Page, rev: int, following: Path, number: int, first: Element,
+                 first_source: str, date: str, pager: str) -> tuple[str, bool]:
+    """This page with #next-part appended, its directory updated, and the current runtime when its runtime is of the
+    same generation."""
+    main, routed, _ids, _rendered, _relinked = _prepare_fragment(_next_part_block(following.name, number, first, first_source),
+                                                                 page, rev + 1, reserved=())
+    text = _with_pager(_ensure_katex(_insert(source, page, main, routed, marker=APPEND_MARKER)), pager)
+    refreshed = _refresh_runtime(text)
+    text = _bump(refreshed or text, Page(refreshed or text), rev + 1, date)
+    return text, refreshed is not None
+
+
+def _first_node(page: Page) -> Element | None:
+    return next(iter(_nodes_of(page)), None)
+
+
+PAGE_STYLE_FROM = "/* 以下照抄第 1 页的 #lp-page-style，改动写在第 1 页 */"
+PAGE_STYLE_END = "/* 以上照抄第 1 页 */"
+RUNTIME_KEPT = ("this page keeps an older runtime, so its header still says 全文约 and stations taught on later pages are not "
+                "linked from it (they show 未开通, or no mark on the oldest pages); its 接第 N 页 block still leads on")
+
+
+def command_continue(args: argparse.Namespace) -> dict[str, Any]:
+    repo = _repo(args.repo)
+    path, source, data, page, rev = _load_page(repo, args.page, args.id)
+    lesson, number, parts = _lesson_parts(path, args.id)
+    rel = lambda target: target.relative_to(repo).as_posix()  # noqa: E731 - tiny local helper
+    if path.name != _part_path(path, lesson, number).name:
+        raise UsageError(f"continue works on {_part_path(path, lesson, number).name}; {path.name} is a copy under another name")
+    if number == 1 and lesson.startswith("qa-") and page.one("intro") is None:
+        raise UsageError("a Q&A page stays one page; continue is for lessons")
+    following = _part_path(path, lesson, number + 1)
+    date = _today(args.date)
+    if not args.fragment:
+        # Repair: the next part was written but the link to it from this page was not.
+        if page.one("next-part") is not None or _marker_id(following) != f"{lesson}-part{number + 1}":
+            raise UsageError(f"nothing to repair: {path.name} has no unlinked next page; pass --fragment to start one")
+        later_source, _later_data = _read(following)
+        later = Page(later_source)
+        back = later.one("part-prev")
+        first = _first_node(later)
+        if back is None or first is None or not any(node.tag == "a" and node.attrs.get("rel") == "prev"
+                                                    and node.attrs.get("href") == path.name for node in back.iter()):
+            raise UsageError(f"{following.name} does not start by linking back to {path.name} with a node after it; link it by hand")
+        whole = parts if any(part.resolve() == following.resolve() for _n, part in parts) else [*parts, (number + 1, following)]
+        directory = _lesson_directory(whole, {})
+        text, refreshed = _linked_text(path, source, page, rev, following, number + 1, first, later_source, date,
+                                       _pager_html(directory, number))
+        result = _finish(path, data, text, page_rel=rel(path), rev=rev + 1, extra={"linked": rel(following)})
+        result = _with_refreshed(result, repo, whole, directory, {path}, date)
+        return {**result, **({} if refreshed else {"note": RUNTIME_KEPT})}
+    if number < len(parts):
+        raise UsageError(f"{path.name} already continues on {parts[number][1].name}; continue from the last page, {parts[-1][1].name}")
+    if following.exists():
+        raise UsageError(f"{rel(following)} already exists and is not part of this lesson; move it away first")
+    if number + 1 > MAX_PARTS:
+        raise UsageError(f"a lesson has at most {MAX_PARTS} pages; ask the learner whether to split the lesson itself")
+    fragment = _read_fragment(args.fragment)
+    probe = Page(fragment)
+    first_raw = next((node for node in probe.find(cls="lp-node") if node.attrs.get("id")), None)
+    if first_raw is None:
+        raise UsageError("continue starts a new page with a teaching segment, but the fragment has no .lp-node with an id")
+    earlier = _earlier_parts(path, source, page, parts, number)
+    elsewhere = _elsewhere(following, parts)
+    for target in _routed_targets(fragment):
+        if target not in {"glossary-list", "sources-list"} and target in elsewhere:
+            raise UsageError(f"the fragment routes a part into #{target}, which is on {elsewhere[target]}; add that part there "
+                             "first, then continue with the rest")
+    # The header repeats page 1's title, crumb, spine line and language with the page number; the look is the last page's.
+    first_name, first_source, first_page = earlier[0]
+    title = next(iter(first_page.find("h1", cls="lp-title")), None)
+    crumb = next(iter(first_page.find("p", cls="lp-crumb")), None)
+    titles = first_page.find("title")
+    meta = next(iter(first_page.find("div", cls="lp-meta")), None)
+    crumb_html = first_source[crumb.start_end:crumb.end_start].strip() if crumb is not None and crumb.end_start else ""
+    title_full = titles[0].text().strip() if titles else lesson
+    label = f"第 {number + 1} 页"
+    roots, first_roots = page.find("html"), first_page.find("html")
+    values = {
+        "lang": html.escape(first_roots[0].attrs.get("lang", "zh-CN") if first_roots else "zh-CN", quote=True),
+        "id": f"{lesson}-part{number + 1}",
+        "key": secrets.token_hex(6),
+        "date": date,
+        "title_full": html.escape(f"{title_full} · {label}"),
+        "title": first_source[title.start_end:title.end_start] if title is not None and title.end_start else html.escape(lesson),
+        "crumb": f"{crumb_html} · {label}" if crumb_html else label,
+        "spine": "\n        ".join(first_source[node.start:node.end] for node in (meta.children if meta else [])
+                                   if node.tag == "p" and "data-lp-auto" not in node.attrs),
+        "sources": "",
+    }
+    text = SLOT_PATTERN.sub(lambda match: values[match.group(1)], TEMPLATE.read_text(encoding="utf-8"))
+    # Page-wide adjustments: page 1's current ones (a fix there reaches pages made later), then those the last page wrote itself.
+    own = _block(source, "style", "lp-page-style") or "" if number > 1 else ""
+    own = re.sub(re.escape(PAGE_STYLE_FROM) + r".*?" + re.escape(PAGE_STYLE_END) + r"\n?", "", own, flags=re.S)
+    own = own.replace(_block(TEMPLATE.read_text(encoding="utf-8"), "style", "lp-page-style") or "\0", "").strip("\n")
+    first_css = (_block(first_source, "style", "lp-page-style") or "").strip("\n")
+    css = f"\n{PAGE_STYLE_FROM}\n{first_css}\n{PAGE_STYLE_END}\n" + (own + "\n" if own.strip() else "")
+    text = re.sub(r'(<style id="lp-page-style">)(.*?)(</style>)', lambda match: match.group(1) + css + match.group(3),
+                  text, count=1, flags=re.S)
+    shell = Page(text)
+    used = {name for node in probe.elements for name in node.classes if not name.startswith("lp-")}
+    defined = {node.attrs["id"] for node in probe.elements if node.attrs.get("id")}
+    own_styles = {node.text().strip() for node in probe.find("style") if "data-lp-style" in node.attrs}
+    opening = _opening(earlier, number + 1, _node_label(first_raw, fragment)[0], used, defined, own_styles)
+    main, routed, _ids, _rendered, _relinked = _prepare_fragment(opening, shell, 1, elsewhere, reserved=())
+    text = _insert(text, shell, main, routed, marker=CONTENT_MARKER)
+    shell = Page(text)
+    main, routed, ids, rendered, relinked = _prepare_fragment(fragment, shell, 2, elsewhere)
+    reason = _split_reason(page, len(data), main)
+    if reason is None:
+        raise UsageError(f"{path.name} still has room for this segment (about {round(page_minutes(page))} reading minutes so far); "
+                         "use add")
+    text = _insert(text, shell, main, routed, marker=CONTENT_MARKER)
+    text = text.replace(CONTENT_MARKER + "\n", "").replace(CONTENT_MARKER, "")
+    look = (roots[0].attrs.get("data-look") if roots else None) or "handout"
+    text = _ensure_packs(_apply_look(_ensure_katex(text), look))
+    whole = [*parts, (number + 1, following)]
+    directory = _lesson_directory(whole, {following: (text, Page(text))})
+    text = _with_pager(text, _pager_html(directory, number + 1))
+    written = Page(text)
+    text = _bump(text, written, 2, date)
+    report, scripts = full_check(text, following)
+    if report.errors:
+        raise UsageError("the new page would fail check; nothing was written:\n"
+                         + "\n".join(f"  {item['code']}: {item['message']}" for item in report.errors))
+    first = _first_node(written)
+    assert first is not None  # the segment's node is on the new page
+    # Check the previous page with its link before anything is written; only the link to the page not yet written may fail.
+    linked, refreshed = _linked_text(path, source, page, rev, following, number + 1, first, text, date, _pager_html(directory, number))
+    blocking = [item for item in full_check(linked, path)[0].errors
+                if not (item["code"] in {"link.missing", "link.anchor"} and following.name in item["message"])]
+    if blocking:
+        raise UsageError(f"{path.name} already fails check, so it could not link the new page; nothing was written. Fix it first:\n"
+                         + "\n".join(f"  {item['code']}: {item['message']}" for item in blocking))
+    _write_new(following, text)
+    try:
+        previous = _finish(path, data, linked, page_rel=rel(path), rev=rev + 1, extra={})
+    except UsageError as exc:
+        raise UsageError(f"{rel(following)} was written, but linking it from {path.name} failed: {exc}\nRun continue "
+                         f"--page {rel(path)} --id {args.id} without --fragment to add the link") from exc
+    result = {
+        "page": rel(following),
+        "id": values["id"],
+        "part": number + 1,
+        "rev": 2,
+        "look": look,
+        "inserted_ids": ids,
+        "anchors": ["#" + element_id for element_id in ids],
+        "rendered": rendered,
+        **({"relinked": relinked} if relinked else {}),
+        "reading_minutes": reading_minutes(main + "".join(part for _target, part in routed)),
+        "page_minutes": round(page_minutes(written)),
+        "check": report.as_dict(),
+        "scripts": scripts,
+        "previous": {"page": previous["page"], "rev": previous["rev"], "check": previous["check"],
+                     **({} if refreshed else {"note": RUNTIME_KEPT})},
+    }
+    return _with_refreshed(result, repo, whole, directory, {path, following}, date)
 
 
 def command_state(args: argparse.Namespace) -> dict[str, Any]:
     repo = _repo(args.repo)
     path, source, data, page, rev = _load_page(repo, args.page, args.id)
+    _lesson, number, parts = _lesson_parts(path, args.id)
+    elsewhere = _elsewhere(path, parts)
+    _on_other_part(page, args.question, elsewhere, "state")
     element = page.one(args.question)
     if element is None or "lp-check" not in element.classes:
         raise UsageError(f"no question block with id {args.question!r}")
@@ -1862,15 +2613,22 @@ def command_state(args: argparse.Namespace) -> dict[str, Any]:
     new_rev = rev + 1
     text = _edit_start_tags(source, {element.start: (element.start_end, {"data-state": args.to, "data-rev": str(new_rev)})})
     ids: list[str] = []
+    carried = 0
     if args.fragment:
         if args.to != "closed":
             raise UsageError("--fragment adds reference points, so it only goes with --to closed")
         edited = Page(text)
-        main, routed, ids, _rendered = _prepare_fragment(_read_fragment(args.fragment), edited, new_rev)
+        fragment = _read_fragment(args.fragment)
+        for target in _routed_targets(fragment):
+            _on_other_part(edited, target, elsewhere, "add")
+            _not_a_copy(edited, target)
+        fragment, carried = _with_carried_styles(path, text, edited, parts, number, fragment)
+        main, routed, ids, _rendered, _relinked = _prepare_fragment(fragment, edited, new_rev, elsewhere)
         text = _ensure_packs(_ensure_katex(_insert(text, edited, main, routed, marker=APPEND_MARKER, into=args.question)))
     text = _bump(text, Page(text), new_rev, _today(args.date))
     return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
-                   extra={"question": args.question, "state": args.to, "inserted_ids": ids})
+                   extra={"question": args.question, "state": args.to, "inserted_ids": ids,
+                          **({"carried_styles": carried} if carried else {})})
 
 
 def command_render(args: argparse.Namespace) -> dict[str, Any]:
@@ -1880,12 +2638,27 @@ def command_render(args: argparse.Namespace) -> dict[str, Any]:
     outdated = bool(blocks) and _katex_block_version(blocks[0].text()) != KATEX_VERSION
     text, rendered = _render_fragment(source, page, force=outdated)
     text = _ensure_packs(_ensure_katex(text, redrawn=outdated))
+    _lesson, number, parts = _lesson_parts(path, args.id)
+    directory = _lesson_directory(parts, {path: (text, Page(text))}) if len(parts) > 1 else []
+    if directory:
+        text = _with_pager(text, _pager_html(directory, number))
     if text == source:
-        return {"page": path.relative_to(repo).as_posix(), "rev": rev, "rendered": rendered, "changed": False}
-    new_rev = rev + 1
-    text = _bump(text, Page(text), new_rev, _today(args.date))
-    return _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
-                   extra={"rendered": rendered, "changed": True})
+        result = {"page": path.relative_to(repo).as_posix(), "rev": rev, "rendered": rendered, "changed": False}
+    elif directory and _with_pager(source, _pager_html(directory, number)) == text:
+        # Only the navigation changed, as in a refresh of the other pages: keep the revision, date and 本次新增.
+        report, scripts = full_check(text, path)
+        if report.errors:
+            raise UsageError("the result would fail check; nothing was written:\n"
+                             + "\n".join(f"  {item['code']}: {item['message']}" for item in report.errors))
+        _replace(path, data, text)
+        result = {"page": path.relative_to(repo).as_posix(), "rev": rev, "rendered": rendered, "changed": True,
+                  "check": report.as_dict(), "scripts": scripts}
+    else:
+        new_rev = rev + 1
+        text = _bump(text, Page(text), new_rev, _today(args.date))
+        result = _finish(path, data, text, page_rel=path.relative_to(repo).as_posix(), rev=new_rev,
+                         extra={"rendered": rendered, "changed": True})
+    return _with_refreshed(result, repo, parts, directory, {path}, _today(args.date))
 
 
 def command_look(args: argparse.Namespace) -> dict[str, Any]:
@@ -2038,9 +2811,15 @@ def command_check(args: argparse.Namespace) -> dict[str, Any]:
     path = _page_path(repo, args.page, must_exist=True)
     source, _data = _read(path)
     report, scripts = full_check(source, path)
+    page = Page(source)
+    marker = page.marker()
+    elsewhere = _elsewhere(path, _lesson_parts(path, marker.attrs.get("data-id", ""))[2]) if args.anchor and marker else {}
     for anchor in args.anchor:
-        if anchor.lstrip("#") not in Page(source).by_id:
-            report.error("anchor.cited", f"#{anchor.lstrip('#')} does not exist; do not cite it in chat")
+        element_id = anchor.lstrip("#")
+        if element_id in elsewhere and element_id not in page.by_id:
+            report.error("anchor.cited", f"#{element_id} is on {elsewhere[element_id]}, not this page; link that file in chat")
+        elif element_id not in page.by_id:
+            report.error("anchor.cited", f"#{element_id} does not exist; do not cite it in chat")
     result = {"page": path.relative_to(repo).as_posix(), **report.as_dict()}
     result["scripts"] = scripts
     return result
@@ -2050,7 +2829,28 @@ def command_outline(args: argparse.Namespace) -> dict[str, Any]:
     repo = _repo(args.repo)
     path = _page_path(repo, args.page, must_exist=True)
     source, _data = _read(path)
-    return {"page": path.relative_to(repo).as_posix(), **outline_source(source)}
+    result = {"page": path.relative_to(repo).as_posix(), **outline_source(source)}
+    lesson, number, parts = _lesson_parts(path, result["id"])
+    if len(parts) > 1:
+        # One call shows every page of a long lesson: where each block is, and the next free numbers.
+        summary = []
+        numbers = {"node": 0, "q": 0, "q-a": 0}
+        for n, part in parts:
+            part_page = Page(source if part == path else _read(part)[0])
+            main = _main_of(part_page)
+            blocks = [node.attrs["id"] for node in (main.children if main else []) if node.attrs.get("id")
+                      and node.attrs["id"] not in {"glossary", "sources"} and node.tag not in {"style", "script"}]
+            questions = {node.attrs["id"]: node.attrs.get("data-state", "") for node in part_page.find(cls="lp-check") if node.attrs.get("id")}
+            for element_id in [*blocks, *questions]:
+                found = re.fullmatch(r"(node|q-a|q)-?([0-9]+)", element_id)
+                if found:
+                    numbers[found.group(1)] = max(numbers[found.group(1)], int(found.group(2)))
+            summary.append({"page": part.relative_to(repo).as_posix(), "id": lesson if n == 1 else f"{lesson}-part{n}", "part": n,
+                            "page_minutes": round(page_minutes(part_page)),
+                            "blocks": blocks, "questions": questions})
+        result["lesson"] = {"id": lesson, "part": number, "parts": summary,
+                            "next": {"node": numbers["node"] + 1, "q": numbers["q"] + 1, "q-a": numbers["q-a"] + 1}}
+    return result
 
 
 def _marker_attributes(head: str) -> dict[str, str] | None:
@@ -2095,15 +2895,24 @@ def command_find(args: argparse.Namespace) -> dict[str, Any]:
                 roots = head_page.find("html")
                 if args.id and attributes.get("data-id") != args.id:
                     continue
+                lesson, part = _part_of(candidate, attributes.get("data-id", ""))
+                if args.lesson and lesson != args.lesson:
+                    continue
                 title = re.search(r"<title>(.*?)</title>", head, re.S)
                 pages.append({
                     "page": candidate.relative_to(repo).as_posix(),
                     "id": attributes.get("data-id", ""),
+                    "lesson": lesson,
+                    "part": part,
+                    **({"misnamed": True} if candidate.name != _part_path(candidate, lesson, part).name else {}),
                     "rev": int(attributes["data-rev"]) if REV_PATTERN.fullmatch(attributes.get("data-rev", "")) else None,
                     "updated": attributes.get("data-updated", ""),
                     "title": html.unescape(title.group(1).strip()) if title else "",
                     "look": (roots[0].attrs.get("data-look") if roots else None) or "handout",
                 })
+    # A lesson's pages are listed in reading order: page 1, then part 2, part 3, ...
+    pages.sort(key=lambda item: (PurePosixPath(item["page"]).parent.as_posix(), item["lesson"], item.get("misnamed", False),
+                                 item["part"], item["page"]))
     result: dict[str, Any] = {"pages": pages}
     if skipped:
         result["skipped"] = skipped
@@ -2179,12 +2988,14 @@ def make_server(root: Path, host: str = "127.0.0.1", port: int = 8765, allowed_h
 
         def list_directory(self, path):  # noqa: ANN001 - stdlib signature
             directory = Path(path)
-            names = sorted(
-                entry.name for entry in directory.iterdir()
-                if not entry.name.startswith(".") and not entry.is_symlink()
-                and entry.is_file() and entry.suffix.lower() == ".html"
-                and _marker_attributes(_head(entry)) is not None
-            )
+            pages = []
+            for entry in directory.iterdir():
+                if entry.name.startswith(".") or entry.is_symlink() or not entry.is_file() or entry.suffix.lower() != ".html":
+                    continue
+                attributes = _marker_attributes(_head(entry))
+                if attributes is not None:
+                    pages.append((*_part_of(entry, attributes.get("data-id", "")), entry.name))
+            names = [name for _lesson, _part, name in sorted(pages)]  # a lesson's pages in reading order
             items = "".join(f'<li><a href="{quote(name)}">{html.escape(name)}</a></li>' for name in names)
             body = f'<!doctype html><meta charset="utf-8"><title>课程网页</title><ul>{items}</ul>'.encode("utf-8")
             self.send_response(200)
@@ -2256,6 +3067,13 @@ def _parser() -> argparse.ArgumentParser:
     where.add_argument("--after", help="insert right after the element with this id")
     add.add_argument("--date", help=argparse.SUPPRESS)
 
+    cont = sub.add_parser("continue", help="start the next page of a long lesson with a teaching segment, and link it from this page")
+    common(cont)
+    cont.add_argument("--page", required=True, help="the lesson's last page")
+    cont.add_argument("--id", required=True, help="the page id; must match the page's marker")
+    cont.add_argument("--fragment", help="the teaching segment that add refused; without it, only a missing link is repaired")
+    cont.add_argument("--date", help=argparse.SUPPRESS)
+
     state = sub.add_parser("state", help="move a question block: open to answered, closed or replaced; answered to closed or replaced")
     common(state)
     state.add_argument("--page", required=True)
@@ -2297,6 +3115,7 @@ def _parser() -> argparse.ArgumentParser:
     common(find)
     find.add_argument("--in", dest="collection", action="append", required=True)
     find.add_argument("--id")
+    find.add_argument("--lesson", help="every page of one lesson, in reading order")
 
     serve = sub.add_parser("serve", help="serve one collection read-only on localhost")
     common(serve)
@@ -2311,6 +3130,7 @@ def _parser() -> argparse.ArgumentParser:
 COMMANDS = {
     "new": command_new,
     "add": command_add,
+    "continue": command_continue,
     "state": command_state,
     "render": command_render,
     "look": command_look,

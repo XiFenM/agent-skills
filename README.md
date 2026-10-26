@@ -23,7 +23,7 @@
 - [`memo-cards`](docs/user-guides/memo-cards.md)
 - [`resource-planning`](docs/user-guides/resource-planning.md)
 
-迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D58 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态，D50 让 guide-learning 的记录映射支持并行计划，D51 让有参考资料的课程先向学习者指明资料位置与阅读范围，D52 把学习者画像定为必备输入并在缺失时主动访谈建立，D53 让 memo-cards 首次制卡就核对覆盖、事实与回忆质量，D54 让 memo-cards 的上传器在确认后更新它上传过的卡片，D55 新增 `lesson-pages`，把课程讲解写进逐段生长的离线单文件网页，对话只留指路、检查题和反馈，D56 让课程网页的公式与代码在写入时排版，D57 让课程网页可按课程选择蓝图或朱批风格，并加入地铁线路、术语注音、可调段落与学习地层，D58 把只有部分页面用得到的部件做成只写进用到它的页面的部件包，新增海报式开场、对数尺、误区对照、类比卡、公式解剖、逐行推导、执行回放与可缩放的系统结构图，并加入小地铁、按版本回看与深链聚光。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
+迁移历史、中央升级结果及当前遗留问题记录在 [`docs/migration-baseline.md`](docs/migration-baseline.md)。学习类 Skill 与创作工作流的 D1–D60 决策、实现设计和迁移边界记录在 [`docs/learning-skills-review.md`](docs/learning-skills-review.md)；其中 D48 把学习类 Skill 重构为以理解为中心并精简了状态与产物流程，D49 让制卡与英语回顾的素材读取不再依赖 Git 跟踪状态，D50 让 guide-learning 的记录映射支持并行计划，D51 让有参考资料的课程先向学习者指明资料位置与阅读范围，D52 把学习者画像定为必备输入并在缺失时主动访谈建立，D53 让 memo-cards 首次制卡就核对覆盖、事实与回忆质量，D54 让 memo-cards 的上传器在确认后更新它上传过的卡片，D55 新增 `lesson-pages`，把课程讲解写进逐段生长的离线单文件网页，对话只留指路、检查题和反馈，D56 让课程网页的公式与代码在写入时排版，D57 让课程网页可按课程选择蓝图或朱批风格，并加入地铁线路、术语注音、可调段落与学习地层，D58 把只有部分页面用得到的部件做成只写进用到它的页面的部件包，新增海报式开场、对数尺、误区对照、类比卡、公式解剖、逐行推导、执行回放与可缩放的系统结构图，并加入小地铁、按版本回看与深链聚光，D59 让很长的课按正文阅读时间分成几页，每页页头有上一页、下一页和分页目录，页间都是相对链接，D60 把课程网页给 Agent 看的文档按读取时机拆开、预算按用途分开算。D41 及后续精确文章交接修复已发布；PlanA 的 version 2 配置、历史产物适配与资源 bootstrap 也已发布。面向维护者的工具实现说明放在 [`docs/dev/`](docs/dev/)。
 
 ## 目录
 

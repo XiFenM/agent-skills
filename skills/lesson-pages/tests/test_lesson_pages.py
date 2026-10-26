@@ -1442,7 +1442,7 @@ def test_every_widget_pack_builds_from_the_fixture(built: Path, capsys) -> None:
     code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
                         "--fragment", fixture, "--date", "2026-10-24")
     assert code == 0 and result["check"]["ok"], result
-    assert {item["code"] for item in result["check"]["warnings"]} <= {"page.size-soft"}
+    assert result["check"]["warnings"] == [], result
     source = _source(built)
     assert lp.outline_source(source)["packs"] == sorted(lp.PACKS)
     for name in lp.PACKS:
@@ -1516,3 +1516,540 @@ def test_traced_values_with_spaces_pass_check_unchanged(built: Path, tmp_path: P
               + result["html"] + '</ol><figcaption><b>图 9.3</b>拼接字符串。</figcaption></figure>')
     code, result = _add(capsys, built, tmp_path, figure, "--into", "node-1")
     assert code == 0 and result["check"]["warnings"] == [], result
+
+
+# ---------------------------------------------------------------- parts of a long lesson
+
+PART2 = "learning/pages/attn-03-part2.html"
+PART3 = "learning/pages/attn-03-part3.html"
+PROSE = "这一段把页面撑长，讲在线 softmax 怎样在块之间传递两个统计量，并说明为什么最后才归一化。" * 3
+OPENING = (
+    '<section class="lp-narrative" id="intro"><h2>这一课要解决什么</h2><p>导入。</p>\n'
+    '<figure class="lp-figure is-wide" id="fig-0"><ol class="lp-stages lp-flow">'
+    '<li id="st-a" data-label="分块"><b>分块</b><span>第一站</span></li>'
+    '<li id="st-b" data-label="在线更新"><b>在线更新</b><span>第二站</span></li>'
+    '<li id="st-c" data-label="归一化"><b>归一化</b><span>第三站</span></li></ol>'
+    '<figcaption><b>图 0</b>全流程骨架。</figcaption></figure></section>\n'
+    '<template data-lp-into="glossary-list"><div id="g-m"><dt>m</dt><dd>每行见过的最大分数。</dd></div></template>\n'
+)
+
+
+def _segment(n: int, stages: str, q: int, paragraphs: int = 3, extra: str = "") -> str:
+    body = "".join(f"  <p>{PROSE}</p>\n" for _ in range(paragraphs))
+    return (f'<section class="lp-node" id="node-{n}" data-stages="{stages}">\n  <h2><span class="lp-no">{n}</span>第 {n} 个节点</h2>\n'
+            f'  <p class="lp-lead">节点 {n} 的结论。</p>\n{body}{extra}</section>\n'
+            f'<section class="lp-check" id="q-{q}" data-state="open">\n  <h3>检查 {q}<span class="lp-kind">预测</span></h3>\n'
+            f'  <p class="lp-ask">节点 {n} 之后会怎样？</p>\n</section>\n')
+
+
+def _write(capsys, repo: Path, tmp_path: Path, command: str, page: str, page_id: str, text: str, *extra: str) -> tuple[int, dict]:
+    fragment = _fragment(tmp_path, f"{command}-{page_id}-{abs(hash(text))}.html", text)
+    return _run(capsys, command, "--repo", str(repo), "--page", page, "--id", page_id, "--fragment", fragment,
+                "--date", "2026-10-26", *extra)
+
+
+@pytest.fixture()
+def lesson(repo: Path, tmp_path: Path, capsys, monkeypatch) -> Path:
+    """A page holding two nodes, with the split thresholds scaled down to a few minutes."""
+    monkeypatch.setattr(lp, "SPLIT_DUE_MINUTES", 2)
+    monkeypatch.setattr(lp, "SPLIT_LIMIT_MINUTES", 5)
+    code, result = _new(capsys, repo, "--look", "blueprint", "--source", "FlashAttention-2，arXiv:2307.08691 v1。",
+                        "--fragment", _fragment(tmp_path, "opening.html", OPENING))
+    assert code == 0, result
+    for n, stages in ((1, "st-a"), (2, "st-a,st-b")):
+        code, result = _write(capsys, repo, tmp_path, "add", PAGE, PAGE_ID, _segment(n, stages, n))
+        assert code == 0, result
+    return repo
+
+
+def test_page_minutes_count_lesson_content_and_size_no_longer_splits() -> None:
+    source = (REFERENCES / "sample-pages" / "attn-03-handout.html").read_text(encoding="utf-8")
+    page = lp.Page(source)
+    assert 12 < lp.page_minutes(page) < 15
+    without_glossary = re.sub(r'<section class="lp-glossary".*?</section>', "", source, flags=re.S)
+    assert abs(lp.page_minutes(lp.Page(without_glossary)) - lp.page_minutes(page)) < 0.01
+    assert lp.outline_source(source)["page_minutes"] == round(lp.page_minutes(page))
+    # The approved sample is 493 KB but reads in about 14 minutes; file size alone no longer warns.
+    assert "page.size-soft" not in {item["code"] for item in lp.check_source(source, None).as_dict()["warnings"]}
+
+
+def test_a_long_page_refuses_the_next_segment_and_continue_starts_part_two(lesson: Path, tmp_path: Path, capsys) -> None:
+    page = lesson / PAGE
+    before = page.read_bytes()
+    segment = _segment(3, "st-b", 3, extra='  <p>回看<a href="#node-1">节点 1</a>。</p>\n')
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, segment)
+    assert code == 2 and "continue in place of add" in result["error"] and PART2 in result["error"], result
+    assert page.read_bytes() == before
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, segment)
+    assert code == 0, result
+    assert (result["page"], result["id"], result["part"], result["rev"]) == (PART2, "attn-03-part2", 2, 2)
+    assert result["relinked"] == ["#node-1 -> attn-03.html#node-1"] and result["check"]["errors"] == []
+    assert result["previous"]["page"] == PAGE and result["previous"]["rev"] == 4
+    second = _source(lesson / PART2)
+    marker = lp.Page(second).marker()
+    assert marker.attrs["data-id"] == "attn-03-part2" and marker.attrs["data-key"] != lp.Page(_source(page)).marker().attrs["data-key"]
+    assert 'data-look="blueprint"' in second and "<title>分块 softmax · Attention 算子 · 第 3 课 · 第 2 页</title>" in second
+    assert '<p class="lp-crumb">Attention 算子 · 第 3 课 · 第 2 页</p>' in second
+    opening = re.search(r'<section class="lp-narrative" id="part-prev".*?</section>', second, re.S).group(0)
+    assert '<a rel="prev" href="attn-03.html">第 1 页</a>' in opening and 'id="st-c"' in opening
+    assert 'data-rev' not in opening.split(">", 1)[1]
+    assert "lp-back" not in opening and "分页目录" in opening
+    # Both pages carry the directory: previous and next page, and each page's nodes, all as relative links.
+    pager = re.search(r'<nav class="lp-pager" id="lp-pager".*?</nav>', second, re.S).group(0)
+    assert '<a rel="prev" href="attn-03.html">‹ 第 1 页</a><span>第 2 页，共 2 页</span>' in pager
+    assert '<a href="attn-03.html#node-1" data-stages="st-a"><b>1</b><span>第 1 个节点</span></a>' in pager
+    assert '<li aria-current="page"><a href="#top">第 2 页</a><ol><li><a href="#node-3" data-stages="st-b">' in pager
+    assert re.search(r'href="(?:/|file:)', pager) is None
+    assert '<div id="g-m" data-lp-copy="attn-03.html" data-rev="1">' in second and "FlashAttention-2，arXiv:2307.08691 v1。" in second
+    assert second.index('id="part-prev"') < second.index('id="node-3"') < second.index('id="glossary"')
+    assert 'href="attn-03.html#node-1">节点 1</a>' in second
+    first = _source(page)
+    link = re.search(r'<section class="lp-narrative" id="next-part" data-rev="4">.*?</section>', first, re.S).group(0)
+    assert '<a rel="next" href="attn-03-part2.html#node-3">第 2 页</a>' in link and "从节点 3「第 3 个节点」开始" in link
+    assert first.index('id="next-part"') < first.index('id="glossary"')
+    first_pager = re.search(r'<nav class="lp-pager" id="lp-pager".*?</nav>', first, re.S).group(0)
+    assert '<span>第 1 页，共 2 页</span><a rel="next" href="attn-03-part2.html">第 2 页 ›</a>' in first_pager
+    assert '<a href="attn-03-part2.html#node-3" data-stages="st-b"><b>3</b>' in first_pager
+    for target in (page, lesson / PART2):
+        assert lp.check_source(_source(target), target).errors == []
+
+
+def test_a_segment_that_finishes_the_skeleton_stays_unless_it_passes_the_limit(lesson: Path, tmp_path: Path, capsys) -> None:
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-c", 3, paragraphs=8))
+    assert code == 2 and "limit" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3, paragraphs=1).replace("st-b", "st-c"))
+    assert code == 2 and "still has room" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-c", 3))
+    assert code == 0 and result["page_minutes"] >= 3, result
+    # Synthesis, acceptance and supplements never start a page, however long the page is.
+    synthesis = '<section class="lp-narrative" id="synthesis"><h2>导师串讲</h2><p>' + PROSE * 6 + "</p></section>"
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, synthesis)
+    assert code == 0, result
+    supplement = '<aside class="lp-addendum" id="add-1-1"><h3>补充 1.1</h3><p>补一句。</p></aside>'
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, supplement, "--into", "node-1")
+    assert code == 0, result
+
+
+def test_writes_after_a_split_go_to_the_page_that_holds_the_block(lesson: Path, tmp_path: Path, capsys) -> None:
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 0, result
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(4, "st-c", 4))
+    assert code == 2 and "continues on attn-03-part2.html" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(4, "st-c", 4))
+    assert code == 2 and "already continues" in result["error"], result
+    supplement = '<aside class="lp-addendum" id="add-1-1"><h3>补充 1.1</h3><p>补一句。</p></aside>'
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", supplement, "--into", "node-1")
+    assert code == 2 and "#node-1 is on attn-03.html" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, supplement, "--into", "node-1")
+    assert code == 0, result
+    glossary = '<template data-lp-into="glossary-list"><div id="g-l"><dt>ℓ</dt><dd>指数和。</dd></div></template>'
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, glossary)
+    assert code == 0, result
+    code, result = _run(capsys, "state", "--repo", str(lesson), "--page", PART2, "--id", "attn-03-part2", "--question", "q-1", "--to", "answered")
+    assert code == 2 and "#q-1 is on attn-03.html" in result["error"], result
+    code, result = _run(capsys, "state", "--repo", str(lesson), "--page", PAGE, "--id", PAGE_ID, "--question", "q-1", "--to", "answered")
+    assert code == 0, result
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(2, "st-c", 9))
+    assert code == 2 and "node-2 (attn-03.html)" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", '<section class="lp-narrative" id="next-part"><h2>x</h2><p>x</p></section>')
+    assert code == 2 and "continue writes them" in result["error"], result
+
+
+def test_widgets_on_a_later_page_may_reveal_a_question_closed_earlier(lesson: Path, tmp_path: Path, capsys) -> None:
+    _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 0, result
+    toggle = ('<details class="lp-toggle" id="add-3-1" data-reveals="q-1"><summary>展开</summary><p>与检查 1 有关。</p></details>')
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", toggle, "--into", "node-3")
+    assert code == 2 and "reveals q-1 on attn-03.html, which is still open" in result["error"], result
+    code, result = _run(capsys, "state", "--repo", str(lesson), "--page", PAGE, "--id", PAGE_ID, "--question", "q-1", "--to", "closed")
+    assert code == 0, result
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", toggle, "--into", "node-3")
+    assert code == 0, result
+    second = lesson / PART2
+    broken = _with(_source(second), 'href="attn-03.html#node-1"', 'href="attn-03.html#node-99"')
+    assert "link.anchor" in _error_codes(broken, second)
+    (second.parent / "plain.html").write_text("<!doctype html><title>x</title>", encoding="utf-8")
+    assert "link.anchor" not in _error_codes(_with(_source(second), 'href="attn-03.html#node-1"', 'href="plain.html#nowhere"'), second)
+
+
+def test_outline_find_and_check_see_every_page(lesson: Path, tmp_path: Path, capsys) -> None:
+    _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(4, "st-b", 4))
+    assert code == 0, result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PART2, "attn-03-part2", _segment(5, "st-b", 5))
+    assert code == 0 and result["page"] == PART3, result
+    third = _source(lesson / PART3)
+    assert '<a rel="prev" href="attn-03-part2.html">第 2 页</a>' in third
+    assert '<a href="attn-03.html">第 1 页</a>' in third and '<a href="attn-03-part2.html">第 2 页</a>' in third
+    assert 'href="attn-03-part2.html#node-4"' in third
+    # Page 1's directory was refreshed when part 3 appeared, and again when part 3 gained a node.
+    assert result["directory_refreshed"] == [PAGE] and 'href="attn-03-part3.html#node-5"' in _source(lesson / PAGE)
+    code, result = _write(capsys, lesson, tmp_path, "add", PART3, "attn-03-part3", _segment(6, "st-c", 6, paragraphs=1))
+    assert code == 0 and result["directory_refreshed"] == [PAGE, PART2], result
+    assert 'href="attn-03-part3.html#node-6"' in _source(lesson / PAGE)
+    assert 'href="attn-03-part3.html#node-5"' in _source(lesson / PART2)
+    code, result = _run(capsys, "outline", "--repo", str(lesson), "--page", PART2)
+    parts = result["lesson"]["parts"]
+    assert [(part["page"], part["part"]) for part in parts] == [(PAGE, 1), (PART2, 2), (PART3, 3)]
+    assert parts[0]["questions"] == {"q-1": "open", "q-2": "open"} and "next-part" in parts[0]["blocks"]
+    assert result["lesson"]["next"] == {"node": 7, "q": 7, "q-a": 1} and result["lesson"]["part"] == 2
+    code, result = _run(capsys, "find", "--repo", str(lesson), "--in", "learning/pages", "--lesson", PAGE_ID)
+    assert [(page["page"], page["part"]) for page in result["pages"]] == [(PAGE, 1), (PART2, 2), (PART3, 3)]
+    code, result = _run(capsys, "check", "--repo", str(lesson), "--page", PART3, "--anchor", "node-5", "--anchor", "node-1")
+    assert code == 1 and [item["message"] for item in result["errors"]] == ["#node-1 is on attn-03.html, not this page; link that file in chat"]
+    code, result = _run(capsys, "new", "--repo", str(lesson), "--page", "learning/pages/x-part2.html", "--id", "x-part2", "--title", "x")
+    assert code == 2 and "choose another id" in result["error"]
+
+
+def test_continue_can_repair_a_missing_link(lesson: Path, tmp_path: Path, capsys, monkeypatch) -> None:
+    _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    original = lp._replace
+
+    def changed(path: Path, data: bytes, text: str) -> None:
+        raise lp.UsageError(f"{path.name} changed after it was read")
+
+    monkeypatch.setattr(lp, "_replace", changed)
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 2 and "was written, but linking it from attn-03.html failed" in result["error"], result
+    assert (lesson / PART2).is_file() and 'id="next-part"' not in _source(lesson / PAGE)
+    monkeypatch.setattr(lp, "_replace", original)
+    code, result = _run(capsys, "continue", "--repo", str(lesson), "--page", PAGE, "--id", PAGE_ID, "--date", "2026-10-26")
+    assert code == 0 and result["linked"] == PART2, result
+    assert '<a rel="next" href="attn-03-part2.html#node-3">' in _source(lesson / PAGE)
+    code, result = _run(capsys, "continue", "--repo", str(lesson), "--page", PAGE, "--id", PAGE_ID)
+    assert code == 2 and "nothing to repair" in result["error"]
+
+
+def test_runtime_follows_the_lesson_across_pages() -> None:
+    template = (ROOT / "assets" / "lesson-template.html").read_text(encoding="utf-8")
+    assert '#lp-pager .lp-pager-list > ol > li' in template and ".lp-pager-row" in template
+    assert "本页约" in template and "全文约" not in template and "见续篇" not in template
+
+
+def _split(capsys, lesson: Path, tmp_path: Path, segment: str) -> dict:
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, segment)
+    assert code == 2 and "continue in place of add" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, segment)
+    assert code == 0, result
+    return result
+
+
+def test_wrapped_nodes_and_rich_titles_carry_over(lesson: Path, tmp_path: Path, capsys) -> None:
+    segment = _segment(3, "st-b", 3).replace("第 3 个节点", "<code>flash_attn_varlen_qkvpacked_func</code> 与 <a href=\"#node-1\">节点 1</a>"
+                                             '，挂到 <code>&lt;div id="app"&gt;</code>')
+    result = _split(capsys, lesson, tmp_path, '<div class="x-wrap">\n' + segment + "</div>\n")
+    assert result["check"]["errors"] == [] and result["previous"]["check"]["errors"] == []
+    first = _source(lesson / PAGE)
+    assert ('从节点 3「<code>flash_attn_varlen_qkvpacked_func</code> 与 节点 1，挂到 <code>&lt;div id="app"&gt;</code>」开始' in first
+            and 'href="attn-03-part2.html#node-3"' in first)
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(4, "st-b", 4))
+    code, result = _write(capsys, lesson, tmp_path, "continue", PART2, "attn-03-part2", _segment(5, "st-b", 5))
+    assert code == 0, result
+    assert '<b>3</b><span><code>flash_attn_varlen_qkvpacked_func</code> 与 节点 1，挂到 <code>&lt;div id="app"&gt;</code></span>' in _source(lesson / PART3)
+
+
+def test_continue_writes_nothing_when_it_cannot_finish(lesson: Path, tmp_path: Path, capsys) -> None:
+    page = lesson / PAGE
+    page.write_text(_with(_source(page), "<p>导入。</p>", '<p>导入。见<a href="#my-note">我的笔记</a>。</p>'), encoding="utf-8")
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 2 and "already fails check" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 2 and "nothing was written" in result["error"] and "#my-note" in result["error"], result
+    assert not (lesson / PART2).exists()
+    page.write_text(_with(_source(page), '见<a href="#my-note">我的笔记</a>。', ""), encoding="utf-8")
+    routed = _segment(3, "st-b", 3) + '<template data-lp-into="node-2"><aside class="lp-addendum" id="add-2-1"><h3>补充</h3><p>补。</p></aside></template>'
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, routed)
+    assert code == 2 and "add those parts here first" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, routed)
+    assert code == 2 and "#node-2, which is on attn-03.html" in result["error"] and not (lesson / PART2).exists(), result
+
+
+def test_split_points_follow_the_skeleton_and_the_lesson(repo: Path, tmp_path: Path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr(lp, "SPLIT_DUE_MINUTES", 2)
+    monkeypatch.setattr(lp, "SPLIT_LIMIT_MINUTES", 8)
+    code, result = _new(capsys, repo, "--fragment", _fragment(tmp_path, "opening.html", OPENING))
+    for n, stages in ((1, "st-a,st-b,st-c"), (2, "st-a")):
+        code, result = _write(capsys, repo, tmp_path, "add", PAGE, PAGE_ID, _segment(n, stages, n))
+        assert code == 0, result
+    # Every station is already open, so a later segment finishes nothing and starts a new page at the due point.
+    code, result = _write(capsys, repo, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 2 and "continue in place of add" in result["error"], result
+    code, result = _run(capsys, "new", "--repo", str(repo), "--page", "learning/pages/lesson-3.html", "--id", "attn-04", "--title", "t")
+    assert code == 2 and "name the page attn-04.html" in result["error"]
+    code, result = _run(capsys, "new", "--repo", str(repo), "--page", "learning/pages/qa-softmax.html", "--id", "qa-softmax", "--title", "答疑")
+    for n in (1, 2, 3):
+        code, result = _write(capsys, repo, tmp_path, "add", "learning/pages/qa-softmax.html", "qa-softmax", _segment(n, "", n))
+        assert code == 0, result
+    assert "a Q&A page stays one page" in result["note"]
+    # A lesson whose id happens to start with qa- has an opening, so it still splits.
+    code, result = _run(capsys, "new", "--repo", str(repo), "--page", "learning/pages/qa-basics.html", "--id", "qa-basics", "--title", "质量保证",
+                        "--fragment", _fragment(tmp_path, "qa-opening.html", OPENING))
+    for n, stages in ((1, "st-a"), (2, "st-a"), (3, "st-b")):
+        code, result = _write(capsys, repo, tmp_path, "add", "learning/pages/qa-basics.html", "qa-basics", _segment(n, stages, n))
+    assert code == 2 and "continue in place of add" in result["error"], result
+    monkeypatch.setattr(lp, "MAX_PARTS", 1)
+    code, result = _write(capsys, repo, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 0 and "1-page limit" in result["note"], result  # the lesson cannot have another page
+
+
+def test_new_pages_take_page_one_header_styles_and_current_copies(lesson: Path, tmp_path: Path, capsys) -> None:
+    page = lesson / PAGE
+    source = _with(_source(page), "<title>分块 softmax · Attention 算子 · 第 3 课</title>", "<title>&amp;lt;tag&amp;gt; · Attention 算子 · 第 3 课</title>")
+    source = _with(source, "颜色只用 var(--…) 令牌。 */", "颜色只用 var(--…) 令牌。 */\n.attn-shape { white-space: nowrap; }")
+    page.write_text(source, encoding="utf-8")
+    style = '<style data-lp-style>\n.x-box { border: 1px solid var(--rule); }\n</style>\n'
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, style + '<p class="x-box">框。</p>', "--into", "node-1")
+    assert code == 0, result
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    second = _source(lesson / PART2)
+    assert "<title>&amp;lt;tag&amp;gt; · Attention 算子 · 第 3 课 · 第 2 页</title>" in second
+    assert ".attn-shape { white-space: nowrap; }" in second and ".x-box {" not in second
+    # Page 1 changes after the split: a new glossary entry and a corrected one.
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID,
+                          '<template data-lp-into="glossary-list"><div id="g-l"><dt>ℓ</dt><dd>指数和。</dd></div></template>')
+    assert code == 0, result
+    corrected = _with(_source(page), "<dd>每行见过的最大分数。</dd>", "<dd>每行见过的最大分数（已更正）。</dd>")
+    page.write_text(_with(corrected, ".attn-shape { white-space: nowrap; }", ".attn-shape { white-space: normal; }"), encoding="utf-8")
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(4, "st-b", 4))
+    assert code == 0, result
+    segment = (_segment(5, "st-b", 5, extra='  <p class="x-box">框。</p>\n')
+               + '<template data-lp-into="glossary-list"><div id="g-l"><dt>ℓ</dt><dd>这一段的写法。</dd></div></template>')
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", segment)
+    assert code == 2 and "continue in place of add" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PART2, "attn-03-part2", segment)
+    assert code == 0, result
+    third = _source(lesson / PART3)
+    assert "每行见过的最大分数（已更正）。" in third and "这一段的写法。" in third and third.count('id="g-l"') == 1
+    assert third.count(".x-box { border: 1px solid var(--rule); }") == 1
+    page_style = re.search(r'<style id="lp-page-style">(.*?)</style>', third, re.S).group(1)
+    assert ".attn-shape { white-space: normal; }" in page_style and "nowrap" not in page_style
+
+
+def test_later_segments_on_a_part_bring_styles_and_links_resolve_like_a_browser(lesson: Path, tmp_path: Path, capsys) -> None:
+    page = lesson / PAGE
+    style = '<style data-lp-style>\n.x-box { border: 1px solid var(--rule); }\n</style>\n'
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, style + '<aside class="lp-addendum x-box" id="add-1-1"><h3>补充</h3><p>见 <code>&lt;section id="recap"&gt;</code>。</p></aside>', "--into", "node-1")
+    assert code == 0, result
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2",
+                          '<aside class="lp-addendum x-box" id="add-3-1"><h3>补充</h3><p>回看<a href=" #node-1">节点 1</a>和<a href="#node%2D2">节点 2</a>。</p></aside>',
+                          "--into", "node-3")
+    assert code == 0 and result["carried_styles"] == 1, result
+    second = _source(lesson / PART2)
+    assert 'href="attn-03.html#node-1"' in second and 'href="attn-03.html#node-2"' in second
+    assert second.count(".x-box { border: 1px solid var(--rule); }") == 1
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", '<section class="lp-narrative" id="recap"><h2>前面讲过</h2><p>回顾。</p></section>')
+    assert code == 0, result  # id="recap" written as text on page 1 is not an id
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", '<template data-lp-into="node-1"><p>补一句。</p></template>')
+    assert code == 2 and "#node-1 is on attn-03.html" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", "<dd>补充。</dd>", "--into", "g-m")
+    assert code == 2 and "copy of the entry on attn-03.html" in result["error"], result
+    answer = '<div class="lp-answer" id="q-3-ref"><p>要点。</p></div><template data-lp-into="node-1"><p>补一句。</p></template>'
+    code, result = _run(capsys, "state", "--repo", str(lesson), "--page", PART2, "--id", "attn-03-part2", "--question", "q-3",
+                        "--to", "closed", "--fragment", _fragment(tmp_path, "answer.html", answer))
+    assert code == 2 and "#node-1 is on attn-03.html" in result["error"], result
+    # A fragment that brings its own copy of an earlier page's style does not get a second copy.
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2",
+                          style + '<aside class="lp-addendum x-box" id="add-3-2"><h3>补充</h3><p>框。</p></aside>', "--into", "node-3")
+    assert code == 0 and "carried_styles" not in result, result
+
+
+@needs_node
+def test_continue_checks_the_previous_page_scripts_before_writing(lesson: Path, tmp_path: Path, capsys) -> None:
+    hook = '<script data-lp-hook>\nvar x = ;\n</script>'
+    page = lesson / PAGE
+    page.write_text(_with(_source(page), "<p>导入。</p>", "<p>导入。</p>\n" + hook), encoding="utf-8")
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 2 and "script.syntax" in result["error"], result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 2 and "nothing was written" in result["error"] and not (lesson / PART2).exists(), result
+
+
+def test_continue_brings_an_older_page_one_runtime_up_to_date(lesson: Path, tmp_path: Path, capsys) -> None:
+    page = lesson / PAGE
+    page.write_text(_with(_source(page), "本页约 ", "全文约 "), encoding="utf-8")
+    assert "runtime.drift" in _codes(_source(page), page)
+    result = _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    assert "note" not in result["previous"] and "runtime.drift" not in _codes(_source(page), page)
+
+
+def test_continue_keeps_an_older_generation_runtime_and_says_so(lesson: Path, tmp_path: Path, capsys) -> None:
+    page = lesson / PAGE
+    page.write_text(_with(_source(page), "lesson-pages runtime v3", "lesson-pages runtime v2"), encoding="utf-8")
+    result = _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    assert "全文约" in result["previous"]["note"] and "not linked" in result["previous"]["note"]
+    assert "lesson-pages runtime v2" in _source(page)
+
+
+def test_serve_lists_a_lesson_in_reading_order(lesson: Path, tmp_path: Path, capsys) -> None:
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    server = lp.make_server(lesson / "learning" / "pages", "127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.server_address[1]}/") as response:
+            listing = response.read().decode("utf-8")
+        assert listing.index("attn-03.html") < listing.index("attn-03-part2.html")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+
+def test_later_page_rules_titles_and_oversized_segments(lesson: Path, tmp_path: Path, capsys) -> None:
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3, paragraphs=40))
+    assert code == 2 and "Write it in smaller segments" in result["error"], result
+    title = '<abbr title="页面里 id=app">挂载点</abbr>'
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3).replace("第 3 个节点", title))
+    assert f"从节点 3「{title}」开始" in _source(lesson / PAGE)
+    second = lesson / PART2
+    second.write_text(_with(_source(second), "/* 以上照抄第 1 页 */\n", "/* 以上照抄第 1 页 */\n.part2-rule { color: var(--ink); }\n"),
+                      encoding="utf-8")
+    style = '<style data-lp-style>\n.x-box { border: 1px solid var(--rule); }\n</style>\n'
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, style + '<p class="x-box">框。</p>', "--into", "node-1")
+    assert code == 0, result
+    answer = '<div class="lp-answer x-box" id="q-3-ref"><p>要点。</p></div>'
+    code, result = _run(capsys, "state", "--repo", str(lesson), "--page", PART2, "--id", "attn-03-part2", "--question", "q-3",
+                        "--to", "closed", "--fragment", _fragment(tmp_path, "answer.html", answer))
+    assert code == 0 and result["carried_styles"] == 1, result
+    assert '<style data-lp-style data-lp-copy="attn-03.html">' in _source(second)
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(4, "st-b", 4))
+    code, result = _write(capsys, lesson, tmp_path, "continue", PART2, "attn-03-part2", _segment(5, "st-b", 5, paragraphs=40))
+    assert code == 2 and "Write it in smaller segments" in result["error"] and not (lesson / PART3).exists(), result
+    code, result = _write(capsys, lesson, tmp_path, "continue", PART2, "attn-03-part2", _segment(5, "st-b", 5))
+    assert code == 0, result
+    page_style = re.search(r'<style id="lp-page-style">(.*?)</style>', _source(lesson / PART3), re.S).group(1)
+    assert page_style.count("以下照抄第 1 页") == 1 and ".part2-rule { color: var(--ink); }" in page_style
+
+
+
+def test_links_into_this_machine_are_refused_and_render_repairs_a_stale_directory(lesson: Path, tmp_path: Path, capsys, monkeypatch) -> None:
+    for href in ("file:///home/me/pages/attn-02.html", "/home/me/pages/attn-02.html"):
+        code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID,
+                              f'<aside class="lp-addendum" id="add-1-9"><h3>补充</h3><p>见<a href="{href}">上一课</a>。</p></aside>', "--into", "node-1")
+        assert code == 2 and "link.absolute" in result["error"], result
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    original = lp._replace
+
+    def flaky(path: Path, *args, **kwargs):
+        if path.name == "attn-03.html":
+            raise lp.UsageError("the page changed after it was read")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(lp, "_replace", flaky)
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(4, "st-b", 4, paragraphs=1))
+    assert code == 0 and result["directory_stale"][0].startswith(PAGE) and "run render" in result["directory_stale"][0], result
+    monkeypatch.setattr(lp, "_replace", original)
+    assert "pager.stale" in _codes(_source(lesson / PAGE), lesson / PAGE)
+    assert "#node-4" not in _source(lesson / PAGE)
+    code, result = _run(capsys, "render", "--repo", str(lesson), "--page", PAGE, "--id", PAGE_ID)
+    assert code == 0 and result["changed"] and 'href="attn-03-part2.html#node-4"' in _source(lesson / PAGE), result
+
+
+
+def _pager(source: str) -> str:
+    return re.search(r'<nav class="lp-pager" id="lp-pager".*?</nav>', source, re.S).group(0)
+
+
+@needs_node
+def test_directory_titles_bring_their_formula_fonts(lesson: Path, tmp_path: Path, capsys) -> None:
+    title = '分块 <span class="tex">\\mathbb{R}^{N \\times d}</span> 的矩阵'
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3).replace("第 3 个节点", title))
+    first = _source(lesson / PAGE)
+    assert 'id="lp-katex"' in first and "KaTeX_AMS" in first and "katex" in _pager(first)
+    assert lp.check_source(first, lesson / PAGE).errors == []
+
+
+def test_directory_refresh_is_quiet_and_robust(lesson: Path, tmp_path: Path, capsys) -> None:
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    page = lesson / PAGE
+    marker = lp.Page(_source(page)).marker().attrs
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(4, "st-b", 4, paragraphs=1))
+    assert code == 0 and result["directory_refreshed"] == [PAGE], result
+    after = lp.Page(_source(page)).marker().attrs
+    assert (after["data-rev"], after["data-updated"]) == (marker["data-rev"], marker["data-updated"])  # only the navigation changed
+    # The tool finds its directory by id, whatever the attribute order.
+    page.write_text(_with(_source(page), '<nav class="lp-pager" id="lp-pager"', '<nav id="lp-pager" class="lp-pager"'), encoding="utf-8")
+    code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2", _segment(5, "st-b", 5, paragraphs=1))
+    assert code == 0 and _source(page).count('id="lp-pager"') == 1 and "#node-5" in _source(page), result
+    # A hand fix to a title leaves the other pages' directories behind until render runs.
+    second = lesson / PART2
+    second.write_text(_with(_source(second), "第 4 个节点</h2>", "第 4 个节点（改）</h2>"), encoding="utf-8")
+    assert "pager.stale" in _codes(_source(page), page)
+    code, result = _run(capsys, "render", "--repo", str(lesson), "--page", PART2, "--id", "attn-03-part2")
+    assert code == 0 and result["directory_refreshed"] == [PAGE] and "第 4 个节点（改）" in _pager(_source(page)), result
+    # A copy under another name stands alone and never rewrites the real pages.
+    copy = page.parent / "attn-03 (1).html"
+    copy.write_bytes(page.read_bytes())
+    code, result = _run(capsys, "find", "--repo", str(lesson), "--in", "learning/pages", "--lesson", PAGE_ID)
+    assert [entry.get("misnamed", False) for entry in result["pages"]][:2] == [False, True] or any(e.get("misnamed") for e in result["pages"])
+    before = second.read_bytes()
+    code, result = _write(capsys, lesson, tmp_path, "add", "learning/pages/attn-03 (1).html", PAGE_ID,
+                          '<aside class="lp-addendum" id="add-1-1"><h3>补充</h3><p>补。</p></aside>', "--into", "node-1")
+    assert code == 0 and "directory_refreshed" not in result and second.read_bytes() == before, result
+    copy.unlink()
+    # A sibling that cannot be read is named.
+    second.write_bytes(second.read_bytes().replace(b"</body>", b"<!-- \xb2\xe2 --></body>"))
+    code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID, '<aside class="lp-addendum" id="add-1-2"><h3>补充</h3><p>补。</p></aside>', "--into", "node-1")
+    assert code == 0 and "attn-03-part2.html is not UTF-8" in result["directory_stale"][0], result
+
+
+def test_parts_need_their_link_back_and_old_stylesheets_get_directory_styles(repo: Path, tmp_path: Path, capsys, monkeypatch) -> None:
+    # A lesson whose id merely ends in -part2 (made before this rule) is not page 2 of another lesson.
+    code, result = _run(capsys, "new", "--repo", str(repo), "--page", "learning/pages/linalg.html", "--id", "linalg", "--title", "线代")
+    other = repo / "learning" / "pages" / "linalg-part2.html"
+    other.write_text((repo / "learning" / "pages" / "linalg.html").read_text(encoding="utf-8").replace('data-id="linalg"', 'data-id="linalg-part2"'),
+                     encoding="utf-8")
+    code, result = _write(capsys, repo, tmp_path, "add", "learning/pages/linalg.html", "linalg", _segment(1, "", 1, paragraphs=1))
+    assert code == 0 and "directory_refreshed" not in result, result
+    assert lp._part_of(other, "linalg-part2") == ("linalg-part2", 1)
+    # A page whose stylesheet predates the directory gets the directory's styles inside the block.
+    monkeypatch.setattr(lp, "SPLIT_DUE_MINUTES", 2)
+    monkeypatch.setattr(lp, "SPLIT_LIMIT_MINUTES", 5)
+    code, result = _new(capsys, repo, "--fragment", _fragment(tmp_path, "opening.html", OPENING))
+    for n, stages in ((1, "st-a"), (2, "st-a")):
+        _write(capsys, repo, tmp_path, "add", PAGE, PAGE_ID, _segment(n, stages, n))
+    page = repo / PAGE
+    page.write_text(re.sub(r"(?m)^\.lp-pager.*\n", "", _source(page)), encoding="utf-8")
+    _write(capsys, repo, tmp_path, "add", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    monkeypatch.setattr(lp, "_refresh_runtime", lambda source: None)
+    code, result = _write(capsys, repo, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    assert code == 0, result
+    assert "<style data-lp-style>\n.lp-pager" in _pager(_source(page)) and "<style data-lp-style>" not in _pager(_source(repo / PART2))
+
+
+def test_repair_lists_each_page_once_and_machine_links_are_refused(lesson: Path, tmp_path: Path, capsys, monkeypatch) -> None:
+    original = lp._replace
+    monkeypatch.setattr(lp, "_replace", lambda path, data, text: (_ for _ in ()).throw(lp.UsageError("changed")))
+    code, result = _write(capsys, lesson, tmp_path, "continue", PAGE, PAGE_ID, _segment(3, "st-b", 3))
+    monkeypatch.setattr(lp, "_replace", original)
+    code, result = _run(capsys, "continue", "--repo", str(lesson), "--page", PAGE, "--id", PAGE_ID)
+    assert code == 0, result
+    assert "第 1 页，共 2 页" in _pager(_source(lesson / PAGE)) and 'rel="next"' not in _pager(_source(lesson / PART2))
+    for href in ("C:\\Users\\me\\attn-02.html", "C:/Users/me/attn-02.html", "\\\\server\\share\\attn-02.html", "//server/share/attn-02.html"):
+        code, result = _write(capsys, lesson, tmp_path, "add", PAGE, PAGE_ID,
+                              f'<aside class="lp-addendum" id="add-1-8"><h3>补充</h3><p>见<a href="{href}">上一课</a>。</p></aside>', "--into", "node-1")
+        assert code == 2 and "link.absolute" in result["error"], (href, result)
+
+
+def test_render_keeps_the_revision_for_the_directory_and_copies_never_continue(lesson: Path, tmp_path: Path, capsys, monkeypatch) -> None:
+    _split(capsys, lesson, tmp_path, _segment(3, "st-b", 3))
+    page, second = lesson / PAGE, lesson / PART2
+    second.write_text(_with(_source(second), "第 3 个节点</h2>", "第 3 个节点（改）</h2>"), encoding="utf-8")
+    marker = lp.Page(_source(second)).marker().attrs
+    code, result = _run(capsys, "render", "--repo", str(lesson), "--page", PART2, "--id", "attn-03-part2")
+    after = lp.Page(_source(second)).marker().attrs
+    assert code == 0 and result["changed"] and (after["data-rev"], after["data-updated"]) == (marker["data-rev"], marker["data-updated"]), result
+    assert "第 3 个节点（改）" in _pager(_source(page))
+    copy = second.parent / "attn-03-part2 (1).html"
+    copy.write_bytes(second.read_bytes())
+    code, result = _write(capsys, lesson, tmp_path, "continue", "learning/pages/attn-03-part2 (1).html", "attn-03-part2", _segment(4, "st-b", 4))
+    assert code == 2 and "is a copy under another name" in result["error"], result
+    copy.unlink()
+    for markup in ('<img alt="图" srcset="/home/me/x.png 2x">', '<video poster="C:/Users/me/p.png"></video>',
+                   '<svg role="img" aria-label="图" viewBox="0 0 10 10"><image href="/home/me/x.png" width="10" height="10"/></svg>'):
+        code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2",
+                              f'<aside class="lp-addendum" id="add-3-9"><h3>补充</h3><p>图。</p>{markup}</aside>', "--into", "node-3")
+        assert code == 2 and "link.absolute" in result["error"], (markup, result)

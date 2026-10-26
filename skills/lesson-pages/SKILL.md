@@ -50,32 +50,32 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 ## 一课在页面上怎样展开
 
-1. **开课**：`new` 建页，只写导入、骨架和资料指路；一门课的页面用同一种风格（`--look`，见
+1. **开课**：`new` 建页，只写导入、骨架和资料指路（写法见 opening.md）；一门课的页面用同一种风格（`--look`，见
    [page-design.md](references/page-design.md) 第 9 节）。核对画像与前置在对话里进行；不需要提问时，同一轮接着追加第一段。
 2. **每段**：讲到下一次提问为止的那几个节点连同那道题，一次 `add`；每个节点至多一个交互部件。节奏只听 `guide-learning`；
    一段读起来超过约 9 分钟时，先删冗余、把细节移进图或已讲内容的 `<details>`，不为篇幅多加提问。
 3. **作答之后**：先 `state --to answered`，题头不再提示作答；反馈在对话，需要展开的补充用 `add --into node-N` 放到所属
    节点下。复查题和普通检查题一样写进页面并逐字发到对话；复查答完后用 `state --to closed --fragment <参考要点>` 关闭
    原题，一次写进参考要点。
-4. **串讲与验收**：导师串讲、综合验收各在其时机追加；进入正式练习时页面只加一行，指向练习约定的位置，不写版本号。
-5. **不提前写**：还没讲的节点不进页面。学习者明确要求“剩下的都写出来”时可以提前写讲解节点，题目仍等真正提出时
+4. **串讲与验收**：导师串讲、综合验收各在其时机追加；进入正式练习时页面只加一行指向练习约定（写法见 upkeep.md）。
+5. **不提前写**：还没讲的节点不进页面。学习者明确要求“剩下的都写出来”时可以提前写讲解节点（仍一段一次 `add`），题目仍等真正提出时
    用 `add --after` 插到对应节点之后；串讲和验收题不提前写。结课后不再写入，除非学习者要求。
 
-各块的写法、编号、状态与恢复规则见 [page-structure.md](references/page-structure.md)。
+各块的写法、编号与题目状态见 [page-structure.md](references/page-structure.md)。
 
 ## 每次更新页面
 
 1. 用 `outline` 看已有的块、行号和题目状态。不读整页，不读模板。
 2. 用宿主的写文件工具把片段写成 UTF-8 文件，放在临时目录而不是仓库里；片段只含内容块，不写页面框架和基础样式。
-   公式写成 TeX（`<span class="tex">`、`<div class="tex">`），代码块标 `data-lang`，写入时由随附的 KaTeX 与 highlight.js
-   渲染成静态 HTML；这需要本机有 Node，TeX 写错、语言名不认识或缺 Node 时整段不写入。海报、对数尺、误区对照、
-   类比卡、公式解剖、逐行推导、执行回放与系统结构图是部件包，片段只写结构，脚本只把用到的部件包带进这一页。
-3. 用 `add` 插入片段，或用 `state` 改题目状态。脚本会盖上新版本号并检查，结果不合格就不写入。
+   公式写 TeX、代码块标 `data-lang`，写入时渲染成静态 HTML（需要本机有 Node，出错时整段不写入）。部件包的片段只写
+   结构，脚本只把用到的部件包带进这一页。
+3. 用 `add` 插入片段，或用 `state` 改题目状态。脚本会盖上新版本号并检查，结果不合格就不写入；提示续页时改用
+   `continue`。
 4. 按下文“验证”检查。
 5. 在对话里发指路。
 
 命令从仓库根运行，以 Codex 生成入口为例，其他宿主换成实际的 Skill 路径。第一次在新确认的目录建页时加
-`--make-parents`；`new` 与 `add` 的输出里有 `reading_minutes`，指路里的阅读时间用它：
+`--make-parents`；`new`、`add`、`continue` 的输出里有 `reading_minutes`，指路里的阅读时间用它：
 
 ```bash
 python .agents/skills/lesson-pages/scripts/lesson_pages.py new --page learning/pages/attn-03.html \
@@ -87,29 +87,17 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py state --page learning
   --question q-1 --to closed --fragment /tmp/answer-q-1.html
 python .agents/skills/lesson-pages/scripts/lesson_pages.py outline --page learning/pages/attn-03.html
 python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning/pages/attn-03.html --anchor q-2
-python .agents/skills/lesson-pages/scripts/lesson_pages.py trace --code /tmp/online_softmax.py --vars "m l acc return" \
-  --function attention_row
 ```
 
-`trace` 在本机跑一段讲解用的小例子，逐行列出变量的变化，供执行回放使用。
-
-改正已有内容里的小错时，按 `outline` 给的行号只读那几行，再用宿主的编辑工具改，改完运行 `check`；不整页重写。
-改公式时只改它的 `data-tex`，再运行 `render --page … --id …` 重新排版，部件包也随之刷新；`check` 会指出改了却没重排的公式。
-学习者要换风格时，对这门课的每页运行 `look --page … --id … --to <风格>`。
-`outline` 也列出各块里后加的补充、参考要点，以及片段带进来的样式和脚本所在的行。
+执行回放的轨迹用 `trace` 记录（见 widget-packs.md）；恢复、改错、改公式、换风格和长课分页见 [upkeep.md](references/upkeep.md)。
 
 ## 文件、查看与授权
 
-- **位置**：受管 context 的 `page_targets`；没有时在这门课的目录里用 `find` 找已有页面，或用学习者指定的目录；都没有
-  时提议一个与课程账本、断点平级、但不在 `guide-learning` 映射目录之内的目录。文件名就是页面 ID：Lesson 用账本 ID，独立 Session 用主题短名。
 - **授权**：Lesson 把“本课用网页承载讲解，写入 <路径>（查看方式）”并入 `guide-learning` 的开课确认；独立 Session
   在第一次写页面时确认路径。确认后，本课的追加与题目状态更新自动进行。不覆盖已有文件，不改其他课的页面，不提交、
-  不推送；配置给出的位置只是写入上限，不是授权。
-- **查看**：本机直接用浏览器打开；远程环境用 `serve` 在 127.0.0.1 开只读服务，经编辑器转发端口查看，会话结束时
-  停掉它；宿主能发布私有页面时，学习者同意内容离开本机后才用。画像里只记“长讲解偏好用课程网页”这一条讲解偏好
-  （画像归 `guide-learning` 维护，写入要确认）；位置和查看方式属于环境，不写进画像。
-
-细节见 [files-and-viewing.md](references/files-and-viewing.md)。
+  不推送；启动 `serve` 和把页面发布到本机以外都要学习者先同意；配置给出的位置只是写入上限，不是授权。
+- 文件名就是页面 ID（Lesson 用账本 ID）。选位置、定查看方式、受管配置与画像里能记什么见
+  [files-and-viewing.md](references/files-and-viewing.md)。
 
 ## 题目与部件的底线
 
@@ -136,7 +124,9 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py trace --code /tmp/onl
 
 ## 按需读取参考
 
-- [page-structure.md](references/page-structure.md)：每次写片段前读。各块怎样对应课程结构、写法、编号、题目状态、恢复与对话指路。
+- [page-structure.md](references/page-structure.md)：每次写片段前读。各块怎样对应课程结构、写法、编号、题目状态与对话指路。
+- [upkeep.md](references/upkeep.md)：恢复一课、写串讲验收或练习指路、提示续页或课已分页、改错与换风格时读。
+- [opening.md](references/opening.md)：每次建新页前读，写导入、骨架和资料指路。
 - [example-opening.html](references/example-opening.html) 与 [example-segment.html](references/example-segment.html)：第一次建页前读。开课片段与一段讲解的完整示例。
 - [interactive-widgets.md](references/interactive-widgets.md)：做交互部件前读。
 - [widget-packs.md](references/widget-packs.md)：用海报、对数尺、误区对照、类比卡、公式解剖、逐行推导、执行回放或系统结构图前读。
