@@ -68,28 +68,21 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 1. 用 `outline` 看已有的块、行号和题目状态。不读整页，不读模板。
 2. 用宿主的写文件工具把片段写成 UTF-8 文件，放在临时目录而不是仓库里；片段只含内容块，不写页面框架和基础样式。
    公式写 TeX、代码块标 `data-lang`，写入时渲染成静态 HTML（需要本机有 Node，出错时整段不写入）。部件包的片段只写
-   结构，脚本只把用到的部件包带进这一页。
+   结构，脚本只把用到的部件包带进这一页；页面钩子会自动移到正文外、运行时之前。
 3. 用 `add` 插入片段，或用 `state` 改题目状态。脚本会盖上新版本号并检查，结果不合格就不写入；提示续页时改用
    `continue`。
 4. 按下文“验证”检查。
 5. 在对话里发指路。
 
-命令从仓库根运行，以 Codex 生成入口为例，其他宿主换成实际的 Skill 路径。第一次在新确认的目录建页时加
-`--make-parents`；`new`、`add`、`continue` 的输出里有 `reading_minutes`，指路里的阅读时间用它：
+命令从仓库根运行；页面参数相对 `--repo`，解释器按环境选 `python` 或 `python3`。以下用 Codex 发现入口举例，其他宿主换成实际 Skill 路径。`new` 的完整写法见 opening.md，
+题目状态与续页见 upkeep.md。第一次在新确认的目录建页时加 `--make-parents`；指路的阅读时间取写入输出的
+`reading_minutes`。
 
 ```bash
-python .agents/skills/lesson-pages/scripts/lesson_pages.py new --page learning/pages/attn-03.html \
-  --id attn-03 --title "分块 softmax 与 FlashAttention 前向" --course "Attention 算子" --label "第 3 课" \
-  --spine "FlashAttention-2 论文 v1" --fragment /tmp/opening.html
-python .agents/skills/lesson-pages/scripts/lesson_pages.py add --page learning/pages/attn-03.html --id attn-03 \
-  --fragment /tmp/segment-1.html
-python .agents/skills/lesson-pages/scripts/lesson_pages.py state --page learning/pages/attn-03.html --id attn-03 \
-  --question q-1 --to closed --fragment /tmp/answer-q-1.html
 python .agents/skills/lesson-pages/scripts/lesson_pages.py outline --page learning/pages/attn-03.html
+python .agents/skills/lesson-pages/scripts/lesson_pages.py add --page learning/pages/attn-03.html --id attn-03 --fragment /tmp/segment.html
 python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning/pages/attn-03.html --anchor q-2
 ```
-
-执行回放的轨迹用 `trace` 记录（见 widget-packs.md）；恢复、改错、改公式、换风格和长课分页见 [upkeep.md](references/upkeep.md)。
 
 ## 文件、查看与授权
 
@@ -112,8 +105,8 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 ## 验证
 
 1. **每次**：`check`，本机有 Node 时会一并检查内联脚本语法；在对话里引用锚点前用 `--anchor` 核对它存在。
-2. **建页、出现新的图或部件类型、写了自定义脚本时**：用宿主的浏览器工具在 390、768、1280 像素宽度和浅色、深色下
-   看新增部分，看控制台报错，把部件点一遍。纯文字追加不必。
+2. **建页、增加部件、改布局或脚本时**：按 [浏览器检查](references/browser-checks.md) 检查长内容、组件窄宽度、浅深主题与交互；
+   开启正常动画连续滚动并停留，不能只看静态截图或减少动态效果。纯文字追加不必重跑整套。
 3. **没有浏览器工具时**：在指路里说一次“未在浏览器中验证”，不声称视觉或交互已通过。
 
 ## 与其他 Skill 的分工
@@ -129,7 +122,9 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 - [opening.md](references/opening.md)：每次建新页前读，写导入、骨架和资料指路。
 - [example-opening.html](references/example-opening.html) 与 [example-segment.html](references/example-segment.html)：第一次建页前读。开课片段与一段讲解的完整示例。
 - [interactive-widgets.md](references/interactive-widgets.md)：做交互部件前读。
-- [widget-packs.md](references/widget-packs.md)：用海报、对数尺、误区对照、类比卡、公式解剖、逐行推导、执行回放或系统结构图前读。
+- [widget-packs.md](references/widget-packs.md)：选择部件包时读；按信息结构选图，不默认每课使用全部部件。
+- [source-browser.md](references/source-browser.md) 与 [源码浏览器片段](references/example-source-tree.html)：需要真实目录、文件职责与源码行号时读。
+- [timelines.md](references/timelines.md) 与 [逐步时序片段](references/example-timeline.html)：需要展示参与者、状态、信号与跨步依赖时读。
 - [page-design.md](references/page-design.md)：选风格、自绘图形、改样式或检查视觉时读。
 - [files-and-viewing.md](references/files-and-viewing.md)：选位置、定查看方式、读受管配置或处理授权细节时读。
 - `references/sample-pages/`：同一课用讲义、蓝图、朱批三种风格写成的成品页（2026-10-24 版）。想看整体效果时用浏览器

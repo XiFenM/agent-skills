@@ -1,0 +1,76 @@
+/* lesson-pages 部件包：声明式时序图 .lp-timeline。静态步骤本身就是完整内容。
+   默认使用页面实色令牌；仅 data-timeline-surface="glass" 选择半透明表面。 */
+.lp-timeline { container-type: inline-size; }
+.lp-timeline > .lp-canvas:empty { display: none; }
+.lp-timeline .lp-timeline-state { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 18px; padding: 0; list-style: none; }
+.lp-timeline-state > li { min-width: 0; margin: 0; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 6px; background: var(--raised); }
+.lp-timeline-state :is(.lp-timeline-owner, .lp-timeline-slot) { display: inline; font-weight: 600; }
+.lp-timeline-state .lp-timeline-slot::before { content: " · "; }
+.lp-timeline-state :is(.lp-timeline-value, .lp-timeline-signal) { display: block; overflow-wrap: anywhere; }
+.lp-timeline-state .lp-timeline-signal { margin-top: 4px; font-size: 13px; color: var(--ink-soft); }
+.lp-timeline-state .lp-timeline-signal::before { content: "信号／条件："; }
+.lp-timeline .lp-timeline-dependency { font-size: 14px; color: var(--ink-soft); }
+.lp-timeline .lp-timeline-dependency::before { content: "依赖与等待："; font-weight: 600; }
+/* 包缺失或数据不合法时保留逐步全文，不让基础stepper只露出第一步。 */
+.lp-timeline:not(.is-timeline-ready) > .lp-steps { display: block; }
+.lp-timeline.lp-stepper:not(.is-timeline-ready) > .lp-steps > li { display: list-item; visibility: visible; margin: 18px 0; animation: none; }
+.lp-timeline:not(.is-timeline-ready) > .lp-steps > li::before { content: attr(data-title); display: block; font-weight: 650; }
+.lp-timeline:not(.is-timeline-ready) > .lp-controls { display: none; }
+.lp-timeline.is-timeline-ready > .lp-steps { display: none; }
+.lp-timeline > .lp-controls { flex-wrap: wrap; gap: 8px; margin: 0 0 14px; padding: 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); }
+.lp-timeline > .lp-controls .lp-btn { min-height: 40px; }
+.lp-timeline > .lp-controls .lp-dots { flex-wrap: wrap; max-width: 100%; }
+.lp-timeline:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+.lp-timeline-heading { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.lp-timeline-kind { flex: 0 0 auto; padding: 2px 8px; font-size: 12px; line-height: 1.5; color: var(--ink-soft); border: 1px solid var(--rule); border-radius: 4px; }
+.lp-timeline .lp-timeline-current { margin: 0; font: 650 16px/1.55 var(--font-sans); overflow-wrap: anywhere; }
+.lp-timeline .lp-timeline-now { min-height: 3.1em; margin: 10px 0 14px; font-size: 15px; line-height: 1.65; }
+.lp-timeline-actors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.lp-timeline-actor { min-width: 0; padding: 12px; background: var(--raised); border: 1px solid var(--rule); border-radius: 8px; }
+.lp-timeline .lp-timeline-actor-name { margin: 0 0 10px; font: 650 15px/1.5 var(--font-sans); }
+.lp-timeline-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 8px; }
+.lp-timeline-cell { min-width: 0; padding: 10px; background: var(--paper); border: 1px solid var(--rule); border-left-width: 4px; border-radius: 5px; }
+.lp-timeline-cell-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 8px; }
+.lp-timeline-cell-name { font: 650 14px/1.5 var(--font-sans); overflow-wrap: anywhere; }
+.lp-timeline-status { font-size: 12px; line-height: 1.5; color: var(--ink-soft); }
+.lp-timeline .lp-timeline-cell-value { min-height: 3.1em; margin: 8px 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.lp-timeline .lp-timeline-cell-signal { min-height: 3.2em; margin: 0; padding-top: 8px; font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); border-top: 1px solid var(--rule); overflow-wrap: anywhere; }
+.lp-timeline-cell[data-status="writing"] { border-left-color: var(--s1); }
+.lp-timeline-cell[data-status="reading"] { border-left-color: var(--s2); }
+.lp-timeline-cell[data-status="ready"], .lp-timeline-cell[data-status="done"] { border-left-color: var(--s3); }
+.lp-timeline-cell[data-status="waiting"] { border-left-color: var(--accent); background: var(--accent-wash); }
+.lp-timeline-cell[data-status="waiting"] .lp-timeline-status { color: var(--accent-ink); font-weight: 650; }
+.lp-timeline-gate { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; }
+.lp-timeline-gate-label { display: block; font-size: 13px; color: var(--accent-ink); }
+.lp-timeline .lp-timeline-gate-text { min-height: 3.1em; margin: 5px 0 0; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+@supports (backdrop-filter: blur(8px)) {
+  .lp-timeline[data-timeline-surface="glass"] .lp-timeline-actor { background: color-mix(in srgb, var(--raised) 82%, transparent); backdrop-filter: blur(8px); }
+}
+@container (max-width: 600px) {
+  .lp-timeline-actors, .lp-timeline-slots, .lp-timeline .lp-timeline-state { grid-template-columns: minmax(0, 1fr); }
+  .lp-timeline > .lp-controls { position: sticky; top: 8px; z-index: 4; }
+  .lp-timeline > .lp-controls .lp-dots { order: 5; flex-basis: 100%; justify-content: flex-start; }
+  .lp-timeline > .lp-controls .lp-step-count { margin-left: auto; }
+  .lp-timeline .lp-timeline-cell-value, .lp-timeline .lp-timeline-cell-signal { min-height: 0; }
+}
+@media (max-width: 640px) {
+  .lp-timeline-actors, .lp-timeline-slots, .lp-timeline .lp-timeline-state { grid-template-columns: minmax(0, 1fr); }
+  .lp-timeline > .lp-controls { position: sticky; top: 8px; z-index: 4; }
+  .lp-timeline > .lp-controls .lp-dots { order: 5; flex-basis: 100%; justify-content: flex-start; }
+  .lp-timeline > .lp-controls .lp-btn { min-height: 44px; }
+}
+@media (prefers-contrast: more) {
+  .lp-timeline[data-timeline-surface="glass"] .lp-timeline-actor { background: var(--raised); backdrop-filter: none; }
+  .lp-timeline :is(.lp-timeline-cell, .lp-timeline-gate) { border-color: var(--ink); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-timeline, .lp-timeline * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media print {
+  .lp-timeline > .lp-controls, .lp-timeline > .lp-canvas { display: none !important; }
+  .lp-timeline.is-timeline-ready > .lp-steps { display: block !important; }
+  .lp-timeline.is-timeline-ready > .lp-steps > li { display: list-item !important; visibility: visible !important; margin: 18px 0; }
+  .lp-timeline.is-timeline-ready > .lp-steps > li::before { content: attr(data-title); display: block; font-weight: 650; }
+  .lp-timeline .lp-timeline-state { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-timeline-state > li { break-inside: avoid; background: transparent; }
+}

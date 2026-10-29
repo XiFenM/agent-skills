@@ -1,0 +1,62 @@
+<!-- 声明式因果模型：每步写完整状态，不写 data-lp-hook 或业务脚本。
+     data-timeline-kind="model" 表示按规则推导；observed 只用于有真实运行来源的轨迹。
+     data-timeline-surface="glass" 可选；省略时使用实色表面。
+     data-actor/data-slot 是稳定短标识；owner/slot 是读者看见的名字。
+     每一步必须出现同一组 actor+slot，且名字一致；不能省略未改变的槽。 -->
+<section class="lp-node" id="node-5">
+  <h2><span class="lp-no">5</span>交替使用两个接收槽，为什么仍要等消费者</h2>
+  <p class="lp-spine">资料位置：本节给定的写入与归还规则；先读规则，再逐步观察状态。</p>
+  <p class="lp-lead"><b>结论</b>两份槽可以让写入与读取错开，但每次复用仍要等对应槽真正被归还。</p>
+  <p>先把规则定清：生产者只写已被消费者归还的槽；写完后发布就绪信号，消费者读完后才发布归还回执。A、B 是消费者拥有的两个接收槽，生产者还有一个待发送区。下面的步骤让我们看见：B 可以填补读取 A 的时间，但下一次写 A 仍须等它真正用完。</p>
+  <figure class="lp-figure lp-stepper lp-timeline is-wide" id="fig-5-1" data-timeline-kind="model">
+    <div class="lp-canvas"></div>
+    <ol class="lp-steps">
+      <li data-title="初始：两个接收槽都已归还">
+        <p class="lp-timeline-event">生产者准备好第0批；消费者的A、B都可以接收新数据。</p>
+        <p class="lp-timeline-dependency">生产者可选A开始写；消费者尚无可读的批次。</p>
+        <ul class="lp-timeline-state">
+          <li data-actor="producer" data-slot="out" data-status="ready"><span class="lp-timeline-owner">生产者</span><b class="lp-timeline-slot">待发送区</b><span class="lp-timeline-value">第0批已准备好。</span><span class="lp-timeline-signal">允许写A或B。</span></li>
+          <li data-actor="consumer" data-slot="a" data-status="idle"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽A</b><span class="lp-timeline-value">尚未放入数据。</span><span class="lp-timeline-signal">A已归还，无就绪信号。</span></li>
+          <li data-actor="consumer" data-slot="b" data-status="idle"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽B</b><span class="lp-timeline-value">尚未放入数据。</span><span class="lp-timeline-signal">B已归还，无就绪信号。</span></li>
+        </ul>
+      </li>
+      <li data-title="第0批到A：就绪不等于读完">
+        <p class="lp-timeline-event">生产者写完A并发布就绪信号；消费者开始读取A，生产者转去准备第1批。</p>
+        <p class="lp-timeline-dependency">A尚未归还，不能覆盖；B仍可接收下一批。</p>
+        <ul class="lp-timeline-state">
+          <li data-actor="producer" data-slot="out" data-status="ready"><span class="lp-timeline-owner">生产者</span><b class="lp-timeline-slot">待发送区</b><span class="lp-timeline-value">第1批已准备好。</span><span class="lp-timeline-signal">只允许写B。</span></li>
+          <li data-actor="consumer" data-slot="a" data-status="reading"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽A</b><span class="lp-timeline-value">正在读取第0批。</span><span class="lp-timeline-signal">第0批已就绪，A尚未归还。</span></li>
+          <li data-actor="consumer" data-slot="b" data-status="idle"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽B</b><span class="lp-timeline-value">尚未放入数据。</span><span class="lp-timeline-signal">B已归还，无就绪信号。</span></li>
+        </ul>
+      </li>
+      <li data-title="第1批到B：生产者停在复用A之前">
+        <p class="lp-timeline-event">B已收到第1批，但消费者还没有读完A中的第0批。生产者虽有第2批，也必须等待。</p>
+        <p class="lp-timeline-dependency">等待点在生产者：只有收到A的归还回执，才能把第2批写进A。</p>
+        <ul class="lp-timeline-state">
+          <li data-actor="producer" data-slot="out" data-status="waiting"><span class="lp-timeline-owner">生产者</span><b class="lp-timeline-slot">待发送区</b><span class="lp-timeline-value">第2批待发送，不能覆盖A。</span><span class="lp-timeline-signal">等待消费者归还A。</span></li>
+          <li data-actor="consumer" data-slot="a" data-status="reading"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽A</b><span class="lp-timeline-value">仍在读取第0批。</span><span class="lp-timeline-signal">第0批已就绪，A尚未归还。</span></li>
+          <li data-actor="consumer" data-slot="b" data-status="ready"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽B</b><span class="lp-timeline-value">第1批等待消费。</span><span class="lp-timeline-signal">第1批已就绪，B尚未归还。</span></li>
+        </ul>
+      </li>
+      <li data-title="消费者归还A：解除一个具体依赖">
+        <p class="lp-timeline-event">消费者读完第0批、归还A，再开始读取B。生产者收到回执，可以复用A。</p>
+        <p class="lp-timeline-dependency">A的回执只允许复用A；它不表示B也已经读完。</p>
+        <ul class="lp-timeline-state">
+          <li data-actor="producer" data-slot="out" data-status="ready"><span class="lp-timeline-owner">生产者</span><b class="lp-timeline-slot">待发送区</b><span class="lp-timeline-value">第2批可发送到A。</span><span class="lp-timeline-signal">已收到A归还回执。</span></li>
+          <li data-actor="consumer" data-slot="a" data-status="idle"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽A</b><span class="lp-timeline-value">第0批已读完，槽可复用。</span><span class="lp-timeline-signal">A已归还，旧就绪信号已清除。</span></li>
+          <li data-actor="consumer" data-slot="b" data-status="reading"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽B</b><span class="lp-timeline-value">正在读取第1批。</span><span class="lp-timeline-signal">第1批已就绪，B尚未归还。</span></li>
+        </ul>
+      </li>
+      <li data-title="第2批复用A：地址相同，数据已经换代">
+        <p class="lp-timeline-event">生产者把第2批写入已归还的A并重新发布就绪信号；消费者仍可继续读取B。</p>
+        <p class="lp-timeline-dependency">下一次复用B同样需要它自己的归还回执；两个槽没有消除等待规则。</p>
+        <ul class="lp-timeline-state">
+          <li data-actor="producer" data-slot="out" data-status="waiting"><span class="lp-timeline-owner">生产者</span><b class="lp-timeline-slot">待发送区</b><span class="lp-timeline-value">第3批待发送，下一目标为B。</span><span class="lp-timeline-signal">等待消费者归还B。</span></li>
+          <li data-actor="consumer" data-slot="a" data-status="ready"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽A</b><span class="lp-timeline-value">新写入的第2批等待消费。</span><span class="lp-timeline-signal">第2批已就绪，A尚未归还。</span></li>
+          <li data-actor="consumer" data-slot="b" data-status="reading"><span class="lp-timeline-owner">消费者</span><b class="lp-timeline-slot">接收槽B</b><span class="lp-timeline-value">仍在读取第1批。</span><span class="lp-timeline-signal">第1批已就绪，B尚未归还。</span></li>
+        </ul>
+      </li>
+    </ol>
+    <figcaption><b>图5.1</b>双槽生产消费的因果模型，来源是本段明确给定的“写完发布、读完归还”规则；每步为一个合法状态，不是实测执行轨迹，也没有实测时长。用于真实课程时，图注须换成所依据的固定版本源码、协议或实际运行记录；不能据本例断言某个通信库使用相同回执协议。</figcaption>
+  </figure>
+</section>

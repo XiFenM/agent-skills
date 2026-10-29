@@ -10,8 +10,9 @@
 .lp-scale-mode button[aria-pressed="true"] { font-weight: 600; color: var(--paper); background: var(--accent); }
 .lp-scale-view { position: relative; }
 .lp-scale-view > ol { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin: 0; padding: 0 0 128px; list-style: none; }
-.lp-scale-view > ol > li { flex: 0 1 12em; min-width: 0; margin: 0; padding: 9px 13px 10px; font: 700 21px/1.25 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); transition: border-color .2s ease, transform .2s var(--ease); }
+.lp-scale-view > ol > li { flex: 0 1 12em; min-width: 0; margin: 0; padding: 9px 13px 10px; font: 700 var(--lp-scale-font-size, 21px)/1.25 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); transition: border-color .2s ease, transform .2s var(--ease); }
 .lp-scale-view > ol > li b { display: block; margin: 0 0 3px; font: 600 13px/1.45 var(--font-sans); color: var(--ink-soft); }
+.lp-scale-value { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
 .lp-scale-view > ol > li.is-on { border-color: var(--accent); transform: translateY(-2px); }
 .lp-scale-view > ol > li.lp-scale-ratio { flex: 0 0 auto; align-self: center; padding: 0; font: 800 clamp(18px, 2.6vw, 26px)/1 var(--font-sans); letter-spacing: -.01em; color: var(--accent-ink); background: none; border: 0; box-shadow: none; }
 .lp-scale-lines { position: absolute; inset: 0; overflow: visible; pointer-events: none; }

@@ -45,6 +45,11 @@ FIRST_USE_SECTION_MAX_LINES = 8
 PAGES_REFERENCE_FILES = {
     "example-opening.html",
     "example-segment.html",
+    "example-source-tree.html",
+    "example-timeline.html",
+    "browser-checks.md",
+    "source-browser.md",
+    "timelines.md",
     "files-and-viewing.md",
     "interactive-widgets.md",
     "opening.md",
@@ -53,7 +58,7 @@ PAGES_REFERENCE_FILES = {
     "upkeep.md",
     "widget-packs.md",
 }
-PAGES_PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "zoom")
+PAGES_PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "source-tree", "timeline", "zoom")
 PAGES_VENDOR_FILES = {
     "highlight/LICENSE",
     "highlight/highlight.min.js",
@@ -83,8 +88,10 @@ EXPECTED_PAGES_FILES = {
     "scripts/context_config.py",
     "scripts/lesson_pages.py",
     "scripts/render.cjs",
+    "scripts/browser_checks.js",
     "tests/test_lesson_pages.py",
     "tests/test_lesson_pages_context.py",
+    "tests/test_layout_runtime.py",
     "tests/fixtures/widget-packs.html",
     *(f"references/{name}" for name in PAGES_REFERENCE_FILES),
     *(f"references/sample-pages/attn-03-{look}.html" for look in ("handout", "blueprint", "vermilion")),

@@ -1438,11 +1438,13 @@ def test_trace_refuses_a_loop_body_on_its_header_line(tmp_path: Path, capsys) ->
 
 @needs_node
 def test_every_widget_pack_builds_from_the_fixture(built: Path, capsys) -> None:
-    fixture = str(ROOT / "tests" / "fixtures" / "widget-packs.html")
-    code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
-                        "--fragment", fixture, "--date", "2026-10-24")
-    assert code == 0 and result["check"]["ok"], result
-    assert result["check"]["warnings"] == [], result
+    fixtures = [ROOT / "tests" / "fixtures" / "widget-packs.html",
+                REFERENCES / "example-source-tree.html", REFERENCES / "example-timeline.html"]
+    for fixture in fixtures:
+        code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
+                            "--fragment", str(fixture), "--date", "2026-10-29")
+        assert code == 0 and result["check"]["ok"], result
+        assert result["check"]["warnings"] == [], result
     source = _source(built)
     assert lp.outline_source(source)["packs"] == sorted(lp.PACKS)
     for name in lp.PACKS:
@@ -2053,3 +2055,129 @@ def test_render_keeps_the_revision_for_the_directory_and_copies_never_continue(l
         code, result = _write(capsys, lesson, tmp_path, "add", PART2, "attn-03-part2",
                               f'<aside class="lp-addendum" id="add-3-9"><h3>补充</h3><p>图。</p>{markup}</aside>', "--into", "node-3")
         assert code == 2 and "link.absolute" in result["error"], (markup, result)
+
+
+# Reusable source browsers, causal timelines and registration-hook placement.
+def test_add_moves_hooks_out_of_content_and_keeps_registration_order(built: Path, tmp_path: Path, capsys) -> None:
+    original_hooks = [node.text() for node in lp.Page(_source(built)).find("script") if "data-lp-hook" in node.attrs]
+    first = '<script data-lp-hook id="hook-first">LessonPage.onStep["fig-x"] = function () {};</script>'
+    code, result = _add(capsys, built, tmp_path, first, "--into", "node-1")
+    assert code == 0, result
+    second = '<script data-lp-hook id="hook-second">LessonPage.onStep["fig-9-8"] = function () {};</script>'
+    fragment = ('<div class="lp-addendum" id="add-1-9"><h3>补充</h3>'
+                '<figure id="fig-9-8"><p>一张图。</p><figcaption>图9.8</figcaption></figure>'
+                + second + '<aside class="lp-note" id="note-9" data-note-for="fig-9-8">来源。</aside></div>')
+    code, result = _add(capsys, built, tmp_path, fragment, "--into", "node-1")
+    assert code == 0 and result["check"]["warnings"] == [], result
+    text, parsed = _source(built), lp.Page(_source(built))
+    hooks = [node for node in parsed.find("script") if "data-lp-hook" in node.attrs]
+    assert [node.text() for node in hooks[:len(original_hooks)]] == original_hooks
+    assert [node.attrs.get("id") for node in hooks[len(original_hooks):]] == ["hook-first", "hook-second"]
+    runtime = parsed.one("lp-runtime")
+    assert runtime is not None
+    assert all(not any(parent.tag == "main" for parent in node.ancestors()) and node.start < runtime.start for node in hooks)
+    note = parsed.one("note-9")
+    assert note is not None and note.parent is not None
+    assert note.parent.children[note.parent.children.index(note) - 1].attrs.get("id") == "fig-9-8"
+    assert first in text and second in text
+    assert lp._ensure_packs(text) == text
+    assert lp._ensure_packs(text.replace("\n", "\r\n")) == text.replace("\n", "\r\n")
+
+
+def test_render_repairs_legacy_hook_placement_without_changing_hook_or_content(built: Path, tmp_path: Path, capsys) -> None:
+    _add(capsys, built, tmp_path, MYTH)
+    hook = '<script data-lp-hook id="legacy-hook">LessonPage.onStep["legacy"] = function () { return 1; };</script>'
+    original = _source(built)
+    legacy = _with(original, lp.APPEND_MARKER, hook + '\n' + lp.APPEND_MARKER)
+    built.write_text(legacy, encoding="utf-8")
+    assert "script.placement" in _codes(legacy, built)
+    code, result = _run(capsys, "render", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID)
+    assert code == 0 and result["changed"], result
+    repaired = _source(built)
+    assert hook in repaired and "script.placement" not in _codes(repaired, built)
+    assert repaired.index('id="legacy-hook"') < repaired.index('id="lp-pack-myth-js"') < repaired.index('id="lp-runtime"')
+    assert lp._visible_text(lp.Page(repaired).find("main")[0]).split() == lp._visible_text(lp.Page(legacy).find("main")[0]).split()
+    code, repeat = _run(capsys, "render", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID)
+    assert code == 0 and not repeat["changed"] and _source(built) == repaired
+
+
+@pytest.mark.parametrize("target", ["missing", "lp-runtime", "q-1"])
+def test_note_explicit_target_is_an_earlier_content_element(built: Path, tmp_path: Path, capsys, target: str) -> None:
+    fragment = f'<aside class="lp-note" data-note-for="{target}">来源。</aside>'
+    before = built.read_bytes()
+    code, result = _add(capsys, built, tmp_path, fragment, "--into", "node-1")
+    assert code == 2 and "note.target" in result["error"], result
+    assert built.read_bytes() == before
+
+
+@pytest.mark.parametrize("example,pack", [("example-source-tree.html", "source-tree"), ("example-timeline.html", "timeline")])
+def test_declarative_examples_build_and_stay_stable(built: Path, capsys, example: str, pack: str) -> None:
+    original_hooks = [node.text() for node in lp.Page(_source(built)).find("script") if "data-lp-hook" in node.attrs]
+    code, result = _run(capsys, "add", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID,
+                        "--fragment", str(REFERENCES / example))
+    assert code == 0 and result["check"]["warnings"] == [], result
+    text = _source(built)
+    assert lp.outline_source(text)["packs"] == [pack]
+    assert [node.text() for node in lp.Page(text).find("script") if "data-lp-hook" in node.attrs] == original_hooks
+    assert lp._ensure_packs(text) == text
+    code, repeated = _run(capsys, "render", "--repo", str(built.parents[2]), "--page", PAGE, "--id", PAGE_ID)
+    assert code == 0 and not repeated["changed"] and _source(built) == text
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ('data-start="lp-tree-json-api"', 'data-start="lp-tree-lua-api"'),
+        ('data-path="Lib/json/decoder.py"', 'data-path="elsewhere/decoder.py"'),
+        ('data-path="Objects"', 'data-path="../Objects"'),
+        ('data-kind="context"', 'data-kind="unknown"'),
+        ('class="lp-source-version"', 'class="version-missing"'),
+        ('class="lp-source-links"', 'class="links-missing"'),
+    ],
+)
+def test_source_browser_rejects_inconsistent_ownership_and_links(built: Path, tmp_path: Path, capsys, old: str, new: str) -> None:
+    fragment = (REFERENCES / "example-source-tree.html").read_text(encoding="utf-8")
+    assert old in fragment
+    before = built.read_bytes()
+    code, result = _add(capsys, built, tmp_path, fragment.replace(old, new, 1))
+    assert code == 2 and "pack.markup" in result["error"], result
+    assert built.read_bytes() == before
+
+
+@pytest.mark.parametrize("mutation", ["missing-cell", "duplicate-cell", "renamed-actor", "unknown-state", "no-kind", "no-dependency"])
+def test_timeline_requires_complete_consistent_snapshots(built: Path, tmp_path: Path, capsys, mutation: str) -> None:
+    fragment = (REFERENCES / "example-timeline.html").read_text(encoding="utf-8")
+    parsed = lp.Page(fragment)
+    timeline = parsed.one("fig-5-1")
+    assert timeline is not None
+    steps = next(node for node in timeline.children if "lp-steps" in node.classes).children
+    second = steps[1]
+    state = next(node for node in second.children if "lp-timeline-state" in node.classes)
+    cell = state.children[0]
+    if mutation == "missing-cell":
+        fragment = fragment[:cell.start] + fragment[cell.end:]
+    elif mutation == "duplicate-cell":
+        fragment = fragment[:cell.end] + fragment[cell.start:cell.end] + fragment[cell.end:]
+    elif mutation == "renamed-actor":
+        owner = next(node for node in cell.children if "lp-timeline-owner" in node.classes)
+        fragment = fragment[:owner.start_end] + "不同的参与者" + fragment[owner.end_start:]
+    elif mutation == "unknown-state":
+        fragment = fragment.replace('data-status="ready"', 'data-status="guessing"', 1)
+    elif mutation == "no-kind":
+        fragment = fragment.replace('data-timeline-kind="model"', '', 2)
+    else:
+        dependency = next(node for node in second.children if "lp-timeline-dependency" in node.classes)
+        fragment = fragment[:dependency.start] + fragment[dependency.end:]
+    before = built.read_bytes()
+    code, result = _add(capsys, built, tmp_path, fragment)
+    assert code == 2 and "pack.markup" in result["error"], result
+    assert built.read_bytes() == before
+
+
+@pytest.mark.parametrize("example", ["example-source-tree.html", "example-timeline.html"])
+def test_new_widgets_respect_open_question_boundaries(built: Path, tmp_path: Path, capsys, example: str) -> None:
+    source = (REFERENCES / example).read_text(encoding="utf-8")
+    figure = lp.Page(source).find("figure")[0]
+    fragment = source[figure.start:figure.end]
+    code, result = _add(capsys, built, tmp_path, fragment, "--after", "q-1")
+    assert code == 2 and "check.leak" in result["error"], result

@@ -10,13 +10,14 @@
 | --- | --- |
 | `assets/lesson-template.html` | 唯一的页面模板：内容安全策略、标记 meta、`#lp-boot`、`#lp-base`、`#lp-page-style`、页头、两个插入标记、符号表与来源、`#lp-runtime` |
 | `assets/looks/*.css` | 蓝图、朱批两种风格的样式表；`new --look` 与 `look` 把选中的一份原样写进页面的 `<style id="lp-look">` |
-| `assets/packs/<名字>.css`、`.js` | 八个部件包：海报 `poster`、对数尺 `scale`、误区对照 `myth`、类比卡 `analogy`、公式解剖 `anatomy`、逐行推导 `derive`、执行回放 `replay`、系统结构图 `zoom`；页面用到 `lp-<名字>` 时才写进去 |
+| `assets/packs/<名字>.css`、`.js` | 十个部件包：海报 `poster`、对数尺 `scale`、误区对照 `myth`、类比卡 `analogy`、公式解剖 `anatomy`、逐行推导 `derive`、执行回放 `replay`、系统结构图 `zoom`、源码浏览器 `source-tree`、逐步时序图 `timeline`；页面用到 `lp-<名字>` 时才写进去 |
 | `scripts/lesson_pages.py` | `new`、`add`、`continue`、`state`、`render`、`look`、`trace`、`check`、`outline`、`find`、`serve`；只用标准库 |
+| `scripts/browser_checks.js` | 接受 Playwright Page 的本地页面检查函数；在隔离上下文检查长读数、窄组件、多行选项与正常动画滚动，不修改读者当前页面 |
 | `scripts/render.cjs` | 写入时由 Node 运行：用 KaTeX 渲染 `.tex`，用 highlight.js 给 `pre.lp-code[data-lang]` 着色 |
 | `assets/vendor/` | KaTeX 0.19.0 与 highlight.js 11.12.0 的发布文件，原样附带，许可与校验值见 `NOTICE.md` |
 | `scripts/context_config.py` | 受管配置 `agent-skills.lesson-pages/v1` 的严格校验 |
 | `references/*.md` | 按读取时机拆开的参考：`opening.md` 建页时，`page-structure.md` 每次写片段前，`upkeep.md` 恢复、结课、分页与改错时，`interactive-widgets.md`、`widget-packs.md`、`page-design.md`、`files-and-viewing.md` 用到时 |
-| `references/example-*.html` | 片段示例；测试用它们经 `new` 与 `add` 生成完整页面并要求零错误、零警告 |
+| `references/example-*.html` | 开课、讲解、双栏源码浏览器和逐步时序的声明式片段；经 `new`／`add` 生成完整页面并要求零错误、零警告 |
 | `tests/fixtures/widget-packs.html` | 每种部件包各一个的第 3 节，接在示例页后面；测试用它检查部件包的写入，回放轨迹与 `trace` 的结果逐行相同 |
 | `references/sample-pages/*.html` | 第二轮试做定稿的成品页（2026-10-24 版）：同一课的讲义、蓝图、朱批三页，供人用浏览器看效果，Agent 不读进上下文。它们是快照，不随模板、风格或部件包更新，下一轮试做定稿后整体替换；测试只要求它们零错误 |
 
@@ -30,6 +31,11 @@ KaTeX 样式表、许可全文，以及按本页公式实际用到的字体（�
 页面用到某个部件包时，`#lp-look`（没有就是 `#lp-base`）之后有它的 `<style id="lp-pack-<名字>">`，`#lp-runtime` 之前有它的
 `<script id="lp-pack-<名字>-js">`，都按名字排序；`new`、`add`、`state` 与 `render` 每次写入都重排这两组，用到的写进或刷新，
 不再用到的删掉，所以已经齐全的页面写入前后这两组逐字不变。
+
+`_place_hooks` 在部件组装之前，把正文中、boot之前或runtime之后的 `data-lp-hook` 移到运行时前；保留现有集中钩子顺序，再按源码顺序追加新钩子。
+因此向一个节点 `add --into` 不会把不可见脚本留在图与批注之间。`check` 对正文钩子提示 `script.placement`，`render` 可修复，重复运行不再次改动。
+基础运行时的布局修订 v3.1 保持 v3 接口：批注支持 `data-note-for`，默认跳过非内容／不可见锚点；选项背景跟随实际按钮的二维位置和尺寸；
+对数尺按实际字体与组件空间拟合不可断行的读数，必要时转为纵向。
 
 ## 改模板时守住的约束
 
@@ -133,7 +139,7 @@ ID 大写）与版次（`R` 加版本号）。
 - 检查：用到包却缺样式或脚本报 `pack.missing`；以 `lp-pack-` 开头却不是包的块报 `pack.unknown`；包的内容与资源文件
   不同报 `runtime.drift`，留着没用的包报 `pack.unused`，这两种运行 `render` 就能修好；页面用到部件包而 `#lp-runtime`
   早于 v3 时报 `pack.runtime`，这样的旧页面不会被迁移；部件的结构与 `references/widget-packs.md` 不符时报 `pack.markup`
-  （例如回放某步的 `data-line` 不在代码里、`data-set` 不是“名字=值”、公式解剖的 `\tA`–`\tF` 与说明条数不等）。对数尺、类比卡、公式解剖、逐行推导、执行回放与系统结构图都在
+  （例如回放某步的 `data-line` 不在代码里、`data-set` 不是“名字=值”、公式解剖的 `\tA`–`\tF` 与说明条数不等）。对数尺、类比卡、公式解剖、逐行推导、执行回放、系统结构图、源码浏览器与时序图都在
   `WIDGET_CLASSES` 里，开放题内外的泄题规则对它们生效。
 - 外观：包的样式只用页面令牌；三种风格各自的差别写成 `:root[data-look="…"]` 规则放在包里，不放进风格文件。符号色只留给
   符号，包里用中性色与朱红。执行回放与系统结构图靠 `figure.is-stage` 上实验台，片段漏写时脚本补上。
@@ -263,3 +269,16 @@ S、P 缩进片上存储；节点 2 的分步演示五步读数与算式一致�
 `motion.md` 的动效时长、呼应和“减少动态效果”，`tools.md` 列出的模型默认做法，以及参照 `reviewer-manual.md` 的
 视觉检查要点。它们按阅读型讲义改写，许可全文随 Skill 放在 `NOTICE.md`。没有采用的部分：多方向探索与对比页、
 落地页滚动叙事、生图与素材检索、版本检查、付费版提示，以及 oil-ui 的全部脚本、字体和图片。
+
+
+## 源码浏览器与逐步时序
+
+源码浏览器从一份嵌套提纲生成左右面板；节点id留在原目录项，职责与来源只维护一次。运行时定位只调整树容器滚动，
+SVG辅助线依据当前可见元素的真实边界重画。版本、父子路径、起始节点归属由Python结构校验；具体源码真实性仍由作者核验。
+
+时序图复用基础stepper，initPacks较晚注册onStep后主动渲染当前步。每步的完整快照必须保持相同参与者／槽位及显示名；
+直接跳步或回退不继承上一状态。model与observed区分解释模型和实际轨迹，来源写在图注；结构错误时退回完整静态步骤。
+
+维护时运行 `skills/lesson-pages/tests/test_layout_runtime.py`：这三个浏览器行为回归分别覆盖零尺寸批注锚点、换行选项背景、长读数与单位；
+它们需要可用的playwright-cli和本地Chromium，否则明确skip。`scripts/browser_checks.js`可用于临时生成的长页，正常动画下滚动并停留；
+自动几何结果之外，还需目视部件、测试跳步／选择、键盘、无脚本与打印。既有sample-pages仍是历史快照，不为模板更新批量改写。

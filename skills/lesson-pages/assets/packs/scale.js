@@ -37,7 +37,11 @@
       var items = ui.$all(":scope > li", list).map(function (li) {
         var value = Number(li.getAttribute("data-value"));
         if (!(value > 0) || !isFinite(value)) throw new Error("对数尺上的每个量都要有大于 0 的 data-value");
-        return { li: li, value: value };
+        var label = li.querySelector(":scope > b"), readout = document.createElement("span");
+        readout.className = "lp-scale-value";
+        Array.from(li.childNodes).forEach(function (node) { if (node !== label) readout.appendChild(node); });
+        li.appendChild(readout);
+        return { li: li, value: value, readout: readout };
       }).sort(function (a, b) { return a.value - b.value; });
       if (items.length < 2) return;
       var lo = exponent(items[0].value), hi = Math.ceil(Math.log10(items[items.length - 1].value) - 1e-9);
@@ -158,7 +162,22 @@
       };
       var layout = function () {
         if (!view.clientWidth || frame) return;
-        figure.classList.toggle("is-vertical", figure.clientWidth < 560);
+        /* 按组件内的实际读数与卡数量尺寸；不把字体或单位长度假定为固定值。 */
+        figure.style.removeProperty("--lp-scale-font-size");
+        var style = window.getComputedStyle(items[0].li), base = parseFloat(style.fontSize);
+        var inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+        var longest = Math.max.apply(null, items.map(function (item) {
+          var range = document.createRange(); range.selectNodeContents(item.readout);
+          return range.getBoundingClientRect().width;
+        }));
+        var gap = parseFloat(window.getComputedStyle(list).columnGap) || 10;
+        var cell = (view.clientWidth - gap * (items.length - 1)) / items.length;
+        var fitted = Math.min(base, base * Math.max(0, cell - inset - 2) / Math.max(1, longest));
+        var vertical = view.clientWidth < 560 || fitted < 16;
+        figure.classList.toggle("is-vertical", vertical);
+        if (vertical) fitted = Math.min(base, base * Math.max(0, view.clientWidth - 112 - inset - 2) / Math.max(1, longest));
+        figure.style.setProperty("--lp-scale-font-size", Math.max(Math.min(base, 16), Math.floor(fitted * 10) / 10) + "px");
+        items.forEach(function (item) { item.readout.tabIndex = item.readout.scrollWidth > item.readout.clientWidth ? 0 : -1; });
         note.textContent = "线性刻度：最大的量占满整把尺，其余的挤在" + (figure.classList.contains("is-vertical") ? "底端" : "左端") + "几乎分不开，所以跨数量级的量要用对数尺比。";
         items.forEach(function (item, i) {
           var order = figure.classList.contains("is-vertical") ? 2 * (items.length - 1 - i) : 2 * i;
@@ -182,9 +201,9 @@
           var geometry = place(shown);
           if (t < 1) { frame = window.requestAnimationFrame(tick); return; }
           frame = 0;
-          drawTicks(geometry);
           ticks.classList.remove("is-swapping");
           note.hidden = mode === "log";
+          layout();
           ui.layout();
         };
         frame = window.requestAnimationFrame(tick);

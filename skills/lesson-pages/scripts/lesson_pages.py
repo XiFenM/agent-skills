@@ -97,7 +97,7 @@ FRAGMENT_FORBIDDEN_TAGS = FORBIDDEN_TAGS | frozenset("html head body meta link t
 PACKS_DIR = SKILL_ROOT / "assets" / "packs"
 PACK_PREFIX = "lp-pack-"
 # Widget packs: a page carries a pack's style and script only while some element uses the class lp-<name>.
-PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "zoom")
+PACKS = ("analogy", "anatomy", "derive", "myth", "poster", "replay", "scale", "source-tree", "timeline", "zoom")
 PACK_RUNTIME = 3  # the first "lesson-pages runtime vN" that starts widget packs
 JS_NUMBER = re.compile(r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")  # what the browser's Number() reads
 POSTER_NUMBER = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?")
@@ -105,7 +105,7 @@ POSTER_NUMBER = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0
 TRACE_GAP = re.compile(r"[ \t\n\r\f]+")
 TRACE_PAIR = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=[^ \t\n\r\f]*")  # an empty string value is written as name=
 WIDGET_CLASSES = frozenset({"lp-stepper", "lp-explorer", "lp-toggle", "lp-timer", "lp-live",
-                            "lp-analogy", "lp-anatomy", "lp-derive", "lp-replay", "lp-scale", "lp-zoom"})
+                            "lp-analogy", "lp-anatomy", "lp-derive", "lp-replay", "lp-scale", "lp-source-tree", "lp-timeline", "lp-zoom"})
 CONTROL_TAGS = frozenset({"input", "select", "textarea", "button"})
 EMOJI_PATTERN = re.compile(
     "[\U0001F300-\U0001FAFF\U00002600-\U000026FF\U00002700-\U000027BF\U0001F000-\U0001F2FF]"
@@ -415,10 +415,143 @@ class Report:
         }
 
 
+def _source_tree_markup(element: Element) -> list[str]:
+    """Keep path ownership, node selection and the no-script outline in agreement."""
+    problems: list[str] = []
+    repos = [node for node in element.children if node.tag == "section" and "lp-source-repo" in node.classes]
+    if element.tag != "figure" or not element.attrs.get("id") or not repos:
+        return ["a source browser needs a figure id and one or more section.lp-source-repo"]
+
+    for repo in repos:
+        if not repo.attrs.get("id"):
+            problems.append("each source repository needs a unique id")
+        for tag, cls, label in (("h4", None, "repository name"), ("p", "lp-source-version", "fixed source version"),
+                                ("p", "lp-source-about", "repository responsibility")):
+            fields = [child for child in repo.children if child.tag == tag and (cls is None or cls in child.classes)]
+            if len(fields) != 1 or not fields[0].text().strip():
+                problems.append(f"each repository needs one {tag}{'.' + cls if cls else ''} with its {label}")
+        outlines = [child for child in repo.children if child.tag == "ul" and "lp-source-outline" in child.classes]
+        if len(outlines) != 1:
+            problems.append("each repository needs exactly one ul.lp-source-outline")
+            continue
+        ids: set[str] = set()
+        paths: set[str] = set()
+
+        def visit(outline: Element, parent_path: str | None = None) -> None:
+            entries = [child for child in outline.children if child.tag == "li"]
+            if not entries or len(entries) != len(outline.children):
+                problems.append("source directory lists contain one or more li nodes")
+            for entry in entries:
+                node_id, path, kind = (entry.attrs.get(name, "") for name in ("id", "data-path", "data-kind"))
+                if not node_id or node_id in ids:
+                    problems.append("each source node needs a unique id")
+                ids.add(node_id)
+                if (not path or path.startswith("/") or "\\" in path or
+                        any(part in {"", ".", ".."} for part in path.rstrip("/").split("/"))):
+                    problems.append(f"source data-path={path!r} must be a repository-relative path")
+                normalized = path.rstrip("/")
+                if normalized in paths:
+                    problems.append(f"source path {path!r} appears more than once in one repository")
+                paths.add(normalized)
+                if parent_path and not normalized.startswith(parent_path + "/"):
+                    problems.append(f"source path {path!r} is not inside its parent directory {parent_path!r}")
+                if kind not in {"dir", "file", "context"}:
+                    problems.append("source data-kind must be dir, file or context")
+                if entry.attrs.get("data-main") not in (None, "true", "false"):
+                    problems.append("source data-main is true or false when present")
+                for tag in ("b", "p"):
+                    fields = [child for child in entry.children if child.tag == tag]
+                    if len(fields) != 1 or not fields[0].text().strip():
+                        problems.append("each source node needs one direct <b> name and one <p> responsibility")
+                lists = [child for child in entry.children if child.tag == "ul"]
+                if kind == "dir":
+                    if len(lists) != 1 or "lp-source-links" in lists[0].classes:
+                        problems.append("a source directory needs one child <ul>; use context for an unexpanded side directory")
+                    else:
+                        visit(lists[0], normalized)
+                elif kind == "file":
+                    if len(lists) != 1 or "lp-source-links" not in lists[0].classes:
+                        problems.append("a source file needs one ul.lp-source-links containing its source links")
+                    else:
+                        links = [child for child in lists[0].children if child.tag == "li"]
+                        if not links or any(not any(node.tag == "a" and node.attrs.get("href") and node.text().strip()
+                                                   for node in child.children) for child in links):
+                            problems.append("each source link item needs a labeled <a href>")
+                elif kind == "context" and lists:
+                    problems.append("a context directory is a location cue and has no child list")
+
+        visit(outlines[0])
+        if repo.attrs.get("data-start") is not None and repo.attrs["data-start"] not in ids:
+            problems.append("repository data-start must name a source node in that repository")
+    return problems
+
+
+def _timeline_markup(element: Element) -> list[str]:
+    """A full state per step makes backward and random navigation deterministic."""
+    if element.tag != "figure" or not element.attrs.get("id") or "lp-stepper" not in element.classes:
+        return ["a timeline needs a figure id and the lp-stepper class"]
+    problems: list[str] = []
+    if element.attrs.get("data-timeline-kind") not in {"model", "observed"}:
+        problems.append("data-timeline-kind is model or observed; explain the source in the caption")
+    if element.attrs.get("data-timeline-surface") not in (None, "glass"):
+        problems.append("data-timeline-surface is glass or left out")
+    canvases = [child for child in element.children if child.tag == "div" and "lp-canvas" in child.classes]
+    if len(canvases) != 1 or canvases[0].children or canvases[0].text().strip():
+        problems.append("a timeline needs one empty div.lp-canvas; its board comes from the step snapshots")
+    lists = [child for child in element.children if child.tag == "ol" and "lp-steps" in child.classes]
+    steps = [child for child in lists[0].children if child.tag == "li"] if len(lists) == 1 else []
+    if len(steps) < 2:
+        return problems + ["a timeline needs one ol.lp-steps with at least two steps"]
+    baseline: dict[tuple[str, str], tuple[str, str]] | None = None
+    for index, step in enumerate(steps, start=1):
+        if not step.attrs.get("data-title", "").strip():
+            problems.append(f"timeline step {index} needs a data-title")
+        for cls in ("lp-timeline-event", "lp-timeline-dependency"):
+            fields = [child for child in step.children if child.tag == "p" and cls in child.classes]
+            if len(fields) != 1 or not fields[0].text().strip():
+                problems.append(f"timeline step {index} needs one p.{cls}")
+        snapshots = [child for child in step.children if child.tag == "ul" and "lp-timeline-state" in child.classes]
+        if len(snapshots) != 1:
+            problems.append(f"timeline step {index} needs one ul.lp-timeline-state")
+            continue
+        state: dict[tuple[str, str], tuple[str, str]] = {}
+        names: dict[str, str] = {}
+        for cell in snapshots[0].children:
+            actor, slot = cell.attrs.get("data-actor", ""), cell.attrs.get("data-slot", "")
+            if cell.tag != "li" or not ELEMENT_ID_PATTERN.fullmatch(actor) or not ELEMENT_ID_PATTERN.fullmatch(slot):
+                problems.append("timeline state items need data-actor/data-slot keys made of letters, digits, - or _")
+            if (actor, slot) in state:
+                problems.append(f"timeline step {index} repeats actor/slot {actor!r}/{slot!r}")
+            if cell.attrs.get("data-status") not in {"idle", "writing", "ready", "reading", "waiting", "done"}:
+                problems.append("timeline data-status is idle, writing, ready, reading, waiting or done")
+            values: list[str] = []
+            for tag, cls in (("span", "lp-timeline-owner"), ("b", "lp-timeline-slot"),
+                             ("span", "lp-timeline-value"), ("span", "lp-timeline-signal")):
+                fields = [child for child in cell.children if child.tag == tag and cls in child.classes]
+                if len(fields) != 1 or fields[0].children or not fields[0].text().strip():
+                    problems.append(f"timeline state needs one plain-text {tag}.{cls}")
+                values.append(fields[0].text().strip() if fields else "")
+            if actor in names and names[actor] != values[0]:
+                problems.append("one timeline actor key must keep the same display name")
+            names[actor] = values[0]
+            state[(actor, slot)] = (values[0], values[1])
+        if len(names) < 2:
+            problems.append("a timeline snapshot needs at least two actors")
+        if baseline is None:
+            baseline = state
+        elif state != baseline:
+            problems.append(f"timeline step {index} must repeat the full actor/slot set and display names from step 1")
+    return problems
+
+
 def _pack_markup(name: str, element: Element, code_lines: Any) -> list[str]:
     """What is wrong with one widget's structure, in the terms references/widget-packs.md uses."""
     kids = element.children
     items = lambda parent, tag="li": [child for child in parent.children if child.tag == tag]  # noqa: E731
+    if name == "source-tree":
+        return _source_tree_markup(element)
+    if name == "timeline":
+        return _timeline_markup(element)
     if name == "poster":
         nums = [child for child in kids if "lp-poster-num" in child.classes]
         if not 1 <= len(nums) <= 2:
@@ -717,6 +850,8 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
             elif (element.attrs.get("id") not in {"lp-boot", "lp-runtime"} and not element.attrs.get("id", "").startswith(PACK_PREFIX)
                   and "data-lp-hook" not in element.attrs):
                 report.error("script.hook", "page scripts must carry data-lp-hook", element.line)
+            elif "data-lp-hook" in element.attrs and any(node.tag == "main" for node in element.ancestors()):
+                report.warn("script.placement", "registration hook is inside reading content; render moves it before #lp-runtime", element.line)
         if element.tag == "style" or "style" in element.attrs:
             css = element.text() if element.tag == "style" else element.attrs.get("style", "")
             for match in CSS_URL.finditer(css):
@@ -745,6 +880,12 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
     for element_id, nodes in page.by_id.items():
         if len(nodes) > 1:
             report.error("id.duplicate", f"id {element_id!r} is used {len(nodes)} times", nodes[1].line)
+    for note in (node for node in page.elements if "lp-note" in node.classes and "data-note-for" in node.attrs):
+        anchor_id = note.attrs["data-note-for"].removeprefix("#")
+        anchor = page.one(anchor_id)
+        if (anchor is None or anchor.start >= note.start or anchor.tag in {"script", "style", "template"}
+                or not any(node.tag == "main" for node in anchor.ancestors())):
+            report.error("note.target", "data-note-for must name an earlier content element in this page", note.line)
     for element in page.find("a"):
         href = element.attrs.get("href", "")
         value = href or element.attrs.get("xlink:href", "")
@@ -1503,12 +1644,44 @@ def _pack_of(node: Element) -> tuple[str | None, str]:
     return (stem if stem in PACKS else None), "css"
 
 
+def _place_hooks(text: str) -> str:
+    """Move registration hooks out of reading flow, before runtime initialization.
+
+    Keep already-centralized hooks in place and append newly inserted hooks in their
+    source order. A script between a figure and a note must never become its layout
+    anchor. Moving only misplaced hooks also preserves byte-stable repeated renders.
+    """
+    page = Page(text)
+    hooks = [node for node in page.find("script") if "data-lp-hook" in node.attrs]
+    if not hooks:
+        return text
+    runtime = next((node for node in page.by_id.get("lp-runtime", []) if node.tag == "script"), None)
+    if runtime is None:
+        raise UsageError("page has no #lp-runtime to put registration hooks before")
+    boot = next((node for node in page.by_id.get("lp-boot", []) if node.tag == "script"), None)
+    moved = [node for node in hooks if any(parent.tag == "main" for parent in node.ancestors())
+             or node.start > runtime.start or (boot is not None and node.start < boot.start)]
+    if not moved:
+        return text
+    newline = "\r\n" if "\r\n" in text else "\n"
+    blocks = [text[node.start:node.end] for node in moved]
+    for node in reversed(moved):
+        if node.end is None:
+            raise UsageError("a registration hook is missing </script>")
+        end = node.end + (len(newline) if text.startswith(newline, node.end) else 0)
+        text = text[:node.start] + text[end:]
+    runtime = Page(text).one("lp-runtime")
+    assert runtime is not None
+    return text[:runtime.start] + newline.join(blocks) + newline + text[runtime.start:]
+
+
 def _ensure_packs(text: str) -> str:
     """Give the page the style and script of each widget pack it uses, refresh stale copies and drop unused ones.
 
     Styles go after #lp-look (or #lp-base), scripts right before #lp-runtime, both in pack-name order,
     so a page that already has the right packs comes back unchanged.
     """
+    text = _place_hooks(text)
     page = Page(text)
     newline = "\r\n" if "\r\n" in text else "\n"
     for node in reversed(_pack_blocks(page)):
@@ -1815,11 +1988,12 @@ def outline_source(source: str) -> dict[str, Any]:
     lines = lambda node: [node.line, line_of(node.end or node.start)]  # noqa: E731
     blocks = []
     page_code = []
+    for code in page.elements:
+        in_main = mains and any(node is mains[0] for node in code.ancestors())
+        if code.tag in {"style", "script"} and (in_main or "data-lp-hook" in code.attrs):
+            owner = next((node.attrs.get("id", "") for node in code.ancestors() if mains and node.parent is mains[0]), "")
+            page_code.append({"tag": code.tag, "lines": lines(code), **({"inside": owner} if owner else {})})
     if mains:
-        for code in mains[0].iter():
-            if code.tag in {"style", "script"}:
-                owner = next((node.attrs.get("id", "") for node in code.ancestors() if node.parent is mains[0]), "")
-                page_code.append({"tag": code.tag, "lines": lines(code), **({"inside": owner} if owner else {})})
         for element in mains[0].children:
             if element.tag in {"style", "script"}:
                 continue
@@ -3044,7 +3218,7 @@ def _parser() -> argparse.ArgumentParser:
 
     new = sub.add_parser("new", help="create a page from the template; never replaces a file")
     common(new)
-    new.add_argument("--page", required=True)
+    new.add_argument("--page", required=True, help="page path relative to --repo")
     new.add_argument("--id", required=True, help="stable page id, e.g. the Lesson id")
     new.add_argument("--title", required=True)
     new.add_argument("--course", default="", help="breadcrumb: course or program name")
@@ -3059,7 +3233,7 @@ def _parser() -> argparse.ArgumentParser:
 
     add = sub.add_parser("add", help="insert a fragment, bump the revision and check")
     common(add)
-    add.add_argument("--page", required=True)
+    add.add_argument("--page", required=True, help="page path relative to --repo")
     add.add_argument("--id", required=True, help="the page id; must match the page's marker")
     add.add_argument("--fragment", required=True, help="fragment file, or - for stdin")
     where = add.add_mutually_exclusive_group()
@@ -3069,14 +3243,14 @@ def _parser() -> argparse.ArgumentParser:
 
     cont = sub.add_parser("continue", help="start the next page of a long lesson with a teaching segment, and link it from this page")
     common(cont)
-    cont.add_argument("--page", required=True, help="the lesson's last page")
+    cont.add_argument("--page", required=True, help="the lesson's last page, relative to --repo")
     cont.add_argument("--id", required=True, help="the page id; must match the page's marker")
     cont.add_argument("--fragment", help="the teaching segment that add refused; without it, only a missing link is repaired")
     cont.add_argument("--date", help=argparse.SUPPRESS)
 
     state = sub.add_parser("state", help="move a question block: open to answered, closed or replaced; answered to closed or replaced")
     common(state)
-    state.add_argument("--page", required=True)
+    state.add_argument("--page", required=True, help="page path relative to --repo")
     state.add_argument("--id", required=True, help="the page id; must match the page's marker")
     state.add_argument("--question", required=True)
     state.add_argument("--to", required=True, choices=["answered", "closed", "replaced"])
@@ -3085,13 +3259,13 @@ def _parser() -> argparse.ArgumentParser:
 
     render = sub.add_parser("render", help="render TeX and color code that were written into the page by hand")
     common(render)
-    render.add_argument("--page", required=True)
+    render.add_argument("--page", required=True, help="page path relative to --repo")
     render.add_argument("--id", required=True, help="the page id; must match the page's marker")
     render.add_argument("--date", help=argparse.SUPPRESS)
 
     look = sub.add_parser("look", help="switch a page to another look, or refresh its look stylesheet")
     common(look)
-    look.add_argument("--page", required=True)
+    look.add_argument("--page", required=True, help="page path relative to --repo")
     look.add_argument("--id", required=True, help="the page id; must match the page's marker")
     look.add_argument("--to", required=True, choices=LOOKS)
     look.add_argument("--date", help=argparse.SUPPRESS)
@@ -3104,12 +3278,12 @@ def _parser() -> argparse.ArgumentParser:
 
     check = sub.add_parser("check", help="validate one page")
     common(check)
-    check.add_argument("--page", required=True)
+    check.add_argument("--page", required=True, help="page path relative to --repo")
     check.add_argument("--anchor", action="append", default=[], help="an id you are about to cite in chat; repeatable")
 
     outline = sub.add_parser("outline", help="list blocks, line ranges and question states without reading the page")
     common(outline)
-    outline.add_argument("--page", required=True)
+    outline.add_argument("--page", required=True, help="page path relative to --repo")
 
     find = sub.add_parser("find", help="list lesson pages inside confirmed collections")
     common(find)

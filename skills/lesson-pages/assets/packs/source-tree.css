@@ -1,0 +1,83 @@
+/* lesson-pages 部件包：声明式源码浏览器 .lp-source-tree。由 lesson_pages.py 注入，不手改生成副本。
+   默认继承课程令牌；is-glass 只改变表面，不改变结构与键盘语义。 */
+.lp-source-tree { min-width: 0; }
+.lp-source-repo { margin: 18px 0 24px; min-width: 0; }
+.lp-source-repo > h4 { margin: 0 0 5px; font-size: 18px; line-height: 1.5; }
+.lp-source-repo > h4 a { color: var(--ink); }
+.lp-source-version { font: 13px/1.7 var(--font-mono); color: var(--ink-faint); overflow-wrap: anywhere; }
+.lp-source-about { font-size: 14px; line-height: 1.75; }
+.lp-source-docs { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.lp-source-outline, .lp-source-outline ul { margin: 0; padding-left: 1.2em; }
+.lp-source-outline li > p { margin: .3em 0 .7em; font-size: 14px; line-height: 1.7; }
+.lp-source-outline li > b { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.lp-source-links { font-size: 13px; line-height: 1.8; }
+.lp-st-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.lp-st-tabs .lp-btn { flex: 1 1 96px; min-height: 44px; border-radius: var(--radius); font-size: 14px; }
+.lp-st-tabs [aria-pressed="true"] { color: var(--ink); background: var(--raised); border-color: var(--s1); box-shadow: inset 0 -2px 0 var(--s1); font-weight: 650; }
+.lp-st-status { color: var(--ink-faint); font-size: 13px; overflow-wrap: anywhere; }
+.lp-source-tree.is-ready > .lp-source-repo { margin: 14px 0 0; }
+.lp-source-tree.is-ready > .lp-source-repo[hidden] { display: none; }
+.lp-st-workspace { position: relative; display: grid; grid-template-columns: minmax(190px, .95fr) minmax(220px, 1.05fr); gap: 38px; align-items: stretch; min-width: 0; }
+.lp-st-tree-pane, .lp-st-info { position: relative; min-width: 0; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); }
+.lp-st-tree-pane { display: flex; flex-direction: column; }
+.lp-st-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 6px 10px; color: var(--ink-soft); font-size: 13px; border-bottom: 1px solid var(--rule); }
+.lp-st-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.lp-st-actions .lp-btn { min-height: 36px; padding: 3px 8px; font-size: 12px; border-radius: var(--radius); }
+.lp-st-info-jump { display: none; }
+.lp-st-tree { height: 460px; max-height: 64vh; min-height: 240px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 8px 6px; }
+.lp-source-tree.is-ready .lp-source-outline, .lp-source-tree.is-ready .lp-source-outline ul:not(.lp-source-links) { list-style: none; margin: 0; padding: 0; }
+.lp-source-tree.is-ready .lp-source-outline ul:not(.lp-source-links) { margin-left: 8px; padding-left: 7px; border-left: 1px solid var(--rule); }
+.lp-source-tree.is-ready .lp-source-outline li { margin: 0; padding: 0; min-width: 0; scroll-margin: 8px; }
+.lp-source-tree.is-ready .lp-st-source-text, .lp-source-tree.is-ready .lp-st-source-links { display: none; }
+.lp-st-directory { margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
+.lp-st-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 7px; border-radius: 4px; color: var(--ink-soft); font: 13px/1.65 var(--font-mono); text-decoration: none; cursor: pointer; box-sizing: border-box; }
+summary.lp-st-row { display: list-item; list-style-position: inside; }
+summary.lp-st-row::marker { color: var(--ink-faint); font-size: .8em; }
+summary.lp-st-row > .lp-st-icon { margin-left: 2px; margin-right: 6px; }
+.lp-st-row > b { font: inherit; overflow-wrap: anywhere; }
+.lp-st-row .lp-st-main-label { margin-left: auto; font: 11px/1.5 var(--font-sans); color: var(--s1); white-space: nowrap; }
+summary.lp-st-row .lp-st-main-label { margin-left: 8px; }
+.lp-st-row:hover, .lp-st-row.is-path { color: var(--ink); background: var(--raised); }
+.lp-st-row.is-selected { color: var(--s1); background: var(--raised); box-shadow: inset 0 0 0 1px var(--s1); }
+.lp-st-context > .lp-st-row { color: var(--ink-faint); }
+.lp-st-icon { width: 17px; height: 17px; vertical-align: -3px; flex: 0 0 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.lp-st-info { padding: 18px; max-height: calc(64vh + 58px); overflow: auto; overscroll-behavior: contain; }
+.lp-st-kind { margin: 0 0 4px !important; color: var(--ink-faint); font-size: 12px; }
+.lp-st-title { margin: 0 0 10px; color: var(--ink); font: 650 19px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.lp-st-path { margin: 0 0 16px !important; color: var(--ink-faint); font-size: 12px; line-height: 1.7; }
+.lp-st-path code { color: inherit; background: none; padding: 0; overflow-wrap: anywhere; white-space: normal; }
+.lp-st-description { margin: 0 0 16px !important; color: var(--ink); font-size: 15px; line-height: 1.8; }
+.lp-st-links { list-style: none; padding: 0 !important; margin: 0 0 18px !important; font-size: 13px; line-height: 1.8; }
+.lp-st-links li { margin: 6px 0 !important; }
+.lp-st-links a { color: var(--s1); overflow-wrap: anywhere; }
+.lp-st-related { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.lp-st-related .lp-btn { min-height: 40px; font: 13px/1.7 var(--font-mono); text-align: left; overflow-wrap: anywhere; white-space: normal; }
+.lp-source-tree :is(a, button, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lp-st-wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.lp-st-wire[hidden] { display: none; }
+.lp-st-wire path { fill: none; stroke: var(--s1); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.lp-st-wire circle { fill: var(--paper); stroke: var(--s1); stroke-width: 1.2; }
+.lp-source-tree.is-glass :is(.lp-st-tree-pane, .lp-st-info) { background: color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter: blur(12px); }
+:root[data-look="blueprint"] .lp-source-tree :is(.lp-st-tree-pane, .lp-st-info, .lp-st-row, .lp-btn) { border-radius: 0; }
+@media (max-width: 700px) {
+  .lp-st-workspace { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .lp-st-tree { height: 300px; max-height: 42vh; }
+  .lp-st-info { max-height: none; padding: 16px; }
+  .lp-st-info-jump { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; border-top: 1px solid var(--rule); color: var(--s1); font-size: 14px; }
+  .lp-st-wire { display: none; }
+  .lp-source-tree.is-ready .lp-source-outline ul:not(.lp-source-links) { margin-left: 3px; padding-left: 5px; }
+}
+@media (pointer: coarse) {
+  .lp-st-row, .lp-st-actions .lp-btn, .lp-st-related .lp-btn { min-height: 44px; }
+  .lp-st-links a { display: inline-block; padding: 8px 0; }
+}
+@media print {
+  .lp-st-tabs, .lp-st-status, .lp-st-bar, .lp-st-info, .lp-st-wire, .lp-st-main-label, .lp-st-info-jump { display: none !important; }
+  .lp-source-tree.is-ready > .lp-source-repo[hidden] { display: block !important; }
+  .lp-st-workspace, .lp-st-tree-pane, .lp-st-tree { display: block; height: auto; max-height: none; min-height: 0; overflow: visible; padding: 0; border: 0; background: none; }
+  .lp-source-tree.is-ready .lp-st-source-text, .lp-source-tree.is-ready .lp-st-source-links { display: block !important; }
+  .lp-st-directory::details-content { content-visibility: visible !important; display: block !important; }
+  .lp-st-directory > ul, .lp-st-directory > p { display: block !important; }
+  .lp-st-row, .lp-st-row.is-selected { min-height: 0; background: none; box-shadow: none; padding: 3px 0; color: var(--ink); }
+  .lp-source-tree.is-ready .lp-source-outline p, .lp-source-tree.is-ready .lp-source-links { margin: 3px 0 10px; }
+}

@@ -1,0 +1,69 @@
+<section class="lp-node" id="node-4">
+  <h2><span class="lp-no">4</span>从目录找到接口实现</h2>
+  <p class="lp-spine">资料位置：图中两份仓库的固定版本；先定位目录，再沿行号阅读。</p>
+  <p class="lp-lead"><b>结论</b>目录回答代码放在哪里，职责说明回答为什么要读它；源码链接固定版本与行号，避免把不同版本的实现混在一起。</p>
+  <figure class="lp-figure is-stage is-wide lp-source-tree" id="fig-4-1">
+    <section class="lp-source-repo" id="lp-tree-python" data-start="lp-tree-json-api">
+      <h4><a href="https://github.com/python/cpython/tree/v3.12.0">cpython/</a></h4>
+      <p class="lp-source-version">CPython v3.12.0</p>
+      <p class="lp-source-about">从标准库 JSON 的公开入口，找到负责解码的 Python 实现。</p>
+      <p class="lp-source-docs"><a href="https://docs.python.org/3.12/library/json.html">Python 3.12 JSON 文档</a></p>
+      <ul class="lp-source-outline">
+        <li id="lp-tree-python-lib" data-kind="dir" data-path="Lib">
+          <b>Lib/</b>
+          <p>标准库中的 Python 模块。</p>
+          <ul>
+            <li id="lp-tree-python-json" data-kind="dir" data-path="Lib/json" data-main="true">
+              <b>json/</b>
+              <p>JSON 编码与解码接口所在的包。</p>
+              <ul>
+                <li id="lp-tree-json-api" data-kind="file" data-path="Lib/json/__init__.py" data-main="true">
+                  <b>__init__.py</b>
+                  <p>提供 <code>dump</code>、<code>dumps</code>、<code>load</code> 和 <code>loads</code> 等公开函数，并连接编码器与解码器。</p>
+                  <ul class="lp-source-links">
+                    <li><a href="https://github.com/python/cpython/blob/v3.12.0/Lib/json/__init__.py#L183-L200">L183–200：dumps 接口</a></li>
+                    <li><a href="https://github.com/python/cpython/blob/v3.12.0/Lib/json/__init__.py#L299-L320">L299–320：loads 接口</a></li>
+                  </ul>
+                </li>
+                <li id="lp-tree-json-decoder" data-kind="file" data-path="Lib/json/decoder.py">
+                  <b>decoder.py</b>
+                  <p><code>JSONDecoder</code> 提供解码配置与从 JSON 文本恢复 Python 对象的接口。</p>
+                  <ul class="lp-source-links">
+                    <li><a href="https://github.com/python/cpython/blob/v3.12.0/Lib/json/decoder.py#L254-L290">L254–290：JSONDecoder</a></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li id="lp-tree-python-objects" data-kind="context" data-path="Objects">
+          <b>Objects/</b>
+          <p>Python 对象的底层实现；这里先保留目录位置，不展开文件。</p>
+        </li>
+      </ul>
+    </section>
+    <section class="lp-source-repo" id="lp-tree-lua" data-start="lp-tree-lua-state">
+      <h4><a href="https://github.com/lua/lua/tree/v5.4.6">lua/</a></h4>
+      <p class="lp-source-version">Lua v5.4.6</p>
+      <p class="lp-source-about">相关 C 文件直接位于仓库根目录：从状态创建与关闭，转到操作 Lua 栈的公开 C API。</p>
+      <p class="lp-source-docs"><a href="https://www.lua.org/manual/5.4/manual.html#4">Lua 5.4 C API 手册</a></p>
+      <ul class="lp-source-outline">
+        <li id="lp-tree-lua-state" data-kind="file" data-path="lstate.c" data-main="true">
+          <b>lstate.c</b>
+          <p>管理运行时状态，包含创建状态的 <code>lua_newstate</code> 与关闭状态的 <code>lua_close</code>。</p>
+          <ul class="lp-source-links">
+            <li><a href="https://github.com/lua/lua/blob/v5.4.6/lstate.c#L360-L418">L360–418：状态创建与关闭</a></li>
+          </ul>
+        </li>
+        <li id="lp-tree-lua-api" data-kind="file" data-path="lapi.c">
+          <b>lapi.c</b>
+          <p>公开 C API 的实现；可从读取与设置栈顶的接口开始查阅。</p>
+          <ul class="lp-source-links">
+            <li><a href="https://github.com/lua/lua/blob/v5.4.6/lapi.c#L176-L207">L176–207：lua_gettop 与 lua_settop</a></li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+    <figcaption><b>图 4.1</b>两种源码组织方式：展开真实目录，选择目录或文件查看职责，再沿固定版本链接进入实现。旁支只用于定位，不表示这里列出了整个仓库。</figcaption>
+  </figure>
+</section>
