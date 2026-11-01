@@ -31,6 +31,8 @@ description: "Guide human learners to deep, transferable understanding: explain 
   场景、对象与问题，再逐步解释机制和因果关系，把总结性的结论与要点放在节点末尾，不用开头的纲领代替讲解。
 - 清晰完整优先于句子短。写“需要／不能／不要”时，说明谁在什么条件下做什么，以及原因或后果；必要时用
   具体例子补足。适用边界集中说明，不为压成一句而省略关键条件，也不在每段附重复的免责说明。
+- 每个节点围绕一个主示例，把细节落实到代码、输入输出或状态变化；对照时只改主例局部，说明改动、结果与原因。
+  主例已说明的细节直接指向相关部位，不机械另起例子；编程主题给出支撑控制流与依赖判断的代码。
 - 用学习者已熟悉的系统做锚点和对照；新符号先定义含义、维度和单位。
 - 小算例只用来让机制可见，讲完随即回到真实规模和真实系统，不让整课停留在玩具例子里。
 - 算法、算子和多阶段程序：先给未优化的整体数学和接口，再讲实现怎样分解与分工；阶段之间传递的状态要
@@ -38,7 +40,7 @@ description: "Guide human learners to deep, transferable understanding: explain 
 - 关键事实给出来源和版本；来源没有直接支持的动机或收益标为推断。来源角色、版本与冲突处理见
   [source-authority.md](references/source-authority.md)。
 
-两个完整的正面示例见 [teaching-exemplars.md](references/teaching-exemplars.md)。开讲一门新课前先读它。
+讲解深度与主例分支的示范见 [teaching-exemplars.md](references/teaching-exemplars.md)。开讲一门新课前先读它。
 
 ## 提问：考理解，不考计算
 
