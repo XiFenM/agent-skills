@@ -1,7 +1,8 @@
 <section class="lp-node" id="node-4">
   <h2><span class="lp-no">4</span>从目录找到接口实现</h2>
   <p class="lp-spine">资料位置：图中两份仓库的固定版本；先定位目录，再沿行号阅读。</p>
-  <p class="lp-lead"><b>结论</b>目录回答代码放在哪里，职责说明回答为什么要读它；源码链接固定版本与行号，避免把不同版本的实现混在一起。</p>
+  <p>现在要从一个公开接口找到负责实现它的文件。以 Python 的 JSON 解码为例，我们认识调用入口 <code>json.loads</code>，但还需要知道入口放在哪里、实际解码职责由谁承担。下面再用 Lua 对照另一种目录组织，看看同一套定位方法怎样应用到不同仓库。</p>
+  <p>先选择对应版本的仓库，再逐级展开目录。选中文件后，右侧会说明它承担的职责，并给出可继续阅读的代码行。目录树解决的是定位问题；是否读到了目标接口的实现，还要结合职责说明与源码内容判断。</p>
   <figure class="lp-figure is-stage is-wide lp-source-tree" id="fig-4-1">
     <section class="lp-source-repo" id="lp-tree-python" data-start="lp-tree-json-api">
       <h4><a href="https://github.com/python/cpython/tree/v3.12.0">cpython/</a></h4>
@@ -66,4 +67,6 @@
     </section>
     <figcaption><b>图 4.1</b>两种源码组织方式：展开真实目录，选择目录或文件查看职责，再沿固定版本链接进入实现。旁支只用于定位，不表示这里列出了整个仓库。</figcaption>
   </figure>
+  <p>核对调用路径时，要让入口文件与被调用实现来自同一版本。若把另一个版本的同名文件接到当前路径上，函数位置或职责可能已经变化，得到的关系便不再对应同一份实现。图中的链接因此固定了版本和行号，便于逐步回查。</p>
+  <p class="lp-lead"><b>结论</b>目录回答代码放在哪里，职责说明回答为什么要读它；源码链接固定版本与行号，避免把不同版本的实现混在一起。</p>
 </section>
