@@ -334,7 +334,7 @@ def _with(source: str, old: str, new: str) -> str:
         ('<p class="lp-how">', '<button type="button" class="lp-btn">揭晓</button><p class="lp-how">', "check.leak"),
         ('<figure class="lp-figure lp-stepper" id="fig-2-1">', '<figure class="lp-figure lp-stepper" id="fig-2-1" data-reveals="q-1">', "check.reveal"),
         ('<figure class="lp-figure lp-stepper" id="fig-2-1">', '<figure class="lp-figure lp-stepper" id="fig-2-1" data-reveals="q-7">', "check.reveal"),
-        ('<p class="lp-lead"><b>结论</b>分块处理一行时', '<p>结论后置</p><p class="lp-lead"><b>结论</b>分块处理一行时', "node.lead"),
+        ('<p class="lp-lead"><b>结论</b>分块处理一行时', '<p><b>结论</b>分块处理一行时', "node.lead"),
         ("</main>", '<svg role="img" aria-label="a" viewBox="0 0 10 10"><rect fill="#333" width="5" height="5"/></svg></main>', "svg.color"),
     ],
 )
@@ -342,6 +342,39 @@ def test_check_detects_each_rule(built: Path, old: str, new: str, code: str) -> 
     source = _source(built)
     assert code not in _error_codes(source, built)
     assert code in _error_codes(_with(source, old, new), built)
+
+
+@pytest.mark.parametrize("summary_first", [False, True], ids=["textbook-ending", "legacy-opening"])
+def test_add_preserves_node_explanation_and_summary_order(repo: Path, tmp_path: Path, capsys, summary_first: bool) -> None:
+    assert _new(capsys, repo)[0] == 0
+    explanation = '<p>工作线程仍要读取缓冲区，主线程负责持有这块存储。</p>'
+    summary = '<p class="lp-lead"><b>结论</b>主线程确认最后一次读取结束后，才释放缓冲区。</p>'
+    body = summary + explanation if summary_first else explanation + summary
+    fragment = _fragment(tmp_path, "summary-order.html",
+                         '<section class="lp-node" id="node-1"><h2>缓冲区的使用期</h2>' + body + '</section>')
+    code, result = _run(capsys, "add", "--repo", str(repo), "--page", PAGE, "--id", PAGE_ID,
+                        "--fragment", fragment)
+    assert code == 0, result
+    source = _source(repo / PAGE)
+    assert not lp.check_source(source, repo / PAGE).errors
+    assert (source.index("工作线程仍要读取") < source.index("主线程确认最后一次读取")) is not summary_first
+
+
+@pytest.mark.parametrize("summary", [
+    "",
+    '<p class="lp-lead"> \n </p>',
+    '<details><summary>补充</summary><p class="lp-lead">只有折叠中的总结。</p></details>',
+], ids=["missing", "empty", "nested-only"])
+def test_add_rejects_missing_visible_summary_without_changing_page(repo: Path, tmp_path: Path, capsys, summary: str) -> None:
+    assert _new(capsys, repo)[0] == 0
+    before = (repo / PAGE).read_bytes()
+    fragment = _fragment(tmp_path, "invalid-summary.html",
+                         '<section class="lp-node" id="node-1"><h2>缓冲区</h2><p>主线程拥有数据。</p>' + summary + '</section>')
+    code, result = _run(capsys, "add", "--repo", str(repo), "--page", PAGE, "--id", PAGE_ID,
+                        "--fragment", fragment)
+    assert code != 0
+    assert "node.lead" in json.dumps(result)
+    assert (repo / PAGE).read_bytes() == before
 
 
 @pytest.mark.parametrize(

@@ -1003,7 +1003,9 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
             elif questions[question] != "closed":
                 report.error("check.reveal", f"this widget reveals {question}, which is still {questions[question]}", element.line)
 
-    # Nodes: conclusion first, spine pointer when the page has one.
+    # Nodes keep a visible summary for review mode. Its position is editorial:
+    # textbook-style pages summarize after the explanation; older pages may lead
+    # with it. Keep the historical .lp-lead class and diagnostic for compatibility.
     has_spine = page.one("spine") is not None
     for node in page.find(cls="lp-node"):
         node_id = node.attrs.get("id")
@@ -1017,8 +1019,8 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
             child for child in node.children
             if child.tag not in {"h2"} and not ({"lp-spine", "lp-where"} & child.classes)
         ]
-        if not content or "lp-lead" not in content[0].classes or not content[0].text().strip():
-            report.error("node.lead", f"{node_id} must open with a non-empty .lp-lead conclusion", node.line)
+        if not any("lp-lead" in child.classes and child.text().strip() for child in content):
+            report.error("node.lead", f"{node_id} needs a non-empty direct-child .lp-lead summary; it may follow the explanation", node.line)
         if has_spine and not any("lp-spine" in child.classes for child in node.children):
             report.warn("node.spine", f"{node_id} has no .lp-spine line naming its part of the teaching spine", node.line)
     spine = page.one("spine")
@@ -1114,7 +1116,7 @@ def check_source(source: str, page_path: Path | None = None) -> Report:
     for paragraph in page.find("p", scope=mains[0] if mains else None):
         cjk = len(re.findall(r"[\u3400-\u9fff]", paragraph.text()))
         if cjk > 220:
-            report.warn("text.wall", f"a paragraph has {cjk} CJK characters; split it or move detail into a figure", paragraph.line)
+            report.warn("text.wall", f"a paragraph has {cjk} CJK characters; consider splitting at a logical break or using a figure, while preserving necessary context and reasoning", paragraph.line)
 
     # Widgets.
     scripts = "\n".join(node.text() for node in page.find("script"))

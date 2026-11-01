@@ -48,12 +48,19 @@ description: "Render guide-learning lessons as calm, interactive, offline single
 Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里，不受这条限制。反馈里的诊断和更正结论必须出现在
 对话中，学习记录只能看到对话。
 
+## 教材式呈现
+
+课程页默认先交代场景、对象和问题，再沿机制、因果与例子展开，最后总结；明确的学习者偏好优先。必要背景与解释
+写全，不为凝练省去主体或条件。限制语句讲清谁在什么条件下做什么、为什么。写法见
+[page-structure.md](references/page-structure.md)。
+
 ## 一课在页面上怎样展开
 
 1. **开课**：`new` 建页，只写导入、骨架和资料指路（写法见 opening.md）；一门课的页面用同一种风格（`--look`，见
    [page-design.md](references/page-design.md) 第 9 节）。核对画像与前置在对话里进行；不需要提问时，同一轮接着追加第一段。
 2. **每段**：讲到下一次提问为止的那几个节点连同那道题，一次 `add`；每个节点至多一个交互部件。节奏只听 `guide-learning`；
-   一段读起来超过约 9 分钟时，先删冗余、把细节移进图或已讲内容的 `<details>`，不为篇幅多加提问。
+   一段读起来超过约 9 分钟时，先清理重复、拆清段落，用图组织关系，把已讲过的可选细节移入 `<details>`；不删必要
+   背景和因果来凑时长，不为篇幅多加提问。
 3. **作答之后**：先 `state --to answered`，题头不再提示作答；反馈在对话，需要展开的补充用 `add --into node-N` 放到所属
    节点下。复查题和普通检查题一样写进页面并逐字发到对话；复查答完后用 `state --to closed --fragment <参考要点>` 关闭
    原题，一次写进参考要点。
@@ -61,7 +68,7 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 5. **不提前写**：还没讲的节点不进页面。学习者明确要求“剩下的都写出来”时可以提前写讲解节点（仍一段一次 `add`），题目仍等真正提出时
    用 `add --after` 插到对应节点之后；串讲和验收题不提前写。结课后不再写入，除非学习者要求。
 
-各块的写法、编号与题目状态见 [page-structure.md](references/page-structure.md)。
+块与题目写法见 [page-structure.md](references/page-structure.md)。
 
 ## 每次更新页面
 
@@ -74,15 +81,7 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 4. 按下文“验证”检查。
 5. 在对话里发指路。
 
-命令从仓库根运行；页面参数相对 `--repo`，解释器按环境选 `python` 或 `python3`。以下用 Codex 发现入口举例，其他宿主换成实际 Skill 路径。`new` 的完整写法见 opening.md，
-题目状态与续页见 upkeep.md。第一次在新确认的目录建页时加 `--make-parents`；指路的阅读时间取写入输出的
-`reading_minutes`。
-
-```bash
-python .agents/skills/lesson-pages/scripts/lesson_pages.py outline --page learning/pages/attn-03.html
-python .agents/skills/lesson-pages/scripts/lesson_pages.py add --page learning/pages/attn-03.html --id attn-03 --fragment /tmp/segment.html
-python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning/pages/attn-03.html --anchor q-2
-```
+常用命令与建页约定见 opening.md，题目状态与续页见 upkeep.md；指路阅读时间取写入输出的 `reading_minutes`。
 
 ## 文件、查看与授权
 
@@ -127,5 +126,5 @@ python .agents/skills/lesson-pages/scripts/lesson_pages.py check --page learning
 - [timelines.md](references/timelines.md) 与 [逐步时序片段](references/example-timeline.html)：需要展示参与者、状态、信号与跨步依赖时读。
 - [page-design.md](references/page-design.md)：选风格、自绘图形、改样式或检查视觉时读。
 - [files-and-viewing.md](references/files-and-viewing.md)：选位置、定查看方式、读受管配置或处理授权细节时读。
-- `references/sample-pages/`：同一课用讲义、蓝图、朱批三种风格写成的成品页（2026-10-24 版）。想看整体效果时用浏览器
-  打开；每页约 500 KB，不读进上下文，写法以上面的参考为准。
+- `references/sample-pages/`：2026-10-24 的历史成品页，仅参照视觉与交互；讲解顺序以 page-structure.md 和
+  example-segment.html 为准。每页约 500 KB，用浏览器看，不读进上下文。
