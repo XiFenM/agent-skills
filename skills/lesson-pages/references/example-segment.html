@@ -116,6 +116,18 @@ def attention_row(scores, values, block=4):
     <li data-lines="11-12"><var class="lp-s2">ℓ</var> 和 <var class="lp-s3">acc</var> 都先乘 α 换基准，再加上本块的贡献。</li>
     <li data-lines="14">整行看完才归一化；同时返回 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，留给反向。用图 2.1 的 12 个分数调用，得到的 O 与最后一步的读数相同。</li>
   </ol>
+  <p>主例的具体输入就是图 2.1 中这一行。继续使用上面的 <code>attention_row</code>，函数体不变；下面的调用把输入和输出连起来，便于对照第 8–9 行的最大值更新、第 11–12 行的累加，以及第 14 行的最终归一化。</p>
+  <pre class="lp-code" data-lang="python" data-title="主例调用：每块 4 个分数"><code>scores = [1.2, 3.1, 0.4, 2.0, 4.5, 0.8, 2.2, 1.0, 3.9, 5.6, 0.3, 2.7]
+values = [0.5, -1.0, 2.0, 0.3, 1.5, -0.4, 0.9, 1.1, -0.7, 0.8, 1.6, -0.2]
+base = attention_row(scores, values, block=4)
+print(tuple(round(x, 6) for x in base))</code></pre>
+  <pre class="lp-output">(0.655197, 6.162142)</pre>
+  <p>这里两个返回值依次是输出 O 和留给反向的 logsumexp L。为了看清“改变分块方式”具体改变了什么，分支只把上面调用中的 <code>block=4</code> 换成 <code>block=6</code>：同一行分数、同一组 values 和函数体全部保留。</p>
+  <pre class="lp-code" data-lang="python" data-title="局部分支：只替换分块参数"><code>changed = attention_row(scores, values, block=6)
+print(tuple(round(x, 6) for x in changed))</code></pre>
+  <pre class="lp-output">(0.655197, 6.162142)</pre>
+  <p>主例经历三个块，块后最大值依次是 3.1、4.5、5.6；分支只经历两个块，块后最大值是 4.5、5.6。中途的分组和基准变化了，但每一步都把旧的 ℓ、acc 换到当前最大值的基准，再加本块贡献，所以最终表达的仍是同一行的加权结果。分块参数改变了怎样分批处理，没有改变输入与数学目标。</p>
+  <p class="lp-code-src">上述输出由本段 Python 3.12 参考实现核对，显示时四舍五入到 6 位小数；两种分组的浮点累加顺序不同，不要求逐位一致。这是参考计算的对照，没有测量 GPU 性能。</p>
   <p>小例子只是为了看清规则。真实规模下一行有几千个分数，按 B<sub>c</sub> = 64 或 128 分成几十个块，但每行随身带的状态始终只有 <var class="lp-s1">m</var>、<var class="lp-s2">ℓ</var> 两个 FP32 标量和长度为 d 的 <var class="lp-s3">acc</var>，与 N 无关。</p>
   <p><b class="lp-layer">真实系统</b><ruby>反向传播<rt>backward pass</rt></ruby>需要 P，但保存 N×N 的 P 正是前向想避免的。FlashAttention 只为每行保存 L = <var class="lp-s1">m</var> + log <var class="lp-s2">ℓ</var>，只占 O(N) 空间；反向按块重算 S，再用 P = exp(S − L) 恢复概率，用重算换显存和带宽。</p>
   <aside class="lp-note" role="note">来源：FlashAttention 论文 arXiv:2205.14135 第 3.1 节；FlashAttention-2 论文 arXiv:2307.08691 v1 第 3.1 节。</aside>
@@ -132,7 +144,7 @@ def attention_row(scores, values, block=4):
   <p class="lp-how">用自己的话回答，说清合并规则和理由即可，不需要算具体数字。</p>
 </section>
 <template data-lp-into="glossary-list">
-  <div id="g-br"><dt>B<sub>r</sub>、B<sub>c</sub></dt><dd>Q 行块的行数与 K、V 列块的列数；受片上存储和寄存器限制。</dd></div>
+  <div id="g-br"><dt>B<sub>r</sub>、B<sub>c</sub></dt><dd>Q 行块的行数与 K、V 沿序列维分块的行数；后者对应分数矩阵 S 的列块宽度，均受片上存储和寄存器限制。</dd></div>
   <div id="g-m"><dt><var class="lp-s1">m</var></dt><dd>每行当前见过的最大分数；标量，FP32。</dd></div>
   <div id="g-l"><dt><var class="lp-s2">ℓ</var></dt><dd>每行以 <var class="lp-s1">m</var> 为基准的指数和；标量，FP32。</dd></div>
   <div id="g-acc"><dt><var class="lp-s3">acc</var></dt><dd>每行未归一化的输出累加；长度 d 的向量，FP32。</dd></div>
