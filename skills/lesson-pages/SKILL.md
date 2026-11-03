@@ -70,6 +70,8 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 块与题目写法见 [page-structure.md](references/page-structure.md)。
 
+新版模板内置横排站点名称和每个节点的“复制为 Markdown”按钮；复制覆盖节点内的正文、补充与完整图示步骤，不夹带导航和操作控件，无需逐课编写复制脚本。行为与验证见 [page-design.md](references/page-design.md) 和 [browser-checks.md](references/browser-checks.md)。
+
 ## 每次更新页面
 
 1. 用 `outline` 看已有的块、行号和题目状态。不读整页，不读模板。
