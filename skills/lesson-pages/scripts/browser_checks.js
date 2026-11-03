@@ -40,6 +40,20 @@ async (page, options = {}) => {
             const a=rect(active), t=rect(thumb);
             if (['left','top','width','height'].some(k=>Math.abs(a[k]-t[k])>2)) problems.push({kind:'selection-background', label:active.textContent.trim(), button:a, background:t});
           }
+          const overlaps=(a,b)=>a.left<b.right-1 && b.left<a.right-1 && a.top<b.bottom-1 && b.top<a.bottom-1;
+          for (const sign of document.querySelectorAll('.lp-sign-here')) {
+            const labels=[...sign.querySelectorAll(':scope > span')].filter(shown);
+            for (let i=0;i<labels.length;i++) for (let j=i+1;j<labels.length;j++) {
+              if (overlaps(rect(labels[i]),rect(labels[j]))) problems.push({kind:'station-label-overlap', labels:[labels[i].textContent,labels[j].textContent]});
+            }
+          }
+          for (const button of document.querySelectorAll('.lp-node-copy')) {
+            if (!shown(button)) continue;
+            const node=button.closest('.lp-node'), heading=node && node.querySelector(':scope > h2'), b=rect(button);
+            if (b.width<44 || b.height<44) problems.push({kind:'copy-touch-target',node:node && node.id});
+            if (heading && overlaps(b,rect(heading))) problems.push({kind:'copy-title-overlap',node:node.id});
+            if (b.left<0 || b.right>innerWidth+1) problems.push({kind:'copy-outside-page',node:node && node.id});
+          }
           let scrollableReadouts=0;
           for (const value of document.querySelectorAll('.lp-scale-value')) {
             const card=value.closest('li[data-value]');
@@ -59,7 +73,7 @@ async (page, options = {}) => {
           const priority=[];
           for (const note of document.querySelectorAll('main .lp-note')) {
             let anchor=document.getElementById((note.getAttribute('data-note-for')||'').replace(/^#/,'')) || note.previousElementSibling;
-            while (anchor && (!anchor.getClientRects().length || ['SCRIPT','STYLE','TEMPLATE'].includes(anchor.tagName))) anchor=anchor.previousElementSibling;
+            while (anchor && (!anchor.getClientRects().length || ['SCRIPT','STYLE','TEMPLATE'].includes(anchor.tagName) || anchor.classList.contains('lp-node-copy-tools'))) anchor=anchor.previousElementSibling;
             if (anchor && anchor.id) priority.push(anchor.id);
           }
           for (const figure of document.querySelectorAll('.lp-source-tree[id], .lp-timeline[id]')) priority.push(figure.id);

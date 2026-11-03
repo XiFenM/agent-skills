@@ -202,6 +202,93 @@ div.tex:hover .lp-copy-tex, .lp-copy-tex:focus-visible, .lp-copy-tex.is-done { o
 .lp-spine { margin: -6px 0 6px !important; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
 .lp-spine::before { content: "对应资料　"; color: var(--ink-faint); }
 
+/* 整节点复制：有脚本时才加控件，保留独立标题供目录与阅读模式使用。 */
+.lp-node-copy-enabled { position: relative; }
+.lp-main .lp-node-copy-enabled > h2 { min-height: 44px; margin-inline-end: 168px; padding-inline-end: 0; }
+.lp-node-copy-tools {
+  position: absolute;
+  inset-inline-end: 0;
+  top: var(--lp-node-copy-top, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0;
+  z-index: 2;
+}
+.lp-node-copy-button {
+  box-sizing: border-box;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 14px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius, 4px);
+  font: 500 13.5px/1.5 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.lp-node-copy-tools > .lp-node-copy-button { min-width: 152px; }
+.lp-node-copy-button:hover { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-wash); }
+.lp-node-copy-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.lp-node-copy-button[aria-busy="true"] { cursor: progress; }
+.lp-node-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.lp-node-copy-buffer { position: fixed; inset: 0 auto auto 0; width: 1px; height: 1px; opacity: 0; padding: 0; border: 0; }
+.lp-node-copy-dialog {
+  box-sizing: border-box;
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--round, 14px);
+  box-shadow: var(--shadow);
+}
+.lp-node-copy-dialog::backdrop { background: color-mix(in srgb, var(--band) 48%, transparent); }
+.lp-node-copy-dialog > h2 { margin: 0 0 12px; font-size: 20px; }
+.lp-node-copy-dialog > p { margin: 0 0 16px; color: var(--ink-soft); font-size: 15px; }
+.lp-node-copy-text {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: min(52dvh, 480px);
+  min-height: 160px;
+  padding: 12px;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius, 4px);
+  font: 13px/1.6 var(--font-mono);
+  white-space: pre;
+  resize: vertical;
+  tab-size: 4;
+}
+.lp-node-copy-dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
+@media (max-width: 760px) {
+  .lp-main .lp-node-copy-enabled > h2 { margin-inline-end: 0; padding-inline-end: 0; min-height: 0; margin-bottom: 12px; }
+  .lp-node-copy-tools { position: static; justify-content: flex-start; width: 100%; margin: 0 0 16px; }
+  .lp-node-copy-dialog { padding: 16px; }
+}
+@media print {
+  .lp-node-copy-tools { display: none !important; }
+  .lp-main .lp-node-copy-enabled > h2 { margin-inline-end: 0; padding-inline-end: 0; min-height: 0; }
+  .lp-node-copy-dialog { display: none; }
+}
+
 /* 批注：宽屏在右栏，窄屏紧跟所属段落 */
 .lp-note { position: relative; margin: -.35em 0 1.1em; padding-left: 16px; font-size: 14px; line-height: 1.65; color: var(--ink-soft); }
 .lp-note::before { content: "注"; position: absolute; left: 0; top: 0; font-family: var(--font-kai); color: var(--accent); }
@@ -443,7 +530,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 
 /* 只看要点：结论、骨架、口述版与题目 */
 .lp-review-exit { position: fixed; z-index: 45; right: 20px; bottom: 20px; min-height: 40px; padding: 6px 18px; font: inherit; font-size: 14.5px; font-weight: 600; color: var(--band-ink); background: var(--band); border: 1px solid var(--band-rule); border-radius: 999px; box-shadow: var(--shadow); cursor: pointer; }
-.lp-review .lp-node > :not(h2):not(.lp-lead):not(.lp-oral):not(.lp-where):not(.lp-spine) { display: none; }
+.lp-review .lp-node > :not(h2):not(.lp-lead):not(.lp-oral):not(.lp-where):not(.lp-spine):not(.lp-node-copy-tools) { display: none; }
 .lp-review .lp-narrative > p:not(:first-of-type), .lp-review #spine, .lp-review .lp-addendum { display: none; }
 
 @media (max-width: 639px) {
@@ -535,7 +622,7 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 @keyframes lp-unblur { from { opacity: .55; filter: blur(.8px); } to { opacity: 1; filter: none; } }
 
 /* 站牌：每个节点开头一块，上一站、本站、下一站，底下是整条线 */
-.lp-where.lp-sign { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); align-items: end; gap: 0 14px; margin: 6px 0 26px; padding: 12px 16px 0; color: var(--band-ink); background: var(--band); border-radius: 10px; overflow: hidden; }
+.lp-where.lp-sign { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); align-items: end; gap: 0 16px; margin: 6px 0 26px; padding: 12px 16px 0; color: var(--band-ink); background: var(--band); border-radius: 10px; overflow: hidden; }
 .lp-sign small { display: block; margin-bottom: 1px; font-size: 11.5px; font-weight: 400; letter-spacing: .06em; color: var(--band-soft); }
 .lp-sign a, .lp-sign .lp-sign-end { display: block; min-width: 0; padding-bottom: 10px; font-size: 14px; line-height: 1.4; color: var(--band-soft); text-decoration: none; }
 .lp-sign a:hover { color: var(--band-ink); }
@@ -543,16 +630,19 @@ select, input[type="number"] { padding: 3px 8px; font: inherit; font-size: 14.5p
 .lp-sign-next { text-align: right; }
 .lp-sign-next > span::after { content: " →"; }
 .lp-sign-next.is-fog > span { opacity: .6; filter: blur(.5px); }
-.lp-sign-here { min-width: 0; padding-bottom: 10px; text-align: center; }
-.lp-sign-here > span { display: block; font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--band-ink); }
-.lp-sign-here > span + span::before { content: "⇄ "; font-weight: 400; color: var(--band-soft); }
+.lp-sign-here { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 3px 12px; min-width: 0; padding-bottom: 10px; text-align: center; }
+.lp-sign-here > small { flex: 0 0 100%; margin: 0; }
+.lp-sign-here > span { display: inline-flex; flex: 0 0 auto; align-items: baseline; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--band-ink); }
+.lp-sign-here > span + span::before { content: "⇄"; flex: 0 0 auto; margin-right: 12px; font-weight: 400; color: var(--band-soft); }
 .lp-sign-line { grid-column: 1 / -1; position: relative; display: flex; justify-content: space-between; align-items: center; height: 18px; margin: 0 -16px !important; padding: 0 22px !important; list-style: none; background: linear-gradient(var(--line), var(--line)) center / 100% 6px no-repeat; }
 .lp-sign-line > li { width: 10px; height: 10px; margin: 0 !important; background: var(--band); border: 2px solid var(--band-ink); border-radius: 50%; }
 .lp-sign-line > li.is-fog { background: var(--band); border-style: dashed; border-color: var(--band-soft); }
 .lp-sign-line > li.is-here { width: 14px; height: 14px; background: var(--band-ink); box-shadow: 0 0 0 4px color-mix(in srgb, var(--band-ink) 30%, transparent); }
-@media (max-width: 559px) {
-  .lp-where.lp-sign { grid-template-columns: 1fr 1fr; }
-  .lp-sign-here { grid-column: 1 / -1; grid-row: 1; padding-bottom: 6px; }
+@media (max-width: 680px) {
+  .lp-where.lp-sign { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; }
+  .lp-sign-here { grid-column: 1 / -1; grid-row: 1; gap: 4px 9px; padding-bottom: 12px; }
+  .lp-sign-here > span { font-size: 16px; }
+  .lp-sign-here > span + span::before { margin-right: 9px; }
 }
 
 /* 中英术语注音：注音只占行距里的空间，不撑高行 */
@@ -728,7 +818,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   </main>
 </div>
 <script id="lp-runtime">
-/* lesson-pages runtime v3.1。页面不要修改本段；本页专用的部件逻辑写进带 data-lp-hook 的脚本。 */
+/* lesson-pages runtime v3.2。页面不要修改本段；本页专用的部件逻辑写进带 data-lp-hook 的脚本。 */
 (function () {
   "use strict";
   var root = document.documentElement;
@@ -740,6 +830,354 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   var rev = meta ? parseInt(meta.getAttribute("data-rev") || "1", 10) : 1;
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var freshSince = rev - 1;
+
+  /* 整节点 Markdown：保存作者内容，不把运行时控件与当前折叠状态当作教材。 */
+  var nodeCopy = (function () {
+    // Snapshot author DOM before navigation, code, math, or widget UI is generated.
+    var snapshots = new Map();
+    var snapshotsById = new Map();
+    var controls = [];
+    var initialized = false;
+    var layoutFrame = 0;
+    var manualDialog = null;
+    var manualReturn = null;
+    var skipped = "button,nav,script,style,template,input,textarea,select,dialog," +
+      ".lp-node-copy-tools,.lp-code-head,.lp-where,.lp-copy-tex,.lp-step-controls";
+    var blockTags = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DETAILS|DIV|DL|FIGCAPTION|FIGURE|FOOTER|H[1-6]|HEADER|HR|OL|P|PRE|SECTION|SUMMARY|TABLE|UL)$/;
+
+    function escapeText(value) {
+      return value.replace(/\\/g, "\\\\").replace(/([`*_[\]<>$])/g, "\\$1")
+        .replace(/(^|\n)([ \t]*)(#{1,6}|[-+] )/g, "$1$2\\$3")
+        .replace(/(^|\n)([ \t]*)(\d+)([.)]) /g, "$1$2$3\\$4 ");
+    }
+
+    function destination(value) {
+      return value.replace(/[\s<>]/g, function (ch) { return encodeURIComponent(ch); });
+    }
+
+    function codeSpan(value) {
+      value = value.replace(/\r\n?|\n/g, " ");
+      var runs = value.match(/`+/g) || [];
+      var fence = "`".repeat(Math.max.apply(null, [0].concat(runs.map(function (s) { return s.length; }))) + 1);
+      var pad = /^`|`$/.test(value) || (/^ .* $/.test(value) && /\S/.test(value));
+      return fence + (pad ? " " : "") + value + (pad ? " " : "") + fence;
+    }
+
+    function wrapped(value, marker) {
+      if (!value.trim()) return value;
+      var leading = (value.match(/^\s*/) || [""])[0];
+      var trailing = (value.match(/\s*$/) || [""])[0];
+      return leading + marker + value.trim() + marker + trailing;
+    }
+
+    function mathValue(el) {
+      var tex = el.getAttribute("data-tex");
+      if (tex === null) return null;
+      var display = el.tagName === "DIV" || el.tagName === "PRE" || el.getAttribute("data-display") === "true";
+      return display ? "$$\n" + tex + "\n$$" : "$" + tex + "$";
+    }
+
+    function inline(node) {
+      if (node.nodeType === 3) return escapeText(node.nodeValue.replace(/\s+/g, " "));
+      if (node.nodeType !== 1 || node.matches(skipped)) return "";
+      var formula = mathValue(node);
+      if (formula !== null) return formula;
+      var tag = node.tagName;
+      if (tag === "BR") return "  \n";
+      if (tag === "CODE" || tag === "KBD" || tag === "SAMP") return codeSpan(node.textContent);
+      if (tag === "IMG") return "![" + escapeText(node.getAttribute("alt") || "") + "](<" + destination(node.getAttribute("src") || "") + ">)";
+      var value = Array.from(node.childNodes).map(inline).join("");
+      if (node.classList.contains("lp-no")) return value + " ";
+      if (tag === "STRONG" || tag === "B") return wrapped(value, "**");
+      if (tag === "EM" || tag === "I") return wrapped(value, "*");
+      if (tag === "DEL" || tag === "S") return wrapped(value, "~~");
+      if (tag === "SUB" || tag === "SUP") return "<" + tag.toLowerCase() + ">" + value + "</" + tag.toLowerCase() + ">";
+      if (tag === "A" && node.hasAttribute("href")) return "[" + (value || escapeText(node.getAttribute("href"))) + "](<" + destination(node.getAttribute("href")) + ">)";
+      return value;
+    }
+
+    function flow(el) {
+      var parts = [];
+      var pending = "";
+      function flush() {
+        if (pending.trim()) parts.push(pending.trim());
+        pending = "";
+      }
+      Array.from(el.childNodes).forEach(function (node) {
+        if (node.nodeType === 1 && (blockTags.test(node.tagName.toUpperCase()) || node.tagName.toUpperCase() === "SVG")) {
+          flush();
+          var value = block(node);
+          if (value) parts.push(value);
+        } else pending += inline(node);
+      });
+      flush();
+      return parts.join("\n\n");
+    }
+
+    function list(el) {
+      var number = Number(el.getAttribute("start")) || 1;
+      var ordered = el.tagName === "OL";
+      return Array.from(el.children).filter(function (node) { return node.tagName === "LI"; }).map(function (item) {
+        if (item.hasAttribute("value")) number = Number(item.getAttribute("value"));
+        var prefix = ordered ? String(number++) + ". " : "- ";
+        var content;
+        if (el.classList.contains("lp-timeline-state")) {
+          content = Array.from(item.children).map(function (child) { return inline(child).trim(); }).filter(Boolean).join(" · ");
+        } else content = flow(item);
+        var title = item.getAttribute("data-title");
+        if (title) content = "**" + escapeText(title) + "**" + (content ? "\n\n" + content : "");
+        return prefix + content.split("\n").join("\n" + " ".repeat(prefix.length));
+      }).join("\n\n");
+    }
+
+    function table(el) {
+      var rows = Array.from(el.rows);
+      if (!rows.length) return "";
+      var grid = [];
+      rows.forEach(function (row, r) {
+        if (!grid[r]) grid[r] = [];
+        var c = 0;
+        Array.from(row.cells).forEach(function (cell) {
+          while (grid[r][c] !== undefined) c++;
+          var value = flow(cell).trim().replace(/\|/g, "\\|").replace(/\n+/g, "<br>");
+          var columns = Math.max(1, cell.colSpan || 1);
+          var height = cell.rowSpan === 0 ? rows.length - r : Math.max(1, cell.rowSpan || 1);
+          // GFM has no spans: repeat the original cell in each covered column/row.
+          for (var y = r; y < Math.min(rows.length, r + height); y++) {
+            if (!grid[y]) grid[y] = [];
+            for (var x = c; x < c + columns; x++) grid[y][x] = value;
+          }
+          c += columns;
+        });
+      });
+      var width = Math.max.apply(null, grid.map(function (row) { return row.length; }));
+      grid = grid.map(function (row) { return Array.from({ length: width }, function (_, i) { return row[i] || ""; }); });
+      if (!Array.from(rows[0].cells).some(function (cell) { return cell.tagName === "TH"; })) grid.unshift(Array(width).fill(""));
+      var lines = grid.map(function (row) { return "| " + row.join(" | ") + " |"; });
+      lines.splice(1, 0, "| " + Array(width).fill("---").join(" | ") + " |");
+      var caption = el.caption ? inline(el.caption).trim() : "";
+      return (caption ? caption + "\n\n" : "") + lines.join("\n");
+    }
+
+    function block(el) {
+      if (el.matches(skipped)) return "";
+      var formula = mathValue(el);
+      if (formula !== null) return formula;
+      var tag = el.tagName.toUpperCase();
+      if (/^H[1-6]$/.test(tag)) return "#".repeat(Number(tag[1])) + " " + inline(el).trim();
+      if (tag === "PRE") {
+        var code = el.querySelector("code") || el;
+        var value = code.textContent.replace(/\r\n?/g, "\n");
+        var langMatch = code.className.match(/(?:language-|lang-)([\w+-]+)/);
+        var language = el.getAttribute("data-lang") || code.getAttribute("data-lang") || (langMatch ? langMatch[1] : "");
+        language = language.replace(/[^\w+#.-]/g, "");
+        var runs = value.match(/`+/g) || [];
+        var fence = "`".repeat(Math.max.apply(null, [2].concat(runs.map(function (s) { return s.length; }))) + 1);
+        var title = el.getAttribute("data-title");
+        return (title ? "**" + escapeText(title) + "**\n\n" : "") + fence + language + "\n" + value + (value.endsWith("\n") ? "" : "\n") + fence;
+      }
+      if (tag === "UL" || tag === "OL") return list(el);
+      if (tag === "TABLE") return table(el);
+      if (tag === "BLOCKQUOTE" || tag === "ASIDE") return flow(el).split("\n").map(function (line) { return ">" + (line ? " " + line : ""); }).join("\n");
+      if (tag === "HR") return "---";
+      if (tag === "SVG") return Array.from(el.querySelectorAll("title,desc,text,foreignObject")).filter(function (node) {
+        return !node.parentElement.closest("text, foreignObject, defs");
+      }).map(function (node) { return node.tagName === "foreignObject" ? flow(node) : escapeText(node.textContent.trim()); }).filter(Boolean).join("\n\n");
+      if (tag === "DL") return Array.from(el.children).map(function (child) {
+        return child.tagName === "DT" ? "**" + inline(child).trim() + "**" : flow(child);
+      }).filter(Boolean).join("\n\n");
+      if (tag === "SUMMARY") return wrapped(inline(el).trim(), "**");
+      return flow(el);
+    }
+
+    function serialize(target) {
+      var source;
+      if (typeof target === "string") {
+        var id = target.replace(/^#/, "");
+        source = snapshotsById.get(id) || document.getElementById(id);
+      } else source = snapshots.get(target) || target;
+      if (!source || source.nodeType !== 1) throw new TypeError("LessonPage.nodeMarkdown requires a node element or its id.");
+      return block(source).trim() + "\n";
+    }
+
+    function rememberPosition() {
+      var active = document.activeElement;
+      var selection = window.getSelection();
+      var ranges = [];
+      if (selection) for (var i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i).cloneRange());
+      var inputRange = null;
+      try { if (active && typeof active.selectionStart === "number") inputRange = [active.selectionStart, active.selectionEnd, active.selectionDirection]; } catch (_) { /* Non-text control. */ }
+      return { active: active, x: window.scrollX, y: window.scrollY, ranges: ranges, inputRange: inputRange };
+    }
+
+    function keepScroll(position) {
+      window.scrollTo({ left: position.x, top: position.y, behavior: "instant" });
+    }
+
+    function restorePosition(position) {
+      if (position.active && position.active.isConnected) {
+        try { position.active.focus({ preventScroll: true }); } catch (_) { position.active.focus(); }
+        if (position.inputRange) try { position.active.setSelectionRange.apply(position.active, position.inputRange); } catch (_) { /* Not a text input now. */ }
+      }
+      var selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        position.ranges.forEach(function (range) { if (range.commonAncestorContainer.isConnected) selection.addRange(range); });
+      }
+      keepScroll(position);
+    }
+
+    function legacyCopy(text) {
+      var position = rememberPosition();
+      var area = document.createElement("textarea");
+      area.className = "lp-node-copy-buffer";
+      area.value = text;
+      area.readOnly = true;
+      area.setAttribute("aria-label", "临时复制内容");
+      document.body.appendChild(area);
+      var copied = false;
+      try {
+        area.focus({ preventScroll: true });
+        area.select();
+        copied = !!document.execCommand && document.execCommand("copy");
+      } catch (_) { copied = false; }
+      area.remove();
+      restorePosition(position);
+      return copied;
+    }
+
+    function showManualCopy(text) {
+      if (!manualDialog) {
+        manualDialog = document.createElement("dialog");
+        manualDialog.className = "lp-node-copy-dialog";
+        manualDialog.setAttribute("aria-labelledby", "lp-node-copy-dialog-title");
+        var title = document.createElement("h2");
+        title.id = "lp-node-copy-dialog-title";
+        title.textContent = "复制 Markdown";
+        var hint = document.createElement("p");
+        hint.textContent = "自动复制不可用。内容已选中，请使用系统复制操作（Ctrl+C 或 ⌘C）。";
+        var area = document.createElement("textarea");
+        area.className = "lp-node-copy-text";
+        area.readOnly = true;
+        area.spellcheck = false;
+        area.setAttribute("aria-label", "本节点的 Markdown");
+        var actions = document.createElement("div");
+        actions.className = "lp-node-copy-dialog-actions";
+        var select = document.createElement("button");
+        select.type = "button";
+        select.className = "lp-node-copy-button";
+        select.textContent = "全选";
+        select.addEventListener("click", function () { area.focus({ preventScroll: true }); area.select(); });
+        var close = document.createElement("button");
+        close.type = "button";
+        close.className = "lp-node-copy-button";
+        close.textContent = "关闭";
+        function finish() {
+          if (typeof manualDialog.close === "function") manualDialog.close();
+          else { manualDialog.removeAttribute("open"); if (manualReturn) restorePosition(manualReturn); }
+        }
+        close.addEventListener("click", finish);
+        manualDialog.addEventListener("close", function () { if (manualReturn) restorePosition(manualReturn); manualReturn = null; });
+        manualDialog.addEventListener("keydown", function (event) { if (event.key === "Escape" && typeof manualDialog.showModal !== "function") { event.preventDefault(); finish(); } });
+        actions.append(select, close);
+        manualDialog.append(title, hint, area, actions);
+        document.body.appendChild(manualDialog);
+      }
+      manualReturn = rememberPosition();
+      var textArea = manualDialog.querySelector("textarea");
+      textArea.value = text;
+      if (!manualDialog.open) {
+        if (typeof manualDialog.showModal === "function") manualDialog.showModal();
+        else manualDialog.setAttribute("open", "");
+      }
+      textArea.focus({ preventScroll: true });
+      textArea.select();
+      textArea.scrollTop = 0;
+      keepScroll(manualReturn);
+    }
+
+    function alignTools() {
+      layoutFrame = 0;
+      controls.forEach(function (entry) {
+        var top = entry.heading.getBoundingClientRect().top - entry.node.getBoundingClientRect().top;
+        entry.tools.style.setProperty("--lp-node-copy-top", top + "px");
+      });
+    }
+
+    function scheduleLayout() {
+      if (!layoutFrame) layoutFrame = window.requestAnimationFrame(alignTools);
+    }
+
+    function init() {
+      if (initialized) return;
+      initialized = true;
+      var nodes = Array.from(document.querySelectorAll(".lp-node"));
+      // Complete the capture pass before adding even the first control.
+      nodes.forEach(function (node) {
+        var clone = node.cloneNode(true);
+        snapshots.set(node, clone);
+        if (node.id) snapshotsById.set(node.id, clone);
+      });
+      nodes.forEach(function (node, index) {
+        var heading = Array.from(node.children).find(function (child) { return child.tagName === "H2"; });
+        if (!heading) return;
+        node.classList.add("lp-node-copy-enabled");
+        var tools = document.createElement("div");
+        tools.className = "lp-node-copy-tools";
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "lp-node-copy lp-node-copy-button";
+        button.textContent = "复制为 Markdown";
+        button.setAttribute("aria-label", "复制“" + heading.textContent.trim() + "”为 Markdown");
+        var status = document.createElement("span");
+        status.className = "lp-node-copy-status";
+        status.id = "lp-node-copy-status-" + (index + 1);
+        status.setAttribute("role", "status");
+        status.setAttribute("aria-live", "polite");
+        status.setAttribute("aria-atomic", "true");
+        var resetTimer;
+        button.addEventListener("click", async function () {
+          if (button.getAttribute("aria-busy") === "true") return;
+          window.clearTimeout(resetTimer);
+          button.setAttribute("aria-busy", "true");
+          status.textContent = "";
+          var text = serialize(node);
+          var copied = false;
+          try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+              await navigator.clipboard.writeText(text);
+              copied = true;
+            }
+          } catch (_) { /* File URLs and browser permissions may reject writes. */ }
+          if (!copied) copied = legacyCopy(text);
+          button.removeAttribute("aria-busy");
+          if (copied) {
+            button.textContent = "已复制";
+            status.textContent = "已复制本节点的完整 Markdown。";
+            resetTimer = window.setTimeout(function () { button.textContent = "复制为 Markdown"; }, 1800);
+          } else {
+            button.textContent = "复制为 Markdown";
+            status.textContent = "自动复制不可用，已打开手动复制窗口。";
+            showManualCopy(text);
+          }
+        });
+        tools.append(button, status);
+        heading.insertAdjacentElement("afterend", tools);
+        controls.push({ node: node, heading: heading, tools: tools });
+      });
+      if ("ResizeObserver" in window) {
+        var observer = new ResizeObserver(scheduleLayout);
+        controls.forEach(function (entry) { observer.observe(entry.node); observer.observe(entry.heading); });
+      }
+      window.addEventListener("resize", scheduleLayout);
+      document.addEventListener("lp:layout", scheduleLayout);
+      scheduleLayout();
+    }
+
+    return { init: init, serialize: serialize };
+  })();
+  LP.nodeMarkdown = nodeCopy.serialize;
+  function initNodeCopy() { nodeCopy.init(); }
 
   function $all(selector, scope) { return Array.prototype.slice.call((scope || document).querySelectorAll(selector)); }
   function store(key, value) {
@@ -767,7 +1205,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   }
   function plainText(node) {
     var clone = node.cloneNode(true);
-    $all(".lp-new, .lp-oral-time, .katex-mathml, rt, rp, .lp-soon, .lp-xfer, .lp-mist, .lp-seal, .lp-live-tag", clone).forEach(function (child) { child.remove(); });
+    $all(".lp-new, .lp-oral-time, .katex-mathml, rt, rp, .lp-soon, .lp-xfer, .lp-mist, .lp-seal, .lp-live-tag, .lp-node-copy-tools", clone).forEach(function (child) { child.remove(); });
     var number = clone.querySelector(".lp-no");
     if (number) number.textContent = number.textContent.trim() + " ";
     var kind = clone.querySelector(".lp-kind");
@@ -776,7 +1214,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   }
   function readable(node) {
     var clone = node.cloneNode(true);
-    $all("script, style, template, .lp-where, .lp-toc-inline, .lp-controls, .katex-mathml, .lp-code-head, .lp-copy-tex, rt, rp, .lp-live-tag, .lp-live-reset, .lp-mist, .lp-soon, .lp-xfer", clone).forEach(function (child) { child.remove(); });
+    $all("script, style, template, .lp-where, .lp-toc-inline, .lp-controls, .katex-mathml, .lp-code-head, .lp-copy-tex, rt, rp, .lp-live-tag, .lp-live-reset, .lp-mist, .lp-soon, .lp-xfer, .lp-node-copy-tools", clone).forEach(function (child) { child.remove(); });
     return clone.textContent || "";
   }
   function failed(widget, error) {
@@ -1736,7 +2174,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   /* 批注只锚定已布局的前文；脚本等零盒的 viewport top=0 不是内容坐标。 */
   function noteAnchor(note) {
     var usable = function (el) {
-      if (!el || el === note || el.contains(note) || el.matches("script, style, template, .lp-note, ol.lp-code-notes") || el.closest("[hidden]")) return false;
+      if (!el || el === note || el.contains(note) || el.matches("script, style, template, .lp-note, ol.lp-code-notes, .lp-node-copy-tools") || el.closest("[hidden]")) return false;
       if (!(el.compareDocumentPosition(note) & 4)) return false;
       var rect = el.getBoundingClientRect(), visibility = window.getComputedStyle(el).visibility;
       return el.getClientRects().length && rect.width > 0 && rect.height > 0 && visibility !== "hidden" && visibility !== "collapse";
@@ -2376,7 +2814,7 @@ html:not(.js) .lp-knob::before, html:not(.js) .lp-knob::after { content: none; }
   function init() {
     $all(".lp-glossary").forEach(function (section) { if (!section.querySelector("dt")) section.hidden = true; });
     $all(".lp-sources").forEach(function (section) { if (!section.querySelector("li")) section.hidden = true; });
-    var steps = [initTheme, initReview, initFreshness, initLook, initToc, initWhere, initFlows, initCode, initMath, initNoBreak, initSteppers, initExplorers, initLive, initPacks, initToggles, initTimers, initSymbols, initReveal, initProgress, initStrata, initNotes, initSpot, initLiveUpdates, initScrollMemory];
+    var steps = [initNodeCopy, initTheme, initReview, initFreshness, initLook, initToc, initWhere, initFlows, initCode, initMath, initNoBreak, initSteppers, initExplorers, initLive, initPacks, initToggles, initTimers, initSymbols, initReveal, initProgress, initStrata, initNotes, initSpot, initLiveUpdates, initScrollMemory];
     steps.forEach(function (step) {
       try { step(); } catch (error) { console.error("lesson-pages " + step.name, error); }
     });
