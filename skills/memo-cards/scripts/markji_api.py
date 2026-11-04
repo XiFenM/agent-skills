@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload verified memo-cards artifacts through the official Markji OpenAPI.
+"""Create chapters and upload verified cards through the official Markji OpenAPI.
 
 No token argument, arbitrary API origin, or automatic POST retry. Remote content is
 overwritten only for a card this tool uploaded whose remote text still matches its receipt.
@@ -18,6 +18,7 @@ import stat
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,10 +32,15 @@ ORIGIN = "https://open.maimemo.com"
 BASE_PATH = "/open/api/v1/markji"
 PLAN_SCHEMA = "memo-cards.markji-upload/v1"
 STATE_SCHEMA = "memo-cards.markji-receipt/v1"
+CHAPTER_PLAN_SCHEMA = "memo-cards.markji-chapters/v1"
+CHAPTER_STATE_SCHEMA = "memo-cards.markji-chapter-receipt/v1"
 TOKEN_ENV = "MAIMEMO_API_TOKEN"
 TOKEN_FILE_ENV = "MAIMEMO_API_TOKEN_FILE"
 MAX_BATCH = 200
 MAX_RESPONSE = 16 * 1024 * 1024
+# Local review/response bounds, not claims about official API quotas.
+MAX_CHAPTER_BATCH = 100
+MAX_CHAPTER_NAME = 200
 
 
 class UploadError(Exception):
@@ -183,9 +189,20 @@ class Client:
         get_path = rf"/decks(?:/{opaque_id}(?:/chapters(?:/{opaque_id})?|/cards/{opaque_id})?)?"
         create_path = rf"/decks/{opaque_id}/chapters/{opaque_id}/cards"
         update_path = rf"/decks/{opaque_id}/cards/{opaque_id}"
+        chapter_create_path = rf"/decks/{opaque_id}/chapters"
         if not ((method == "GET" and re.fullmatch(get_path, path)) or
-                (method == "POST" and (re.fullmatch(create_path, path) or re.fullmatch(update_path, path)))):
+                (method == "POST" and (re.fullmatch(create_path, path) or re.fullmatch(update_path, path)
+                                       or re.fullmatch(chapter_create_path, path)))):
             raise UploadError("操作不在当前已核验的官方接口范围内。")
+        if method == "POST" and re.fullmatch(chapter_create_path, path):
+            if (not isinstance(body, dict) or set(body) - {"deck", "name", "order"}
+                    or body.get("deck") != path.split("/")[2]):
+                raise UploadError("章节创建请求的路径与正文目标不一致，或包含不支持的字段。")
+            chapter_names([body.get("name")])
+            if "order" in body and (type(body["order"]) is not int or body["order"] < 0):
+                raise UploadError("章节插入位置必须是非负整数。")
+            # CreateChapter has not been live-tested. Follow its published body
+            # contract (deck/name/order); do not reuse CreateCard's ID stripping.
         url = ORIGIN + BASE_PATH + path
         if query:
             url += "?" + urllib.parse.urlencode(query)
@@ -566,8 +583,331 @@ def upload(repo, context, request, deck_id, chapter_id, grammar_version, client,
                 "receipt_path": str(path), "cards": results}
 
 
+def _chapter_text(value, *, maximum=4096):
+    if (not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum
+            or any(unicodedata.category(ch).startswith("C")
+                   or unicodedata.category(ch) in {"Zl", "Zp"} for ch in value)):
+        raise UploadError("章节名称或元数据必须是非空单行字符串，不能含首尾空白或控制字符。")
+    return value
+
+
+def chapter_names(names):
+    """Local review bounds; the API does not document these as server quotas."""
+    if not isinstance(names, (list, tuple)) or not 1 <= len(names) <= MAX_CHAPTER_BATCH:
+        raise UploadError("本地每批需提供 1–100 个章节名称；这不是官方 API 配额。")
+    values = [_chapter_text(name, maximum=MAX_CHAPTER_NAME) for name in names]
+    if len(set(values)) != len(values):
+        raise UploadError("章节名称不能重复；请提供明确且有序的名称列表。")
+    return values
+
+
+def _chapter_ids(value):
+    if not isinstance(value, list):
+        raise UploadError("章节或卡片 ID 列表缺失，不能当成空列表。")
+    values = [identifier(item) for item in value]
+    if len(set(values)) != len(values):
+        raise UploadError("章节或卡片 ID 列表包含重复项，无法核验完整顺序。")
+    return values
+
+
+def _chapter_revision(value):
+    if type(value) is not int or value < 0:
+        raise UploadError("章节或牌组版本必须是非负整数。")
+    return value
+
+
+def _chapter_json_copy(value):
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
+    except (ValueError, TypeError):
+        raise UploadError("章节元数据不是有效 JSON，已停止。") from None
+
+
+def _chapter_record(value, deck_id):
+    if not isinstance(value, dict) or value.get("deck_id") != deck_id:
+        raise UploadError("章节缺少可核验的牌组归属。")
+    identifier(value.get("id"))
+    identifier(value.get("creator"))
+    _chapter_text(value.get("name"))
+    _chapter_revision(value.get("revision"))
+    _chapter_ids(value.get("card_ids"))
+    for key in ("created_time", "updated_time"):
+        _chapter_text(value.get(key))
+    # Retain all metadata, not just the fields needed to choose a destination.
+    return _chapter_json_copy(value)
+
+
+def _chapterset_record(value, deck_id):
+    if not isinstance(value, dict) or value.get("deck_id") != deck_id:
+        raise UploadError("章节集缺少可核验的牌组归属与完整顺序。")
+    identifier(value.get("id"))
+    _chapter_revision(value.get("revision"))
+    _chapter_ids(value.get("chapter_ids"))
+    for key in ("created_time", "updated_time"):
+        _chapter_text(value.get(key))
+    return _chapter_json_copy(value)
+
+
+def _chapter_destination(client, deck_id):
+    response = client.request("GET", f"/decks/{deck_id}")
+    deck = response.get("deck") if isinstance(response, dict) else None
+    if (not isinstance(deck, dict) or deck.get("id") != deck_id or deck.get("source") != "SELF"
+            or deck.get("status") != "NORMAL" or type(deck.get("is_private")) is not bool):
+        raise UploadError("目标必须是状态正常的自建牌组，且隐私状态可核验。")
+    _chapter_text(deck.get("name"))
+    identifier(deck.get("creator"))
+    _chapter_revision(deck.get("revision"))
+    deck = {key: deck[key] for key in ("id", "name", "creator", "source", "status", "is_private", "revision")}
+    data = client.request("GET", f"/decks/{deck_id}/chapters")
+    if not isinstance(data, dict) or not isinstance(data.get("chapters"), list):
+        raise UploadError("章节列表响应不完整，不能视为空牌组。")
+    chapters = [_chapter_record(chapter, deck_id) for chapter in data["chapters"]]
+    by_id = {chapter["id"]: chapter for chapter in chapters}
+    if len(by_id) != len(chapters):
+        raise UploadError("章节列表包含重复 ID，无法核验完整顺序。")
+    chapterset = data.get("chapterset")
+    if chapterset is None:
+        if chapters:
+            raise UploadError("非空章节列表缺少章节集与完整排序元数据，已停止。")
+        # ListChapters permits an absent chapterset for a new empty deck.
+        snapshot = {"chapterset": None, "chapters": []}
+    else:
+        chapterset = _chapterset_record(chapterset, deck_id)
+        if set(chapterset["chapter_ids"]) != set(by_id):
+            raise UploadError("章节集顺序与完整章节列表不一致，已停止。")
+        snapshot = {"chapterset": chapterset,
+                    "chapters": [by_id[item] for item in chapterset["chapter_ids"]]}
+    return deck, snapshot
+
+
+def chapter_receipt_path(repo, deck_id):
+    scope = {"repository": str(Path(repo).resolve()), "deck": identifier(deck_id)}
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    return outside_git(base / "memo-cards" / ("chapters-" + digest(scope) + ".json"))
+
+
+def _load_chapter_receipt(path, scope):
+    if not path.exists():
+        return {"schema": CHAPTER_STATE_SCHEMA, "scope": scope, "chapters": {}}
+    try:
+        value = json.loads(read_private(path))
+    except (OSError, ValueError):
+        raise UploadError("章节回执不可读取；请保留文件并检查，不要删除后重试。") from None
+    if (not isinstance(value, dict) or set(value) != {"schema", "scope", "chapters"}
+            or value["schema"] != CHAPTER_STATE_SCHEMA or value["scope"] != scope
+            or not isinstance(value["chapters"], dict)):
+        raise UploadError("章节回执结构或仓库／牌组作用域不一致，已停止。")
+    known_ids = set()
+    for name, entry in value["chapters"].items():
+        _chapter_text(name, maximum=MAX_CHAPTER_NAME)
+        if (not isinstance(entry, dict) or entry.get("name") != name
+                or entry.get("status") not in {"pending", "created", "verified", "rejected"}
+                or "chapter_id" not in entry or type(entry.get("order")) is not int or entry["order"] < 0
+                or type(entry.get("attempt")) is not int or entry["attempt"] < 0):
+            raise UploadError("章节回执条目不完整或无效，已停止。")
+        chapter_id = entry["chapter_id"]
+        if chapter_id is not None:
+            identifier(chapter_id)
+            if chapter_id in known_ids:
+                raise UploadError("章节回执中的远端 ID 被多个名称重复使用，已停止。")
+            known_ids.add(chapter_id)
+        if entry["status"] in {"created", "verified"} and chapter_id is None:
+            raise UploadError("已创建或已核验的章节回执必须保留远端 ID。")
+        if entry["status"] in {"pending", "rejected"} and chapter_id is not None:
+            raise UploadError("未确认创建的章节回执不能携带成功创建的 ID。")
+        if entry["status"] == "rejected":
+            if entry.get("http_status") != 400:
+                raise UploadError("已拒绝章节回执必须记录 HTTP 400。")
+        elif "http_status" in entry:
+            raise UploadError("只有明确拒绝的章节回执可以记录 HTTP 400。")
+        if entry["attempt"] or entry["status"] != "verified":
+            if entry["attempt"] < 1:
+                raise UploadError("章节创建回执缺少有效尝试序号。")
+            _chapter_ids(entry.get("before_chapter_ids"))
+            for key in ("remote_before_sha256", "preview_digest"):
+                if not isinstance(entry.get(key), str) or not memo.DIGEST_RE.fullmatch(entry[key]):
+                    raise UploadError("章节创建回执缺少有效的创建前快照摘要。")
+    return value
+
+
+def _chapter_matches(snapshot, name):
+    matches = [chapter for chapter in snapshot["chapters"] if chapter["name"] == name]
+    if len(matches) > 1:
+        raise UploadError("目标牌组存在多个同名章节；请先核对重复项。")
+    return matches
+
+
+def _validate_chapter_receipt_remote(receipt, snapshot):
+    by_id = {chapter["id"]: chapter for chapter in snapshot["chapters"]}
+    # Validate all recorded names for this deck, including those outside the
+    # present batch. Appending another chapter must not discard unresolved work.
+    for name, prior in receipt["chapters"].items():
+        matches = _chapter_matches(snapshot, name)
+        if prior["chapter_id"] is not None:
+            found = by_id.get(prior["chapter_id"])
+            if found is None:
+                raise UploadError("已记录章节的远端 ID 已删除或被同名替代，停止自动重建。")
+            if found["name"] != name or not matches or matches[0]["id"] != prior["chapter_id"]:
+                raise UploadError("已记录章节已改名或身份发生变化，停止自动处理。")
+        elif prior["status"] == "pending":
+            if not matches:
+                raise UploadError("章节创建结果不确定且远端没有唯一同名新章节，停止重发；请核对回执与远端。")
+            if matches[0]["id"] in prior["before_chapter_ids"]:
+                raise UploadError("同名章节 ID 已在上次创建前存在，不能用于恢复未知创建结果。")
+
+
+def prepare_chapters(repo, deck_id, names, client):
+    """Read-only, append-only chapter plan for an existing SELF deck."""
+    root = memo._repository_root(Path(repo))
+    deck_id, names = identifier(deck_id), chapter_names(names)
+    scope = {"repository": str(root), "deck": deck_id}
+    path = chapter_receipt_path(root, deck_id)
+    receipt = _load_chapter_receipt(path, scope)
+    deck, snapshot = _chapter_destination(client, deck_id)
+    _validate_chapter_receipt_remote(receipt, snapshot)
+    actions = []
+    resulting_order = [{"id": chapter["id"], "name": chapter["name"]} for chapter in snapshot["chapters"]]
+    positions = {chapter["id"]: index for index, chapter in enumerate(snapshot["chapters"])}
+    for name in names:
+        matches = _chapter_matches(snapshot, name)
+        prior = receipt["chapters"].get(name)
+        chapter_id = matches[0]["id"] if matches else None
+        order = positions[chapter_id] if matches else len(resulting_order)
+        actions.append({"name": name, "operation": "skip" if matches else "create", "chapter_id": chapter_id,
+                        "order": order, "recovery": bool(prior and prior["status"] in {"pending", "created"})})
+        if not matches:
+            resulting_order.append({"id": None, "name": name})
+    plan = {"schema": CHAPTER_PLAN_SCHEMA, "origin": ORIGIN, "repository": str(root), "deck": deck,
+            "names": names, "append_only": True, "snapshot": snapshot, "resulting_order": resulting_order,
+            "remote_sha256": digest(snapshot), "receipt_sha256": digest(receipt), "receipt_path": str(path),
+            "actions": actions, "required_authorization": "request"}
+    plan["preview_digest"] = digest(plan)
+    return plan
+
+
+def _assert_chapter_snapshot(client, deck_id, expected_deck, expected_snapshot):
+    deck, snapshot = _chapter_destination(client, deck_id)
+    if deck != expected_deck or snapshot != expected_snapshot:
+        raise UploadError("章节创建期间牌组或章节列表已变化，停止后续写入；请重新预览。")
+    return deck, snapshot
+
+
+def _assert_chapter_append(before, after, chapter_id):
+    old_ids = [chapter["id"] for chapter in before["chapters"]]
+    new_ids = [chapter["id"] for chapter in after["chapters"]]
+    if chapter_id in old_ids or new_ids != old_ids + [chapter_id] or after["chapters"][:-1] != before["chapters"]:
+        raise UploadError("创建后的章节列表不是预期的末尾追加，或原有章节已变化；保留回执并停止。")
+    previous_set, current_set = before["chapterset"], after["chapterset"]
+    if current_set is None:
+        raise UploadError("创建后的非空章节缺少章节集，无法核验追加位置。")
+    if previous_set is not None:
+        mutable = {"chapter_ids", "revision", "updated_time"}
+        if ({k: v for k, v in previous_set.items() if k not in mutable}
+                != {k: v for k, v in current_set.items() if k not in mutable}
+                or current_set["revision"] < previous_set["revision"]):
+            raise UploadError("创建后的章节集身份或版本不一致；保留回执并停止。")
+
+
+def _read_back_chapter(client, deck_id, chapter_id):
+    data = client.request("GET", f"/decks/{deck_id}/chapters/{identifier(chapter_id)}")
+    chapter = _chapter_record(data.get("chapter") if isinstance(data, dict) else None, deck_id)
+    if chapter["id"] != chapter_id:
+        raise UploadError("章节独立读回的 ID 不一致；保留回执并停止。")
+    return chapter
+
+
+def create_chapters(repo, deck_id, names, client, preview_digest, authorization):
+    """Append empty chapters, preserving uncertain writes in a private journal."""
+    if authorization not in {"request", "confirmed"}:
+        raise UploadError("创建章节需要用户明确授权目标牌组和名称列表。")
+    if not isinstance(preview_digest, str) or not memo.DIGEST_RE.fullmatch(preview_digest):
+        raise UploadError("章节预览摘要无效，请重新预览。")
+    root = memo._repository_root(Path(repo))
+    deck_id, names = identifier(deck_id), chapter_names(names)
+    scope = {"repository": str(root), "deck": deck_id}
+    path = chapter_receipt_path(root, deck_id)
+    # Shares the existing upload.lock with card uploads, before any network call.
+    with upload_lock(path):
+        plan = prepare_chapters(root, deck_id, names, client)
+        if plan["preview_digest"] != preview_digest:
+            raise UploadError("章节名称顺序、牌组、章节列表或回执已变化，请重新展示章节预览。")
+        receipt = _load_chapter_receipt(path, scope)
+        expected_deck, expected_snapshot = plan["deck"], plan["snapshot"]
+        results = []
+        for action in plan["actions"]:
+            name = action["name"]
+            prior = receipt["chapters"].get(name)
+            _assert_chapter_snapshot(client, deck_id, expected_deck, expected_snapshot)
+            if digest(_load_chapter_receipt(path, scope)) != digest(receipt):
+                raise UploadError("章节创建期间回执已变化，停止后续写入。")
+            if action["operation"] == "create":
+                order = len(expected_snapshot["chapters"])
+                entry = {"name": name, "status": "pending", "chapter_id": None, "order": order,
+                         "attempt": (prior["attempt"] if prior else 0) + 1,
+                         "before_chapter_ids": [chapter["id"] for chapter in expected_snapshot["chapters"]],
+                         "remote_before_sha256": digest(expected_snapshot), "preview_digest": preview_digest}
+                receipt["chapters"][name] = entry
+                atomic_private_json(path, receipt)
+                try:
+                    data = client.request("POST", f"/decks/{deck_id}/chapters",
+                                          {"deck": deck_id, "name": name, "order": order})
+                except UploadError as error:
+                    if error.http_status == 400:
+                        entry.update(status="rejected", http_status=400)
+                        atomic_private_json(path, receipt)
+                    raise
+                created = data.get("chapter") if isinstance(data, dict) else None
+                if not isinstance(created, dict):
+                    raise UploadError("章节创建响应缺少章节；已保留 pending 回执，请先核对远端。")
+                # Record an acknowledged ID before inspecting the rest of the
+                # response, so recovery cannot substitute a later same-name ID.
+                chapter_id = identifier(created.get("id"))
+                entry.update(status="created", chapter_id=chapter_id)
+                atomic_private_json(path, receipt)
+                created = _chapter_record(created, deck_id)
+                response_set = _chapterset_record(data.get("chapterset"), deck_id)
+                if created["name"] != name or created["card_ids"]:
+                    raise UploadError("创建响应的章节名称或空章节条件不一致；保留回执并停止。")
+                observed = _read_back_chapter(client, deck_id, chapter_id)
+                deck, snapshot = _chapter_destination(client, deck_id)
+                # A successful chapter creation may advance the deck revision.
+                # Its identity, name, ownership and privacy must not change.
+                if ({k: v for k, v in deck.items() if k != "revision"}
+                        != {k: v for k, v in expected_deck.items() if k != "revision"}
+                        or deck["revision"] < expected_deck["revision"]):
+                    raise UploadError("创建期间目标牌组或隐私状态已变化；保留回执并停止。")
+                _assert_chapter_append(expected_snapshot, snapshot, chapter_id)
+                if (observed != created or snapshot["chapters"][-1] != observed
+                        or snapshot["chapterset"] != response_set):
+                    raise UploadError("章节创建后的独立读回、列表或顺序校验不一致；保留回执并停止。")
+                expected_deck, expected_snapshot = deck, snapshot
+            else:
+                chapter_id, order = action["chapter_id"], action["order"]
+                observed = _read_back_chapter(client, deck_id, chapter_id)
+                _assert_chapter_snapshot(client, deck_id, expected_deck, expected_snapshot)
+                if observed != expected_snapshot["chapters"][order] or observed["name"] != name:
+                    raise UploadError("已有章节独立读回不一致；保留回执并停止。")
+                entry = dict(prior) if prior else {"attempt": 0}
+                entry.update(name=name, chapter_id=chapter_id, order=order)
+                entry.pop("http_status", None)
+            entry["status"] = "verified"
+            receipt["chapters"][name] = entry
+            atomic_private_json(path, receipt)
+            results.append({"name": name, "operation": action["operation"],
+                            "chapter_id": chapter_id, "order": order})
+        _deck, final = _assert_chapter_snapshot(client, deck_id, expected_deck, expected_snapshot)
+        for result in results:
+            matches = _chapter_matches(final, result["name"])
+            if not matches or matches[0]["id"] != result["chapter_id"]:
+                raise UploadError("最终章节成员核验不一致；保留回执，停止重发。")
+        return {"verified": True, "created": sum(item["operation"] == "create" for item in results),
+                "skipped": sum(item["operation"] == "skip" for item in results), "deck_id": deck_id,
+                "receipt_path": str(path), "chapters": results,
+                "resulting_order": [{"id": chapter["id"], "name": chapter["name"]} for chapter in final["chapters"]]}
+
+
 def main(argv=None):
-    parser = SafeParser(description="墨墨官方 API：本地凭据、只读预览和可恢复的卡片追加与更新")
+    parser = SafeParser(description="墨墨官方 API：本地凭据、只读预览、可恢复的卡片上传与空章节创建")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("auth-set")
     sub.add_parser("auth-status")
@@ -577,6 +917,15 @@ def main(argv=None):
     inspect = sub.add_parser("inspect")
     inspect.add_argument("--deck", required=True)
     inspect.add_argument("--chapter")
+    for name in ("chapters-prepare", "chapters-create"):
+        child = sub.add_parser(name)
+        child.add_argument("--repo", type=Path, required=True)
+        child.add_argument("--deck", required=True)
+        child.add_argument("--name", action="append", required=True,
+                           help="章节名称，可重复提供；新章节按此顺序追加，已有同名章节不重排")
+        if name == "chapters-create":
+            child.add_argument("--preview-digest", required=True)
+            child.add_argument("--authorization", choices=("request", "confirmed"), required=True)
     for name in ("prepare", "upload"):
         child = sub.add_parser(name)
         child.add_argument("--repo", type=Path, required=True)
@@ -616,6 +965,10 @@ def main(argv=None):
                     data = client.request("GET", f"/decks/{deck}/chapters")
                     result = {"chapters": [{k: c.get(k) for k in ("id", "name", "deck_id")}
                                            for c in data.get("chapters", [])]}
+            elif args.command in {"chapters-prepare", "chapters-create"}:
+                arguments = (args.repo, identifier(args.deck), args.name, client)
+                result = (prepare_chapters(*arguments) if args.command == "chapters-prepare" else
+                          create_chapters(*arguments, args.preview_digest, args.authorization))
             else:
                 arguments = (args.repo, args.context, args.request, identifier(args.deck),
                              identifier(args.chapter), args.grammar_version, client)
