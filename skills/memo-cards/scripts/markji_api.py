@@ -201,8 +201,8 @@ class Client:
             chapter_names([body.get("name")])
             if "order" in body and (type(body["order"]) is not int or body["order"] < 0):
                 raise UploadError("章节插入位置必须是非负整数。")
-            # CreateChapter has not been live-tested. Follow its published body
-            # contract (deck/name/order); do not reuse CreateCard's ID stripping.
+            # Production accepted deck/name/order on 2026-11-04. Keep the deck
+            # after binding it to the path; CreateCard's ID stripping is separate.
         url = ORIGIN + BASE_PATH + path
         if query:
             url += "?" + urllib.parse.urlencode(query)
