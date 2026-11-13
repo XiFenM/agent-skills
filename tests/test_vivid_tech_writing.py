@@ -16,6 +16,7 @@ EXPECTED_FILES = {
     "references/close-readings.md",
     "references/diagnosis.md",
     "references/moves.md",
+    "references/plain-language.md",
     "references/practice.md",
     "references/source-library.md",
     "references/video-script.md",
@@ -28,6 +29,7 @@ EXPECTED_REFERENCES = {
     "close-readings.md",
     "diagnosis.md",
     "moves.md",
+    "plain-language.md",
     "practice.md",
     "source-library.md",
     "video-script.md",
@@ -108,6 +110,23 @@ def test_moves_cover_the_nine_headings() -> None:
     text = (SKILL / "references" / "moves.md").read_text(encoding="utf-8")
     numbers = [int(match) for match in re.findall(r"(?m)^## (\d)\. ", text)]
     assert numbers == list(range(1, 10))
+
+
+def test_plain_language_reference_covers_the_two_passes() -> None:
+    text = (SKILL / "references" / "plain-language.md").read_text(encoding="utf-8")
+    for anchor in (
+        "先给一句话答案",
+        "流程/阶段图",
+        "日常物件",
+        "比喻的三条规矩",
+        "搜索",
+        "部署",
+        "x_max",
+        "自检 8 条",
+    ):
+        assert anchor in text
+    assert "2–3 个主比喻" in text
+    assert "API 参考" in text
 
 
 def test_close_readings_cover_six_passages() -> None:

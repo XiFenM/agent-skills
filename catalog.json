@@ -315,7 +315,8 @@
           "context-free-conversational-coach",
           "style-signal-linter-not-score",
           "article-to-video-handoff",
-          "accuracy-and-no-fabrication-gate"
+          "accuracy-and-no-fabrication-gate",
+          "colloquial-and-everyday-analogy"
         ]
       }
     },

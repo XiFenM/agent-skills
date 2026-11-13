@@ -1,6 +1,6 @@
 ---
 name: vivid-tech-writing
-description: Draft, diagnose, or rewrite technical blog posts, tutorials, talks, and explainer video scripts so they read like a person rather than a textbook. Use when the user wants to write or improve 技术博客、科普文章、教程、技术分享、知识视频口播稿, complains about 教材腔、枯燥、翻译腔, or asks to learn vivid technical exposition from examples. Do not use for API reference, release notes, pure copyediting, SEO, or marketing copy.
+description: Draft, diagnose, or rewrite technical blog posts, tutorials, talks, and explainer video scripts so they read like a person rather than a textbook. Use when the user wants to write or improve 技术博客、科普文章、教程、技术分享、知识视频口播稿, complains about 教材腔、枯燥、翻译腔, or asks for 口语化、生活化、借喻, or wants to learn vivid technical exposition from examples. Do not use for API reference, release notes, pure copyediting, SEO, or marketing copy.
 ---
 
 # Vivid Tech Writing
@@ -68,6 +68,16 @@ Turn technical knowledge back into experience: **scene, person, change**.
 - **术语四条。** 先经验后命名；一段只引入一个新术语；出现三次才缩写；不用术语解释术语。
 - **句号是呼吸。** 超过 45 个字就找地方断；破折号一段最多一个。
 - 更细的翻译腔清单、改写表与标点规则在 [references/chinese-editing.md](references/chinese-editing.md)。
+
+## 口语化与生活化
+
+用户说“太书面”“太像教材”“能不能更口语”“打个生活里的比方”时，读 [references/plain-language.md](references/plain-language.md)。三条硬规则：
+
+- **先给一句话答案。** 难节开头先说“到底在干什么”，再上步骤、公式或代码。
+- **用一个日常物件当主线比喻。** 尺子、记账、合影、装修效果图；2–3 个就够，每个都标“哪里不像”。
+- **并排容易混的东西。** 两个 scale、搜索 vs 部署、方法 vs 表示 vs 执行，用一张表横向对比。
+
+口语化不是段子化：短句、直接称呼、具体动词，但不删数字、caveat 和引用。
 
 ## 视频模式
 
@@ -147,6 +157,7 @@ Turn technical knowledge back into experience: **scene, person, change**.
 | [references/moves.md](references/moves.md) | 选动作、需要样板/公式/坑 |
 | [references/close-readings.md](references/close-readings.md) | 想学具体段落怎么拆、需要大师样本 |
 | [references/chinese-editing.md](references/chinese-editing.md) | 中文翻译腔、术语、标点、句子手术 |
+| [references/plain-language.md](references/plain-language.md) | 口语化、生活化、借喻、公式/表格的“读法” |
 | [references/video-script.md](references/video-script.md) | 视频口播、分镜、开场结尾 |
 | [references/source-library.md](references/source-library.md) | 用户要书单/视频/博客推荐，或需要更多样板 |
 | [references/practice.md](references/practice.md) | 用户要练、要 30 天计划、要语料卡 |
