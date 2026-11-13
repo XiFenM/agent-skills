@@ -58,9 +58,10 @@
 
 ## 应用表达与领域透镜
 
+语言与语气的通用规则见 `vivid-tech-writing` 的 `references/language-contract.md`（学习文章体裁）；本节只保留文章配置字段与选材透镜。
+
 - `language` 控制主要写作语言；缺失时结合仓库语言和用户本轮要求选择。
-- `tone_profile` 只从 `neutral-explanatory`、`peer-explanatory`、`technical-reference`、
-  `reflective-first-person` 中选择。语气不改变事实标准。
+- `tone_profile` 只从 `neutral-explanatory`、`peer-explanatory`、`technical-reference`、`reflective-first-person` 中选择；四种语气的含义与选法见上述契约。语气不改变事实标准。
 - `domain_lenses` 只允许中央枚举：
   - `engineering-practice`：突出实现边界、故障模式和验证方法；
   - `source-code`：突出代码所有权、调用关系和 revision 锚点；

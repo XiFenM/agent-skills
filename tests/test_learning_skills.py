@@ -326,6 +326,16 @@ def test_memo_cards_links_the_self_review_checklist() -> None:
         assert "(card-review-checklist.md)" in rule, name
 
 
+def test_language_guidance_points_to_the_shared_contract() -> None:
+    for name in ("guide-learning", "lesson-pages", "memo-cards"):
+        root = ROOT / "skills" / name
+        text = "\n".join(
+            path.read_text(encoding="utf-8") for path in _text_files(root)
+        )
+        assert "vivid-tech-writing" in text, name
+        assert "language-contract.md" in text, name
+
+
 def test_learning_skills_announce_user_guides_once_per_conversation() -> None:
     combined_guide = ROOT / "docs" / "learning-skills-user-guide.md"
     assert combined_guide.is_file()

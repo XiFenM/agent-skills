@@ -15,6 +15,7 @@ EXPECTED_FILES = {
     "references/chinese-editing.md",
     "references/close-readings.md",
     "references/diagnosis.md",
+    "references/language-contract.md",
     "references/moves.md",
     "references/plain-language.md",
     "references/practice.md",
@@ -28,6 +29,7 @@ EXPECTED_REFERENCES = {
     "chinese-editing.md",
     "close-readings.md",
     "diagnosis.md",
+    "language-contract.md",
     "moves.md",
     "plain-language.md",
     "practice.md",
@@ -110,6 +112,26 @@ def test_moves_cover_the_nine_headings() -> None:
     text = (SKILL / "references" / "moves.md").read_text(encoding="utf-8")
     numbers = [int(match) for match in re.findall(r"(?m)^## (\d)\. ", text)]
     assert numbers == list(range(1, 10))
+
+
+def test_language_contract_covers_genres_and_skills() -> None:
+    text = (SKILL / "references" / "language-contract.md").read_text(encoding="utf-8")
+    for anchor in (
+        "十条通用契约",
+        "技术文章",
+        "教学讲解",
+        "课程网页",
+        "学习文章",
+        "记忆卡片",
+        "视频口播",
+        "共享检查清单",
+        "交接",
+    ):
+        assert anchor in text
+    for skill in ("guide-learning", "lesson-pages", "memo-cards"):
+        assert skill in text
+    assert "完整优先于短" in text
+    assert "plain-language.md" in text
 
 
 def test_plain_language_reference_covers_the_two_passes() -> None:

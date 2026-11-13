@@ -4,6 +4,8 @@
 [卡片质量与身份](card-quality-and-identity.md)或[卡片内容与版式](card-content-layout.md)里的规则，这里只
 列检查方法。没通过的卡先改写、降级或移出，不带着问题进入预览。
 
+语言原则见 `vivid-tech-writing` 的 `references/language-contract.md`（记忆卡片体裁）；本清单只保留逐张与批次检查动作。
+
 ## 逐张：遮住答案
 
 - 只看正面，就能确定讨论哪个对象、哪个阶段，已知哪些条件，要回答什么。

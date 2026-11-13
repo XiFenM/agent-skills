@@ -2205,3 +2205,16 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 - 测试：`tests/test_vivid_tech_writing.py` 增加 plain-language 结构断言；期望文件与 reference 集合同步；catalog、结构、linter 相关测试 37 项通过。
 
 本轮在中央工作分支完成。
+
+## D63：把跨体裁语言指导收束到 vivid-tech-writing（2026-11-13）
+
+`guide-learning`、`lesson-pages`、`memo-cards` 都输出解释性文字，原本各带一部分语言指导。用户要求把所有表达语言指导集合到 `vivid-tech-writing`。本决策：
+
+- 新增 `references/language-contract.md`：十条通用契约；技术文章、教学讲解、课程网页、学习文章、记忆卡片、视频口播六种体裁；共享检查清单与交接边界。
+- 三个 Skill 的详细语言原则改为具名指针 + 2–4 条本地底线；教学深度、页面结构、卡片拆分与 Markji 格式、状态与授权留在原 Skill。
+- 不写跨 Skill 相对链接：materializer 可能只复制一个 Skill，跨目录相对路径会断；统一写“`vivid-tech-writing` 的 `references/language-contract.md`”。未启用时按本地底线执行。
+- 解决“短句 vs 完整”的冲突：完整优先于短；短句是节奏工具，不是删主语、条件或因果的许可证。
+- 测试：契约覆盖六种体裁；三个 Skill 都指向契约。
+- 已知基线失败：`lesson-pages` 的 `assets/lesson-template.html` 在基线就是 179,818 字节、超过 170,000 预算；与本轮语言收束无关。
+
+本轮在中央工作分支完成。

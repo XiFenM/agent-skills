@@ -1,6 +1,6 @@
 ---
 name: vivid-tech-writing
-description: Draft, diagnose, or rewrite technical blog posts, tutorials, talks, and explainer video scripts so they read like a person rather than a textbook. Use when the user wants to write or improve 技术博客、科普文章、教程、技术分享、知识视频口播稿, complains about 教材腔、枯燥、翻译腔, or asks for 口语化、生活化、借喻, or wants to learn vivid technical exposition from examples. Do not use for API reference, release notes, pure copyediting, SEO, or marketing copy.
+description: Draft, diagnose, or rewrite technical blog posts, tutorials, talks, and explainer video scripts so they read like a person rather than a textbook. Also the shared language contract for learner-facing teaching, lesson pages, and memo cards; those skills keep their own structure, state, and generation rules. Use when the user wants to write or improve 技术博客、科普文章、教程、技术分享、知识视频口播稿, complains about 教材腔、枯燥、翻译腔, or asks for 口语化、生活化、借喻, or wants to learn vivid technical exposition from examples. Do not use for API reference, release notes, pure copyediting, SEO, or marketing copy.
 ---
 
 # Vivid Tech Writing
@@ -78,6 +78,12 @@ Turn technical knowledge back into experience: **scene, person, change**.
 - **并排容易混的东西。** 两个 scale、搜索 vs 部署、方法 vs 表示 vs 执行，用一张表横向对比。
 
 口语化不是段子化：短句、直接称呼、具体动词，但不删数字、caveat 和引用。
+
+## 跨体裁语言契约
+
+`guide-learning`、`lesson-pages`、`memo-cards` 的讲解、页面和卡片，也用同一套语言底线。完整契约在 [references/language-contract.md](references/language-contract.md)：先场景/对象/问题，完整优先于短，一个主例贯穿，术语先定义，事实/推断分开，结论能自评。
+
+体裁差异（文章／教学／页面／卡片／视频）见契约的“按体裁”一节；结构、状态、授权仍由各自 Skill 负责。
 
 ## 视频模式
 
@@ -158,6 +164,7 @@ Turn technical knowledge back into experience: **scene, person, change**.
 | [references/close-readings.md](references/close-readings.md) | 想学具体段落怎么拆、需要大师样本 |
 | [references/chinese-editing.md](references/chinese-editing.md) | 中文翻译腔、术语、标点、句子手术 |
 | [references/plain-language.md](references/plain-language.md) | 口语化、生活化、借喻、公式/表格的“读法” |
+| [references/language-contract.md](references/language-contract.md) | 跨体裁语言契约：教学、页面、卡片、文章、视频的共同底线 |
 | [references/video-script.md](references/video-script.md) | 视频口播、分镜、开场结尾 |
 | [references/source-library.md](references/source-library.md) | 用户要书单/视频/博客推荐，或需要更多样板 |
 | [references/practice.md](references/practice.md) | 用户要练、要 30 天计划、要语料卡 |

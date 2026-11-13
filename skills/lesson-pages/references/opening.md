@@ -3,9 +3,7 @@
 建新页（`new`）或给中途才开始用页面的课补导入时读取本参考；对应 `guide-learning` 的开课导入。完整示例见
 [example-opening.html](example-opening.html)，块的通用写法见 [page-structure.md](page-structure.md)。
 
-- **导入** `<section class="lp-narrative" id="intro">`：先说明具体场景、涉及的对象与核心问题，再放骨架图，图后一段讲将形成的
-  能力和完成标准；连贯叙述，不写成目标清单或先贴一段抽象结论。路线由目录和骨架承担，不另写一段。尽量让首屏看到
-  骨架图，但不为此删去理解场景所需的前提；骨架帮助定位，具体机制仍在后续节点逐步解释。
+- **导入** `<section class="lp-narrative" id="intro">`：场景、对象、问题、能力和完成标准的写法按 `vivid-tech-writing` 的 `references/language-contract.md`（课程网页体裁）；这里只定结构：先放导入，再放骨架图，图后一段讲能力与完成标准。路线由目录和骨架承担，不另写一段。尽量让首屏看到骨架图，但不为此删去理解场景所需的前提；骨架帮助定位，具体机制仍在后续节点逐步解释。
 - **骨架** 导入里的 `<figure class="lp-figure is-wide" id="fig-0">`，用 `<ol class="lp-stages lp-flow">` 列出阶段：
   `<li id="st-…" data-label="短名"><b>阶段名</b><span>传什么、形状</span></li>`；输入输出的形状与精度写在图注里。阶段被节点
   讲到后成为通车的站，没讲的标“未开通”。

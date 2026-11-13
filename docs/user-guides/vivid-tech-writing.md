@@ -39,6 +39,14 @@ Agent 会先给“一句话答案”，必要时补一张流程/阶段图，再�
 
 如果你只想要“诊断”，说“先别改，告诉我哪里太书面”即可；它会先给诊断表，再问要不要进入 `rewrite`。
 
+## 跨体裁语言契约
+
+除了文章和视频，`guide-learning` 的讲解、`lesson-pages` 的页面文字、`memo-cards` 的题面与答案，也共用同一套语言底线。完整契约在 [`references/language-contract.md`](https://github.com/XiFenM/agent-skills/blob/main/skills/vivid-tech-writing/references/language-contract.md)。
+
+它管的是：先场景/对象/问题，完整优先于短，一个主例贯穿，术语先定义，事实与推断分开，结论能自评。它不管教学深度、页面结构、卡片等级与授权——那些仍由各自 Skill 负责。
+
+如果你在这三个 Skill 里觉得文字太书面，也可以直接说“按 language-contract 的教学/课程网页/记忆卡片体裁改一下”。
+
 ## 一次典型交互
 
 1. 你说明体裁、读者、长度、必须保留的事实，以及有没有过往文章可以作为语气样本。

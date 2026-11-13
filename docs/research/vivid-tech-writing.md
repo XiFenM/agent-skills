@@ -127,6 +127,19 @@ Skill 发布后，用两份真实技术讲义做了两轮“口语化 / 生活�
 6. 变量名误导时换符号，保留原名注释；
 7. 比喻不能替代数字和 caveat。
 
+## 跨 Skill 语言契约（2026-11-13）
+
+`guide-learning`、`lesson-pages`、`memo-cards` 都输出解释性文字，原本各自带一部分语言指导。把这些指导收束成一个中心：
+
+- 新增 `references/language-contract.md`：十条通用契约、难懂机制的四件套、按体裁（技术文章、教学讲解、课程网页、学习文章、记忆卡片、视频口播）、体裁对照表、共享检查清单、交接边界。
+- 三个 Skill 只保留与自身结构强绑定的规则：教学深度阶梯、页面布局与交互、卡片拆分与 Markji 格式；语言原则改为短指针 + 2–4 条本地底线。
+- 不在 Skill 目录之间写相对链接：materializer 可能只复制其中一个 Skill，跨目录相对路径会断。统一用“`vivid-tech-writing` 的 `references/language-contract.md`”这种具名引用；未启用时按本地底线执行。
+- 冲突顺序：事实、边界、授权优先；其次是结构/状态；最后才是语言。
+
+这次收束解决了一个真实矛盾：vivid 强调“短句”，guide-learning 和 lesson-pages 强调“清晰完整优先于句子短”。契约里的写法是：**短句是节奏工具，不是删信息的许可证；先保证主语、条件、因果完整，再把长句拆短。**
+
+测试：`tests/test_vivid_tech_writing.py` 检查契约覆盖六种体裁；`tests/test_learning_skills.py` 检查三个 Skill 都指向契约。`lesson-pages` 的模板预算 179,818 > 170,000 是基线已有的失败，与本轮语言收束无关。
+
 ## 为什么做成一个 Skill，而不是多个
 
 文章、视频、诊断、练习共享同一套底层动作。拆成多个 Skill 会造成三种重复：同一套九动作写三遍、触发边界互相重叠、用户要在“诊断/改写/视频”之间自己选。做成一个 Skill，用 `diagnose`、`rewrite`、`draft`、`video`、`coach` 五个模式分流；`references/` 按需读取，`SKILL.md` 只保留路由和硬约束。
