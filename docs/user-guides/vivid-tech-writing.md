@@ -43,7 +43,7 @@ Agent 会先给“一句话答案”，必要时补一张流程/阶段图，再�
 
 除了文章和视频，`guide-learning` 的讲解、`lesson-pages` 的页面文字、`memo-cards` 的题面与答案，也共用同一套语言底线。完整契约在 [`references/language-contract.md`](https://github.com/XiFenM/agent-skills/blob/main/skills/vivid-tech-writing/references/language-contract.md)。
 
-它管的是：先场景/对象/问题，完整优先于短，一个主例贯穿，术语先定义，事实与推断分开，结论能自评。它不管教学深度、页面结构、卡片等级与授权——那些仍由各自 Skill 负责。
+它管的是：先场景/对象/问题，完整优先于短，一个主例贯穿，术语先定义，事实与推断分开，结论能自评。它不管教学深度、页面结构、卡片等级与授权——那些仍由各自 Skill 负责。课程网页和记忆卡片在完成前还会调用子 Agent，按这份契约分别审查页面语言（口语化、生动）和卡片语言（清晰、完整）。
 
 如果你在这三个 Skill 里觉得文字太书面，也可以直接说“按 language-contract 的教学/课程网页/记忆卡片体裁改一下”。
 

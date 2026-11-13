@@ -50,7 +50,7 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 ## 教材式呈现
 
-讲解顺序与语言按 `vivid-tech-writing` 的 `references/language-contract.md`（课程网页体裁）：先场景、对象和问题，再机制与因果，最后总结；一个主例贯穿，局部对照；必要背景和限制写全。明确的学习者偏好优先；页面只负责呈现，内容放页面还是对话、段落与图文的配合见下一节。
+讲解顺序与语言按 `vivid-tech-writing` 的 `references/language-contract.md`（课程网页体裁）：先场景、对象和问题，再机制与因果，最后总结；必要背景和限制写全。每次写正文片段前，按 [language-review.md](references/language-review.md) 调用子 Agent 审查；结课前再审整页。未通过不改、不声称完成。
 
 ## 一课在页面上怎样展开
 

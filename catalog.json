@@ -317,7 +317,8 @@
           "article-to-video-handoff",
           "accuracy-and-no-fabrication-gate",
           "colloquial-and-everyday-analogy",
-          "cross-skill-language-contract"
+          "cross-skill-language-contract",
+          "subagent-language-review-gate"
         ]
       }
     },

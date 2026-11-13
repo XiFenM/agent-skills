@@ -140,6 +140,17 @@ Skill 发布后，用两份真实技术讲义做了两轮“口语化 / 生活�
 
 测试：`tests/test_vivid_tech_writing.py` 检查契约覆盖六种体裁；`tests/test_learning_skills.py` 检查三个 Skill 都指向契约。`lesson-pages` 的模板预算 179,818 > 170,000 是基线已有的失败，与本轮语言收束无关。
 
+## 子 Agent 语言审查门（2026-11-13）
+
+用户要求 `lesson-pages` 和 `memo-cards` 在完成前调用子 Agent，基于 `vivid-tech-writing` 审查产出语言。两种体裁的目标不同：
+
+- **课程网页**：口语化、生动、生活化，像在跟学习者说话；但不牺牲条件、因果、数字、来源和 caveat。含正文的 `new`/`add` 之前审片段；结课或声称页面完成前审整页可见正文。
+- **记忆卡片**：清晰、完整、可独立复习；不要求口语化。`prepare` 前审所有 included 卡片；内容改动后、`publish`/上传前复查改动卡。
+
+两边的审查参考各自带 prompt 和 8 条 rubric：`skills/lesson-pages/references/language-review.md` 与 `skills/memo-cards/references/language-review.md`。子 Agent 只读、不改文件；主 Agent 修完 blocking 再复查，`PASS` 后才能继续。没有子 Agent 的宿主必须标注“未独立审查”，不得声称通过。
+
+这也把“语言契约”从静态文档变成了完成门：不是建议，而是 `add` / `prepare` 前的前置条件。
+
 ## 为什么做成一个 Skill，而不是多个
 
 文章、视频、诊断、练习共享同一套底层动作。拆成多个 Skill 会造成三种重复：同一套九动作写三遍、触发边界互相重叠、用户要在“诊断/改写/视频”之间自己选。做成一个 Skill，用 `diagnose`、`rewrite`、`draft`、`video`、`coach` 五个模式分流；`references/` 按需读取，`SKILL.md` 只保留路由和硬约束。

@@ -38,7 +38,7 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    内 eligible、已核验且 active 的原子／机制卡；综合口述卡引用其中 2–5 张。不要手写 Markji 语法、
    逻辑 ID、XLSX、hash 或 manifest。结论与边界标签可按卡片语言覆盖，但必须短促，并在同一
    collection 中保持一致。写完后按[制卡自检清单](references/card-review-checklist.md)逐张自检并做批次
-   检查，没通过的卡先改再 prepare。
+   检查，没通过的卡先改；再按“完成前语言审查”一节通过语言审查，才进入 `prepare`。
 4. 按 [受管 Markdown 与 XLSX 合同](references/markdown-xlsx-staging.md) 形成严格 request JSON，调用 `scripts/memo_cards.py prepare`。工具负责模板、身份、inventory、软目标、XLSX、差异和预览摘要。
    request 保存在目标同目录的 `.requests/<目标文件名>.json`，供之后的 verify 与 API 上传复用；prepare、
    publish 和 verify 的输出只在对话中展示摘要，不另存为文件，除非用户要求。
@@ -53,6 +53,12 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    不把内容语法文档当作表格导入协议。
 6. 无写入授权时停在预览。获得足够授权后，用同一 request 和 digest 调用 `publish`，一次发布 Markdown 与全部受管 XLSX；若任何来源、目标、sidecar、模板、候选或 inventory 漂移，重新预览。详细多文件 CAS、迁移与接管规则见 [受管产物合同](references/managed-artifacts.md)。
 7. 发布后用同一 request 调用 `verify --request <request.json>`，复核 context、模板、Markdown、全部 XLSX 与受管 inventory；只有返回的 `request_check.operation` 为 `no-op` 且 `would_write=false`，才表示该 request 无需再次写入。发布、暂存或提交卡片都不需要重新 materialize。报告本地写入结果；手动导入时说明逐模板上传 XLSX，已要求直接上传时继续 API 流程。
+
+## 完成前语言审查
+
+候选卡片在 `prepare` 前必须按 [language-review.md](references/language-review.md) 调用子 Agent 审查。目标不是口语化，而是**清晰、完整、可独立复习**：正面有场景/条件/任务，答案先结论再理由再边界，不泄题、不压成提示词、不混卡。
+
+子 Agent 返回 `REVISE` 时，先改 blocking 再复查；未 `PASS` 不 `prepare`、不 `publish`、不上传。预览里写清 `PASS` / `REVISE` / `未独立审查`；没有子 Agent 时不得声称已通过独立审查。
 
 ## API 章节创建、上传与凭据
 

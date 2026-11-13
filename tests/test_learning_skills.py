@@ -52,6 +52,7 @@ PAGES_REFERENCE_FILES = {
     "timelines.md",
     "files-and-viewing.md",
     "interactive-widgets.md",
+    "language-review.md",
     "opening.md",
     "page-design.md",
     "page-structure.md",
@@ -310,6 +311,30 @@ def test_guide_learning_contains_no_consumer_or_session_format_coupling() -> Non
     )
     without_urls = re.sub(r"https?://[^\s)>]+", "", instructions)
     assert slash_command.search(without_urls) is None
+
+
+def test_lesson_pages_requires_subagent_language_review() -> None:
+    main = (PAGES_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    review = (PAGES_ROOT / "references" / "language-review.md").read_text(encoding="utf-8")
+    assert "(references/language-review.md)" in main
+    assert "子 Agent" in main
+    assert "口语化" in review and "生活化" in review
+    assert "PASS" in review and "REVISE" in review
+    assert "vivid-tech-writing" in review
+    assert "未独立审查" in review
+
+
+def test_memo_cards_requires_subagent_language_review() -> None:
+    memo_root = ROOT / "skills" / "memo-cards"
+    main = (memo_root / "SKILL.md").read_text(encoding="utf-8")
+    review = (memo_root / "references" / "language-review.md").read_text(encoding="utf-8")
+    assert "(references/language-review.md)" in main
+    assert "子 Agent" in main
+    assert "清晰" in review and "完整" in review
+    assert "不要求口语化" in review
+    assert "PASS" in review and "REVISE" in review
+    assert "vivid-tech-writing" in review
+    assert "未独立审查" in review
 
 
 def test_memo_cards_links_the_self_review_checklist() -> None:

@@ -1,6 +1,6 @@
 这六个学习类 Skill 分别负责教学、课程网页、英语表达、学习记录、记忆卡片和资料组合。它们可以在同一次学习中配合，但不是一条自动执行的流水线。每次交接都需要明确目的和最小素材范围，读取、保存、制卡和发布授权也不会传递给下一个 Skill。一句话同时提出多项（例如"整理今天的记录并预览卡片"）就是对每一项的明确请求，按顺序执行，不再逐项追问。
 
-这些 Skill 的语言表达统一按 `vivid-tech-writing` 的 `references/language-contract.md`；未启用该 Skill 时，按各 Skill 的本地底线执行。
+这些 Skill 的语言表达统一按 `vivid-tech-writing` 的 `references/language-contract.md`；未启用该 Skill 时，按各 Skill 的本地底线执行。`lesson-pages` 和 `memo-cards` 在完成前还会调用子 Agent，按同一契约分别审查页面语言（口语化、生动）与卡片语言（清晰、完整）。
 
 ## 六个 Skill 的分工
 

@@ -2218,3 +2218,20 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 - 已知基线失败：`lesson-pages` 的 `assets/lesson-template.html` 在基线就是 179,818 字节、超过 170,000 预算；与本轮语言收束无关。
 
 本轮在中央工作分支完成。
+
+## D64：课程网页与记忆卡片增加子 Agent 语言审查门（2026-11-13）
+
+用户要求 `lesson-pages` 和 `memo-cards` 在制作完成前调用子 Agent，基于 `vivid-tech-writing` 审查产出语言。两种体裁目标不同：
+
+- **课程网页**：口语化、生动、生活化；含正文的 `new`/`add` 前审片段，结课或声称完成前审整页可见正文。未 `PASS` 不 `add`、不声称完成。
+- **记忆卡片**：清晰、完整、可独立复习，不要求口语化；`prepare` 前审所有 included 卡片，内容改动后、`publish`/上传前复查。未 `PASS` 不 `prepare`、不 `publish`、不上传。
+
+实现：
+
+- 新增 `skills/lesson-pages/references/language-review.md` 与 `skills/memo-cards/references/language-review.md`：审查时机、子 Agent prompt、8 条 rubric、`PASS`/`REVISE` 协议、预览/指路里的报告方式。
+- 两处 `SKILL.md` 把审查写成完成门，而不是建议；`lesson-pages` 的 `教材式呈现`、`memo-cards` 的 `完成前语言审查` 都直接指向参考。
+- 子 Agent 只读、不改文件；主 Agent 修完 blocking 再复查。没有子 Agent 的宿主必须标注“未独立审查”，不得声称通过；用户明确接受后才继续。
+- 测试：检查两个 Skill 都引用审查参考、参考里包含目标语气与 `PASS`/`REVISE`；课程网页参考加入文件树与链接集合。
+- 已知基线失败：`lesson-pages` 的 `assets/lesson-template.html` 179,818 > 170,000，与本轮无关。
+
+本轮在中央工作分支完成。
