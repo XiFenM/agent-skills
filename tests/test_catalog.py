@@ -196,6 +196,28 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("progressive-no-spoiler-pages", pages["review"]["topics"])
         self.assertIn("attributed-mit-adaptation", pages["review"]["topics"])
 
+    def test_vivid_tech_writing_is_a_context_free_first_party_skill(self) -> None:
+        catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
+        by_name = {item["name"]: item for item in catalog["skills"]}
+        skill = by_name["vivid-tech-writing"]
+        self.assertEqual(skill["category"], "writing/technical")
+        self.assertEqual(skill["kind"], "first-party")
+        self.assertEqual(skill["migration"], "new-first-party")
+        self.assertEqual(skill["consumers"], ["daily-work"])
+        self.assertNotIn("context", skill)
+        self.assertEqual(
+            skill["lineage"],
+            [
+                {
+                    "repository": "XiFenM/agent-skills",
+                    "path": "docs/research/vivid-tech-writing.md",
+                    "commit": "57e7bb6b9e0e9907621a2cb67e7df5b0f9e9eb7c",
+                }
+            ],
+        )
+        self.assertIn("original-research-synthesis", skill["review"]["topics"])
+        self.assertIn("accuracy-and-no-fabrication-gate", skill["review"]["topics"])
+
     def test_expected_migration_boundary(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
         first_party = {
@@ -214,6 +236,7 @@ class CatalogTests(unittest.TestCase):
                 "memo-cards",
                 "resource-planning",
                 "study-log",
+                "vivid-tech-writing",
             },
         )
         self.assertEqual(

@@ -2171,3 +2171,25 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
   仍要在测试的文件清单里登记。
 
 本轮在中央工作分支完成，未提交。
+
+## D61：新增 `vivid-tech-writing` 写作 Skill（2026-11-13）
+
+用户希望把“技术写作如何写得生动”整理成可复用的 Agent Skill。研究底稿见 `docs/research/vivid-tech-writing.md`。本决策：
+
+- **独立 Skill，而不是并入 creator-workflow。** 写作动作跨文章、教程、视频、诊断和练习；`creator-workflow` 管多阶段编排、授权与发布，不负责句子怎么改。独立后触发清晰，也不会把“改写一段话”升级成 durable project。
+- **一个 Skill，五种模式。** `diagnose` / `rewrite` / `draft` / `video` / `coach` 共用同一套 7 病灶、9 动作和 6 段精读；拆成多个 Skill 会造成重复和触发边界重叠。
+- **无 context validator。** 它不读写消费仓库状态，也不写学习记录、卡片、资源或发布物；输入是对话里的草稿和偏好，输出是文本、诊断和镜头表。风格样本不应进入公共配置。需要仓库级写入时，交给有明确边界的 Skill。
+- **linter 只给信号，不打分。** `scripts/style_lint.py` 统计名词化、被动、套话、长句、具体数字、人称、问句和术语密度；刻意不输出“文风分数”，避免 Agent 和作者优化一个数字。
+- **准确性闸门。** 不虚构事实、数字、引文、来源或第一人称经历；改写不能改变技术结论；API 参考、发布说明、法规走 clarity-first。
+- **渐进披露。** `SKILL.md` ≤ 180 行 / 12 KB，只放路由、七步工作流、九个动作速查、硬约束和输出格式；诊断、动作样板、精读、中文、视频、书单、练习各一份 reference，按需读。
+- **不做。** 多 Skill 拆分；自动发布或剪辑；文风评分；模仿在世作者的签名句；把个人经历写成通用故事。
+
+测试：
+
+- `skills/vivid-tech-writing/tests/test_style_lint.py` 12 项：教材体/具体体、代码块忽略、标题、链接、术语、JSON/stdin、缺文件、空文本、Markdown 渲染。
+- `tests/test_vivid_tech_writing.py` 12 项：文件树、frontmatter、体积、reference/asset 链接、openai metadata、九动作、六段精读、七病灶、书单、用户指南、README。
+- `tests/test_catalog.py` 新增 1 项 catalog 元数据断言；本轮新增 25 项通过。
+- 在临时消费仓库中按真实 `.agent-skills` 子目录布局 materialize 到 Codex：15 个文件齐全、没有注入 context、`--check` 报告 current，说明“无受管配置”的选择在材料化层也成立。
+- 完整套件新增 25 项通过；仓库既有 3 项失败与本轮无关：`lesson-pages` 的 `SKILL.md` 在基线就是 12,051 字节、超过 12,000 预算；两个 `update_consumer` 测试在 macOS 的 `/private/var` 路径别名下比较失败。
+
+本轮在中央工作分支完成，未提交。

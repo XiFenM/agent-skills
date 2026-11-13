@@ -34,7 +34,7 @@
 
 ## lineage 说明
 
-`catalog.json` 里本 Skill 的 `lineage` 记录的是**本文件的首次提交**：它证明这套方法的提炼过程有可追溯的仓库内底稿，而不是“改编自某个 Git 仓库”。研究来源是下列公开书籍、文章与视频，无法用 Git commit 表示；`references/source-library.md` 逐条给出入口。这样登记是为了满足 schema 对 first-party 来源字段的要求，同时不伪造上游仓库。
+`catalog.json` 里本 Skill 的 `lineage` 记录的是**本文件的首次提交**（`57e7bb6b9e0e9907621a2cb67e7df5b0f9e9eb7c`）：它证明这套方法的提炼过程有可追溯的仓库内底稿，而不是“改编自某个 Git 仓库”。研究来源是下列公开书籍、文章与视频，无法用 Git commit 表示；`references/source-library.md` 逐条给出入口。这样登记是为了满足 schema 对 first-party 来源字段的要求，同时不伪造上游仓库。
 
 ## 核心语料
 

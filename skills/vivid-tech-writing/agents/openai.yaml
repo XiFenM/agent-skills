@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vivid Tech Writing"
+  short_description: "Write technical posts that sound like a person"
+  default_prompt: "Use $vivid-tech-writing to diagnose and rewrite this technical draft with concrete scenes, people, and change."

@@ -20,7 +20,8 @@
     "learning/coaching": "陪学、语言练习与交互式教学",
     "learning/knowledge-management": "学习记录、记忆卡片与资源规划",
     "media/video": "视频与媒体制作",
-    "workflow/content-production": "内容创作编排工作流"
+    "workflow/content-production": "内容创作编排工作流",
+    "writing/technical": "技术写作、科普表达与知识视频脚本"
   },
   "skills": [
     {
@@ -284,6 +285,37 @@
           "repository-local-one-to-one-log-pairs",
           "source-and-target-race-guards",
           "generic-managed-structured-targets"
+        ]
+      }
+    },
+    {
+      "name": "vivid-tech-writing",
+      "category": "writing/technical",
+      "kind": "first-party",
+      "path": "skills/vivid-tech-writing",
+      "lineage": [
+        {
+          "repository": "XiFenM/agent-skills",
+          "path": "docs/research/vivid-tech-writing.md",
+          "commit": "57e7bb6b9e0e9907621a2cb67e7df5b0f9e9eb7c"
+        }
+      ],
+      "lifecycle": {
+        "state": "active"
+      },
+      "groups": [],
+      "consumers": [
+        "daily-work"
+      ],
+      "migration": "new-first-party",
+      "review": {
+        "state": "implemented",
+        "topics": [
+          "original-research-synthesis",
+          "context-free-conversational-coach",
+          "style-signal-linter-not-score",
+          "article-to-video-handoff",
+          "accuracy-and-no-fabrication-gate"
         ]
       }
     },

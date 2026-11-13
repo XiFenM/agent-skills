@@ -28,6 +28,10 @@
     "study-log": [
       "codex",
       "claude"
+    ],
+    "vivid-tech-writing": [
+      "codex",
+      "claude"
     ]
   },
   "config": {
