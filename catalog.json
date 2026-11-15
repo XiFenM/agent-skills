@@ -12,16 +12,19 @@
     },
     "study-companion": {
       "replacement": "guide-learning"
+    },
+    "vivid-tech-writing": {
+      "replacement": "vivid-language"
     }
   },
   "categories": {
     "automation/browser": "浏览器自动化与网页测试",
     "integration/zenmux": "ZenMux 配置、使用与资料查询",
+    "language/expression": "面向用户的输出语言：对话反馈、工程书面、教学、页面、卡片、文章与视频",
     "learning/coaching": "陪学、语言练习与交互式教学",
     "learning/knowledge-management": "学习记录、记忆卡片与资源规划",
     "media/video": "视频与媒体制作",
-    "workflow/content-production": "内容创作编排工作流",
-    "writing/technical": "技术写作、科普表达与知识视频脚本"
+    "workflow/content-production": "内容创作编排工作流"
   },
   "skills": [
     {
@@ -289,15 +292,20 @@
       }
     },
     {
-      "name": "vivid-tech-writing",
-      "category": "writing/technical",
+      "name": "vivid-language",
+      "category": "language/expression",
       "kind": "first-party",
-      "path": "skills/vivid-tech-writing",
+      "path": "skills/vivid-language",
       "lineage": [
         {
           "repository": "XiFenM/agent-skills",
           "path": "docs/research/vivid-tech-writing.md",
           "commit": "57e7bb6b9e0e9907621a2cb67e7df5b0f9e9eb7c"
+        },
+        {
+          "repository": "XiFenM/agent-skills",
+          "path": "skills/vivid-tech-writing",
+          "commit": "302e2211b676741b194ab9d999f439962acee1e4"
         }
       ],
       "lifecycle": {
@@ -305,9 +313,11 @@
       },
       "groups": [],
       "consumers": [
-        "daily-work"
+        "PlanA",
+        "daily-work",
+        "programming-lab"
       ],
-      "migration": "new-first-party",
+      "migration": "renamed-and-scope-expanded",
       "review": {
         "state": "implemented",
         "topics": [
@@ -318,7 +328,11 @@
           "accuracy-and-no-fabrication-gate",
           "colloquial-and-everyday-analogy",
           "cross-skill-language-contract",
-          "subagent-language-review-gate"
+          "subagent-language-review-gate",
+          "session-wide-language-layer",
+          "conversation-and-feedback-register",
+          "engineering-prose-register",
+          "renamed-from-vivid-tech-writing"
         ]
       }
     },

@@ -2174,7 +2174,7 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 
 ## D61：新增 `vivid-tech-writing` 写作 Skill（2026-11-13）
 
-用户希望把“技术写作如何写得生动”整理成可复用的 Agent Skill。研究底稿见 `docs/research/vivid-tech-writing.md`。本决策：
+用户希望把“技术写作如何写得生动”整理成可复用的 Agent Skill。研究底稿见 `docs/research/vivid-language.md`。本决策：
 
 - **独立 Skill，而不是并入 creator-workflow。** 写作动作跨文章、教程、视频、诊断和练习；`creator-workflow` 管多阶段编排、授权与发布，不负责句子怎么改。独立后触发清晰，也不会把“改写一段话”升级成 durable project。
 - **一个 Skill，五种模式。** `diagnose` / `rewrite` / `draft` / `video` / `coach` 共用同一套 7 病灶、9 动作和 6 段精读；拆成多个 Skill 会造成重复和触发边界重叠。
@@ -2186,7 +2186,7 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 
 测试：
 
-- `skills/vivid-tech-writing/tests/test_style_lint.py` 12 项：教材体/具体体、代码块忽略、标题、链接、术语、JSON/stdin、缺文件、空文本、Markdown 渲染。
+- `skills/vivid-language/tests/test_style_lint.py` 12 项：教材体/具体体、代码块忽略、标题、链接、术语、JSON/stdin、缺文件、空文本、Markdown 渲染。
 - `tests/test_vivid_tech_writing.py` 12 项：文件树、frontmatter、体积、reference/asset 链接、openai metadata、九动作、六段精读、七病灶、书单、用户指南、README。
 - `tests/test_catalog.py` 新增 1 项 catalog 元数据断言；本轮新增 25 项通过。
 - 在临时消费仓库中按真实 `.agent-skills` 子目录布局 materialize 到 Codex：15 个文件齐全、没有注入 context、`--check` 报告 current，说明“无受管配置”的选择在材料化层也成立。
@@ -2201,7 +2201,7 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 - 新增 `references/plain-language.md`：四个动作（一句话答案、流程/阶段图、日常物件主线比喻、并排表）、三条比喻规矩、句子手术、公式/表格读法、before/after、8 条自检、常见翻车。
 - `SKILL.md` 新增“口语化与生活化”一节，并把该 reference 加进按需读取；描述加入“口语化、生活化、借喻”触发词。
 - 边界不变：API 参考、规范、事故报告不硬套；口语化不删数字、caveat、引用；比喻必须标边界；一篇 2–3 个主比喻，最多 4–5 个短比喻。
-- 两轮案例记录在 `docs/research/vivid-tech-writing.md`：量化映射（12/0.8 冲突、尺子/合影/分组尺子）与 AWQ（D 不是运行时矩阵、搜索 vs 部署、`x_max` 实为 mean）。
+- 两轮案例记录在 `docs/research/vivid-language.md`：量化映射（12/0.8 冲突、尺子/合影/分组尺子）与 AWQ（D 不是运行时矩阵、搜索 vs 部署、`x_max` 实为 mean）。
 - 测试：`tests/test_vivid_tech_writing.py` 增加 plain-language 结构断言；期望文件与 reference 集合同步；catalog、结构、linter 相关测试 37 项通过。
 
 本轮在中央工作分支完成。
@@ -2235,3 +2235,25 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 - 已知基线失败：`lesson-pages` 的 `assets/lesson-template.html` 179,818 > 170,000，与本轮无关。
 
 本轮在中央工作分支完成。
+
+## D65：`vivid-tech-writing` 改名为 `vivid-language`，扩展到 Agent 的全部输出（2026-11-15）
+
+用户指出：`vivid-tech-writing` 的“生动形象、口语化、生活化”不该只用于文章，还要用于 Agent 输出的一切语言——给用户的反馈话语、`guide-learning` 的讲解、`memo-cards` 的卡片、`lesson-pages` 的页面文字，以及其他场合；名字里的 `writing` 也太窄。本决策：
+
+- **改名与退役登记。** `vivid-tech-writing` → `vivid-language`；catalog 的 `retired_names` 记录 `vivid-tech-writing → vivid-language`，materializer 会拒绝旧名并提示替代项。目录、用户指南、研究底稿、测试和所有下游指针同步改名；lineage 增加旧 Skill 目录在 `302e221` 的条目，保留改名链。
+- **两个坐标。** 保留五种模式（`diagnose` / `rewrite` / `draft` / `video` / `coach`）；新增八个场合：对话反馈、工程书面、教学讲解、课程网页、记忆卡片、学习/技术文章、视频口播、参考文档。场合决定长度、人称、比喻密度与禁忌；模式决定这次做什么。
+- **新增 `references/conversation.md`。** 八种对话动作（开工、确认、进展、提问、汇报结果、报错/失败、拒绝/边界、收尾）、五条硬规则（结论先行、具体、不表演、不流水账、一次一个动作）、人称与温度、长答复结构、六组 before/after、工程书面短文字、10 条自检、常见翻车。这是本轮新增的主要能力：以前 Skill 只管文章，现在先管最常出现的聊天输出。
+- **新增 `references/output-formats.md`。** 五种模式的交付格式从常驻 `SKILL.md` 移出，腾出预算给场合与对话规则。
+- **契约扩为“所有输出”。** `language-contract.md` 的十条通用契约改写成跨场合；新增“对话反馈”“工程书面”“参考文档”三种体裁；对照表和检查清单分成“所有输出 / 解释性文本 / 对话与工程书面”三层。解释性文本的体裁规则保持 D63 的内容，不重新发明。
+- **下游同步。** `guide-learning`、`lesson-pages`、`memo-cards` 的指针改为新名字，并明确对话反馈、指路、预览按“对话反馈”体裁；`english-coach` 的随行反馈接入对话体裁。页面仍要求口语化、生动，卡片仍不要求口语化；结构与完成门不变。
+- **会话级生效。** `SKILL.md` 明确写“本 Skill 一旦启用，就管当前对话里你输出的所有文字”，不再只在写文章时触发。
+- **不做。** 不自动改写用户没要求的文本；不给 API 文档、法规、事故报告加比喻；不把“生动”变成段子化；不拆成多个 Skill（场合与模式正交，拆开只会重复）。
+- **体积。** `SKILL.md` 从 11,084 字节变为 11,820 字节（≤12,000）；`lesson-pages` 的 `SKILL.md` 加入对话指针后为 11,991 字节（≤12,000），靠删掉一句重复的模板说明腾出空间。
+
+测试：
+
+- `tests/test_vivid_language.py` 17 项：文件树、frontmatter、体积、会话级声明、全部链接、openai metadata、九动作、九体裁、八种对话动作、五种交付格式、plain-language 全场合、六段精读、七病灶、书单、用户指南、README。
+- `tests/test_catalog.py` 更新 retired_names、改名后的 lineage/consumers/review topics 与 first-party 集合。
+- `tests/test_learning_skills.py` 更新四个 Skill 的契约指针，并新增“对话反馈走对话体裁”的断言。
+
+本轮在中央工作分支完成，未提交。消费仓库的 `.agent-skills.json` 仍写旧名，需在更新子模块时改成 `vivid-language` 并重新 materialize。

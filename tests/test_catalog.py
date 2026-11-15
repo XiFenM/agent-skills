@@ -65,6 +65,7 @@ class CatalogTests(unittest.TestCase):
             {
                 "learn-by-practice": {"replacement": "guide-learning"},
                 "study-companion": {"replacement": "guide-learning"},
+                "vivid-tech-writing": {"replacement": "vivid-language"},
             },
         )
 
@@ -118,6 +119,7 @@ class CatalogTests(unittest.TestCase):
             {
                 "learn-by-practice": {"replacement": "guide-learning"},
                 "study-companion": {"replacement": "guide-learning"},
+                "vivid-tech-writing": {"replacement": "vivid-language"},
             },
         )
 
@@ -196,14 +198,16 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("progressive-no-spoiler-pages", pages["review"]["topics"])
         self.assertIn("attributed-mit-adaptation", pages["review"]["topics"])
 
-    def test_vivid_tech_writing_is_a_context_free_first_party_skill(self) -> None:
+    def test_vivid_language_is_a_context_free_first_party_skill(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
         by_name = {item["name"]: item for item in catalog["skills"]}
-        skill = by_name["vivid-tech-writing"]
-        self.assertEqual(skill["category"], "writing/technical")
+        skill = by_name["vivid-language"]
+        self.assertEqual(skill["category"], "language/expression")
         self.assertEqual(skill["kind"], "first-party")
-        self.assertEqual(skill["migration"], "new-first-party")
-        self.assertEqual(skill["consumers"], ["daily-work"])
+        self.assertEqual(skill["migration"], "renamed-and-scope-expanded")
+        # Intended consumers; each repository adopts the renamed Skill in its
+        # own authorized step.
+        self.assertEqual(skill["consumers"], ["PlanA", "daily-work", "programming-lab"])
         self.assertNotIn("context", skill)
         self.assertEqual(
             skill["lineage"],
@@ -212,11 +216,23 @@ class CatalogTests(unittest.TestCase):
                     "repository": "XiFenM/agent-skills",
                     "path": "docs/research/vivid-tech-writing.md",
                     "commit": "57e7bb6b9e0e9907621a2cb67e7df5b0f9e9eb7c",
-                }
+                },
+                {
+                    "repository": "XiFenM/agent-skills",
+                    "path": "skills/vivid-tech-writing",
+                    "commit": "302e2211b676741b194ab9d999f439962acee1e4",
+                },
             ],
         )
         self.assertIn("original-research-synthesis", skill["review"]["topics"])
         self.assertIn("accuracy-and-no-fabrication-gate", skill["review"]["topics"])
+        self.assertIn("session-wide-language-layer", skill["review"]["topics"])
+        self.assertIn("conversation-and-feedback-register", skill["review"]["topics"])
+        self.assertIn("renamed-from-vivid-tech-writing", skill["review"]["topics"])
+        self.assertEqual(
+            catalog["retired_names"]["vivid-tech-writing"],
+            {"replacement": "vivid-language"},
+        )
 
     def test_expected_migration_boundary(self) -> None:
         catalog = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
@@ -236,7 +252,7 @@ class CatalogTests(unittest.TestCase):
                 "memo-cards",
                 "resource-planning",
                 "study-log",
-                "vivid-tech-writing",
+                "vivid-language",
             },
         )
         self.assertEqual(

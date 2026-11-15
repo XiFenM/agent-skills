@@ -50,7 +50,7 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 ## 教材式呈现
 
-讲解顺序与语言按 `vivid-tech-writing` 的 `references/language-contract.md`（课程网页体裁）：先场景、对象和问题，再机制与因果，最后总结；必要背景和限制写全。每次写正文片段前，按 [language-review.md](references/language-review.md) 调用子 Agent 审查；结课前再审整页。未通过不改、不声称完成。
+讲解顺序与语言按 `vivid-language` 的 `references/language-contract.md`（课程网页体裁）：先场景、对象和问题，再机制与因果，最后总结；必要背景和限制写全。对话里的指路与反馈按契约的对话体裁。每次写正文前，按 [language-review.md](references/language-review.md) 调用子 Agent 审查；结课前再审整页。未通过不改、不声称完成。
 
 ## 一课在页面上怎样展开
 
@@ -68,7 +68,7 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 块与题目写法见 [page-structure.md](references/page-structure.md)。
 
-新版模板内置横排站点名称和每个节点的“复制为 Markdown”按钮；复制覆盖节点内的正文、补充与完整图示步骤，不夹带导航和操作控件，无需逐课编写复制脚本。行为与验证见 [page-design.md](references/page-design.md) 和 [browser-checks.md](references/browser-checks.md)。
+新版模板内置横排站点名称和每个节点的“复制为 Markdown”按钮；复制覆盖节点内的正文、补充与完整图示步骤，不夹带导航和操作控件。行为与验证见 [page-design.md](references/page-design.md) 和 [browser-checks.md](references/browser-checks.md)。
 
 ## 每次更新页面
 

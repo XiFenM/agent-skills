@@ -13,7 +13,7 @@
 ## 怎么审
 
 1. 主 Agent 调宿主提供的子 Agent 工具（如 `subagent`）；子 Agent 只读审查，不改文件。
-2. 子 Agent 读 `vivid-tech-writing` 的 `references/language-contract.md`（记忆卡片体裁）和 `card-content-layout.md`；读不到时用本文件末尾的 8 条 rubric。
+2. 子 Agent 读 `vivid-language` 的 `references/language-contract.md`（记忆卡片体裁）和 `card-content-layout.md`；读不到时用本文件末尾的 8 条 rubric。
 3. 输入是候选卡片的正面、答案、边界标签和来源短标签，不是 XLSX 或 Markji 语法。
 4. 子 Agent 返回 `PASS` 或 `REVISE`；`REVISE` 必须逐卡列 blocking，每条给出原文、问题、建议改法，不重写整批卡。
 5. 主 Agent 修完 blocking，再把改动卡交给子 Agent 复查；`PASS` 后才能 `prepare` 或 `publish`。
@@ -24,7 +24,7 @@
 你是记忆卡片的语言审查子 agent，只审查，不改文件。
 
 先读：
-- 启用中的 `vivid-tech-writing` Skill 的 `references/language-contract.md`（记忆卡片体裁）
+- 启用中的 `vivid-language` Skill 的 `references/language-contract.md`（记忆卡片体裁）
 - `memo-cards` 的 `references/card-content-layout.md`
 
 目标：卡片语言清晰、完整、可独立复习；不要求口语化。学习者忘记原课堂、乱序看到这张卡时，仍应能确定任务、条件和答案。

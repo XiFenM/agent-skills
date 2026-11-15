@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vivid Language"
+  short_description: "Make every agent reply sound like a person"
+  default_prompt: "Use $vivid-language to rewrite this reply so it is direct, concrete, and free of support-desk filler."

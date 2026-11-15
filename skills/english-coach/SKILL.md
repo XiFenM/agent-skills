@@ -61,6 +61,8 @@ description: "Provide low-interruption English feedback on user-authored English
 5. 用“最小原表达 → 更自然表达 → 一句原因”的紧凑形式反馈。只有词块确有复用价值时，再补充一个与
    当前语境直接相关的词块。用户明确要求全面修改时才扩大范围。
 
+反馈的对话形态按 `vivid-language` 的 `references/language-contract.md`（对话反馈体裁）：结论先行、具体、不空夸；未启用时按本节其余底线执行。
+
 不要为了凑反馈而制造问题，不讲脱离当前表达的语法课，也不要用空泛夸奖占据回复结尾。
 
 ## 运行支架式英语回顾

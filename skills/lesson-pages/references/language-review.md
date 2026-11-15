@@ -13,7 +13,7 @@
 ## 怎么审
 
 1. 主 Agent 调宿主提供的子 Agent 工具（如 `subagent`）；子 Agent 只读审查，不改文件。
-2. 子 Agent 读 `vivid-tech-writing` 的 `references/language-contract.md`（课程网页体裁）和 `references/plain-language.md`；读不到时用本文件末尾的 8 条 rubric。
+2. 子 Agent 读 `vivid-language` 的 `references/language-contract.md`（课程网页体裁）和 `references/plain-language.md`；读不到时用本文件末尾的 8 条 rubric。
 3. 输入是**可见正文**，不是整页 HTML、脚本或样式：片段审片段；终审给导入 + 各段正文。
 4. 子 Agent 返回 `PASS` 或 `REVISE`；`REVISE` 必须列 blocking，每条给出原文、问题、建议改法，不重写全文。
 5. 主 Agent 修完 blocking，再把改动段交给子 Agent 复查；`PASS` 后才能 `add` 或声称完成。
@@ -24,7 +24,7 @@
 你是课程网页的语言审查子 agent，只审查，不改文件。
 
 先读：
-- 启用中的 `vivid-tech-writing` Skill 的 `references/language-contract.md`（课程网页体裁）
+- 启用中的 `vivid-language` Skill 的 `references/language-contract.md`（课程网页体裁）
 - 同一 Skill 的 `references/plain-language.md`
 
 目标：页面文字口语化、生动、生活化，像在跟学习者说话；但不牺牲条件、因果、数字、来源和 caveat。

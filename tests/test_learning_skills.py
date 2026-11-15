@@ -320,7 +320,7 @@ def test_lesson_pages_requires_subagent_language_review() -> None:
     assert "子 Agent" in main
     assert "口语化" in review and "生活化" in review
     assert "PASS" in review and "REVISE" in review
-    assert "vivid-tech-writing" in review
+    assert "vivid-language" in review
     assert "未独立审查" in review
 
 
@@ -333,7 +333,7 @@ def test_memo_cards_requires_subagent_language_review() -> None:
     assert "清晰" in review and "完整" in review
     assert "不要求口语化" in review
     assert "PASS" in review and "REVISE" in review
-    assert "vivid-tech-writing" in review
+    assert "vivid-language" in review
     assert "未独立审查" in review
 
 
@@ -352,13 +352,27 @@ def test_memo_cards_links_the_self_review_checklist() -> None:
 
 
 def test_language_guidance_points_to_the_shared_contract() -> None:
-    for name in ("guide-learning", "lesson-pages", "memo-cards"):
+    for name in ("guide-learning", "lesson-pages", "memo-cards", "english-coach"):
         root = ROOT / "skills" / name
         text = "\n".join(
             path.read_text(encoding="utf-8") for path in _text_files(root)
         )
-        assert "vivid-tech-writing" in text, name
+        assert "vivid-language" in text, name
         assert "language-contract.md" in text, name
+
+
+def test_learning_skills_send_chat_feedback_through_the_conversation_register() -> None:
+    for name, phrase in (
+        ("guide-learning", "对话体裁"),
+        ("lesson-pages", "对话体裁"),
+        ("memo-cards", "对话体裁"),
+        ("english-coach", "对话反馈体裁"),
+    ):
+        root = ROOT / "skills" / name
+        text = "\n".join(
+            path.read_text(encoding="utf-8") for path in _text_files(root)
+        )
+        assert phrase in text, name
 
 
 def test_learning_skills_announce_user_guides_once_per_conversation() -> None:

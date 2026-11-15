@@ -198,7 +198,7 @@ int main() {
 
 ## 写法对照
 
-完整的语言对照见 `vivid-tech-writing` 的 `references/language-contract.md`（教学体裁）。这里只留三条最影响教学的：
+完整的语言对照见 `vivid-language` 的 `references/language-contract.md`（教学体裁）。这里只留三条最影响教学的：
 
 - 先交代场景、对象和问题，再给含新术语的结论。
 - 不为了句子短删掉动作主体、完成条件或中间因果。

@@ -30,7 +30,7 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    `git add` 或重新 materialize；来源尚未提交时，在预览中提醒一句，是否提交由用户决定。
 2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。制卡是为了理解与面试：优先"为什么这样设计""怎样取舍""怎样诊断"和口述类卡片；学习者已熟练或一眼即知的内容（首答即对且没有迁移价值的计数、查表、定义复述）评为 C，不制卡。A 级只给能防止高代价错误、或能回答一道可能面试题的卡，并为每张 A 卡写一句理由。选材前先从来源列出学习目标与核心结论作为覆盖清单；纠错卡只收来源确认判错的回答；未实测或只是推断的行为不写成确定事实。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
 3. 由 Agent 完成语义工作：先确定单一回忆目标，再按 [卡片内容与版式](references/card-content-layout.md)
-   撰写可独立理解的题面与答案；语言按 `vivid-tech-writing` 的
+   撰写可独立理解的题面与答案；语言按 `vivid-language` 的
    `references/language-contract.md`（记忆卡片体裁）：正面重建场景、对象、条件和作答目标，
    答案先直接回答、再理由/步骤、最后边界；完整优先于短，不把 A 卡压成提示词；未启用该 Skill 时，按 card-content-layout 的本地规则执行。按单张、乱序复习的情境
    审阅，不依赖原课堂、相邻卡或来源链接才能读懂。判断
@@ -58,7 +58,7 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
 
 候选卡片在 `prepare` 前必须按 [language-review.md](references/language-review.md) 调用子 Agent 审查。目标不是口语化，而是**清晰、完整、可独立复习**：正面有场景/条件/任务，答案先结论再理由再边界，不泄题、不压成提示词、不混卡。
 
-子 Agent 返回 `REVISE` 时，先改 blocking 再复查；未 `PASS` 不 `prepare`、不 `publish`、不上传。预览里写清 `PASS` / `REVISE` / `未独立审查`；没有子 Agent 时不得声称已通过独立审查。
+子 Agent 返回 `REVISE` 时，先改 blocking 再复查；未 `PASS` 不 `prepare`、不 `publish`、不上传。预览里写清 `PASS` / `REVISE` / `未独立审查`；没有子 Agent 时不得声称已通过独立审查。预览与审查结论的对话文字按 `vivid-language` 的对话体裁：结论先行、具体、不客套。
 
 ## API 章节创建、上传与凭据
 

@@ -1,7 +1,7 @@
-# 技术写作的生动表达：研究底稿
+# 生动语言：从技术写作到 Agent 的全部输出
 
-> 2026-11-13 · 为 `vivid-tech-writing` Skill 提供来源、提炼与设计依据
-> 状态：研究完成，Skill 已实现并通过本地校验，待提交
+> 2026-11-13 起为 `vivid-language`（原名 `vivid-tech-writing`）提供来源、提炼与设计依据
+> 状态：研究完成；2026-11-15 扩展为覆盖所有输出语言的语言层
 
 ## 问题
 
@@ -53,7 +53,7 @@
 | Distill, *Research Debt* | 把解释当成研究工作；解释会改变想法 | [Research Debt](https://distill.pub/2017/research-debt/) |
 | 余光中《论中文的常态与变态》 | 欧化中文的化简为繁；名词化与被动 | [节选](http://www.rmzxw.com.cn/c/2017-09-04/1768389.shtml) |
 
-完整 40 条语料见 `skills/vivid-tech-writing/references/source-library.md`。
+完整 40 条语料见 `skills/vivid-language/references/source-library.md`。
 
 ## 提炼结果
 
@@ -133,16 +133,16 @@ Skill 发布后，用两份真实技术讲义做了两轮“口语化 / 生活�
 
 - 新增 `references/language-contract.md`：十条通用契约、难懂机制的四件套、按体裁（技术文章、教学讲解、课程网页、学习文章、记忆卡片、视频口播）、体裁对照表、共享检查清单、交接边界。
 - 三个 Skill 只保留与自身结构强绑定的规则：教学深度阶梯、页面布局与交互、卡片拆分与 Markji 格式；语言原则改为短指针 + 2–4 条本地底线。
-- 不在 Skill 目录之间写相对链接：materializer 可能只复制其中一个 Skill，跨目录相对路径会断。统一用“`vivid-tech-writing` 的 `references/language-contract.md`”这种具名引用；未启用时按本地底线执行。
+- 不在 Skill 目录之间写相对链接：materializer 可能只复制其中一个 Skill，跨目录相对路径会断。统一用“`vivid-language` 的 `references/language-contract.md`”这种具名引用；未启用时按本地底线执行。
 - 冲突顺序：事实、边界、授权优先；其次是结构/状态；最后才是语言。
 
 这次收束解决了一个真实矛盾：vivid 强调“短句”，guide-learning 和 lesson-pages 强调“清晰完整优先于句子短”。契约里的写法是：**短句是节奏工具，不是删信息的许可证；先保证主语、条件、因果完整，再把长句拆短。**
 
-测试：`tests/test_vivid_tech_writing.py` 检查契约覆盖六种体裁；`tests/test_learning_skills.py` 检查三个 Skill 都指向契约。`lesson-pages` 的模板预算 179,818 > 170,000 是基线已有的失败，与本轮语言收束无关。
+测试：`tests/test_vivid_language.py` 检查契约覆盖九种体裁；`tests/test_learning_skills.py` 检查四个 Skill 都指向契约。
 
 ## 子 Agent 语言审查门（2026-11-13）
 
-用户要求 `lesson-pages` 和 `memo-cards` 在完成前调用子 Agent，基于 `vivid-tech-writing` 审查产出语言。两种体裁的目标不同：
+用户要求 `lesson-pages` 和 `memo-cards` 在完成前调用子 Agent，基于 `vivid-language` 审查产出语言。两种体裁的目标不同：
 
 - **课程网页**：口语化、生动、生活化，像在跟学习者说话；但不牺牲条件、因果、数字、来源和 caveat。含正文的 `new`/`add` 之前审片段；结课或声称页面完成前审整页可见正文。
 - **记忆卡片**：清晰、完整、可独立复习；不要求口语化。`prepare` 前审所有 included 卡片；内容改动后、`publish`/上传前复查改动卡。
@@ -155,9 +155,27 @@ Skill 发布后，用两份真实技术讲义做了两轮“口语化 / 生活�
 
 文章、视频、诊断、练习共享同一套底层动作。拆成多个 Skill 会造成三种重复：同一套九动作写三遍、触发边界互相重叠、用户要在“诊断/改写/视频”之间自己选。做成一个 Skill，用 `diagnose`、`rewrite`、`draft`、`video`、`coach` 五个模式分流；`references/` 按需读取，`SKILL.md` 只保留路由和硬约束。
 
+2026-11-15 扩到全部输出后，又加了第二个坐标“场合”：对话反馈、工程书面、教学讲解、课程网页、记忆卡片、学习/技术文章、视频口播、参考文档。场合决定长度、人称和比喻密度；模式决定这一次做什么。两者正交，所以仍是一个 Skill，而不是按场合拆成八个。
+
+## 从写作扩展到一切语言（2026-11-15）
+
+用户要求把 Skill 从“写的文章”扩展到 Agent 输出的一切语言：给用户的回复、进度、提问、报错、总结，`guide-learning` 的讲解，`memo-cards` 的卡片，`lesson-pages` 的页面文字，以及更多。旧名里的 `writing` 不再准确，因此改名为 `vivid-language`。
+
+设计：
+
+- **场合 × 模式。** 旧五种模式不变；新增的是场合。`SKILL.md` 先认场合，再选模式，并把“本 Skill 一旦启用，就管当前对话里你输出的所有文字”写成硬约束。
+- **新增 `references/conversation.md`。** 八种对话动作（开工、确认、进展、提问、汇报结果、报错/失败、拒绝/边界、收尾）、五条硬规则、人称与温度、长答复结构、六组 before/after、工程书面短文字、10 条自检、常见翻车。
+- **新增 `references/output-formats.md`。** 把原来常驻 `SKILL.md` 的五种模式交付格式移出；对话和文章都要交付，但不必每次把格式背在上下文里。
+- **契约从“解释性文本”扩为“所有输出”。** 十条通用契约改写成跨场合；新增对话反馈、工程书面、参考文档三种体裁；对照表与检查清单分成“所有输出 / 解释性文本 / 对话与工程书面”三层。
+- **下游指针同步。** `guide-learning`、`lesson-pages`、`memo-cards` 改指向新名字，并明确对话反馈、指路、预览按“对话体裁”；`english-coach` 的随行反馈也接入。卡片和页面本身的体裁目标不变：卡片仍不要求口语化，页面仍要求口语化、生动。
+- **允许更长的改写。** 口语化不等于变短；补上“怎么落地”后文本可能更长，长度增加是信息，不是注水。
+- **不做。** 不自动改写用户没要求的文本；不给所有场合加比喻；不把 API 文档、法规、事故报告故事化。
+
+测试：`tests/test_vivid_language.py` 覆盖文件树、frontmatter、体积、链接、八种对话动作、九种体裁与五种模式；`tests/test_catalog.py` 记录改名与 retired name；`tests/test_learning_skills.py` 检查四个 Skill 都指向契约且对话反馈走对话体裁。
+
 ## 为什么不做 context validator
 
-`vivid-tech-writing` 是**无状态写作教练**：输入是用户给的草稿、素材和偏好，输出是文本、诊断和镜头表。它不读写消费仓库的学习记录、卡片、资源或发布状态，因此不需要受管上下文，也不应借配置获得任何写入授权。用户的声音样本在对话中提供；如果未来需要“仓库级风格指南”，应另立一个有明确写入边界的 Skill，而不是把风格样本藏进公共配置。
+`vivid-language` 是**无状态语言层**：输入是用户给的草稿、素材和偏好，输出是文本、诊断和镜头表。它不读写消费仓库的学习记录、卡片、资源或发布状态，因此不需要受管上下文，也不应借配置获得任何写入授权。用户的声音样本在对话中提供；如果未来需要“仓库级风格指南”，应另立一个有明确写入边界的 Skill，而不是把风格样本藏进公共配置。
 
 这也意味着它可以在任何宿主、任何仓库、甚至没有仓库的对话里使用。
 
