@@ -80,8 +80,6 @@ description: Draft, diagnose, or rewrite anything the agent outputs so it sounds
 
 一句回复、一张卡、一段页面不必走 1–3 步，直接做 5–7。
 
-九个动作的样板、公式与坑见 [references/moves.md](references/moves.md)；一篇文章用 2–3 个，对话和卡片通常 0–1 个。
-
 ## 中文硬规则
 
 - **去名词化。** "进行了优化" → "从 800ms 降到 120ms"；"具有较高的可维护性" → "改一行不用动三个文件"。
@@ -102,9 +100,13 @@ description: Draft, diagnose, or rewrite anything the agent outputs so it sounds
 
 ## 跨体裁语言契约
 
-对话、工程书面、教学、页面、卡片、文章、视频、参考文档共用同一套底线。完整契约在 [references/language-contract.md](references/language-contract.md)：先给可抓的东西、完整优先于短、一个主例贯穿、术语先定义、事实/推断分开、结论能自评。
+对话、工程书面、教学、页面、卡片、文章、视频、参考文档共用同一套底线，完整契约见 [references/language-contract.md](references/language-contract.md)；体裁差异与"按体裁"的细则也在那里。
 
-体裁差异见契约的"按体裁"；结构、状态、授权仍由各自 Skill 负责。契约同样管 `guide-learning`、`lesson-pages`、`memo-cards`、`english-coach` 的对话反馈。
+结构、状态与授权仍由各自 Skill 负责；契约同样管 `guide-learning`、`lesson-pages`、`memo-cards`、`english-coach` 的对话反馈。
+
+## 远程语言审查（可选）
+
+配置了 `ZENMUX_API_KEY` 时，成篇的审查或改写先跑 `scripts/zenmux_review.py`：默认依次试四个 Gemini 模型，先回应的胜出；拿不到再用宿主子 Agent，都没有就自审并标注"未独立审查"。用法与退出码见 [references/remote-review.md](references/remote-review.md)。正文会发给 ZenMux，敏感文本先关掉。
 
 ## 质量闸门
 
@@ -136,16 +138,17 @@ description: Draft, diagnose, or rewrite anything the agent outputs so it sounds
 
 | 文件 | 什么时候读 |
 |---|---|
-| [references/conversation.md](references/conversation.md) | 写回复、进度、提问、报错、总结、拒绝，或改客服腔时 |
-| [references/output-formats.md](references/output-formats.md) | 交付 diagnose/rewrite/draft/video/coach 结果时 |
+| [references/conversation.md](references/conversation.md) | 写回复、进度、提问、报错、总结、拒绝时 |
+| [references/output-formats.md](references/output-formats.md) | 交付五种模式的结果时 |
 | [references/diagnosis.md](references/diagnosis.md) | 做诊断、需要病灶对照表或病文重写示例 |
 | [references/moves.md](references/moves.md) | 选动作、需要样板/公式/坑 |
 | [references/close-readings.md](references/close-readings.md) | 想学具体段落怎么拆、需要大师样本 |
 | [references/chinese-editing.md](references/chinese-editing.md) | 中文翻译腔、术语、标点、句子手术 |
-| [references/plain-language.md](references/plain-language.md) | 口语化、生活化、借喻、公式/表格的"读法" |
-| [references/language-contract.md](references/language-contract.md) | 跨体裁语言契约：所有输出的共同底线与体裁差异 |
+| [references/plain-language.md](references/plain-language.md) | 口语化、生活化、借喻、公式读法 |
+| [references/language-contract.md](references/language-contract.md) | 跨体裁契约：共同底线与体裁差异 |
+| [references/remote-review.md](references/remote-review.md) | 配置 ZenMux，或用远程模型审查、改写语言 |
 | [references/video-script.md](references/video-script.md) | 视频口播、分镜、开场结尾 |
-| [references/source-library.md](references/source-library.md) | 用户要书单/视频/博客推荐，或需要更多样板 |
+| [references/source-library.md](references/source-library.md) | 要书单/视频/博客推荐或更多样板时 |
 | [references/practice.md](references/practice.md) | 用户要练、要 30 天计划、要语料卡 |
 | [assets/article-brief.md](assets/article-brief.md) | 从零写一篇，先填 brief |
 | [assets/rewrite-worksheet.md](assets/rewrite-worksheet.md) | 逐段诊断与改写 |

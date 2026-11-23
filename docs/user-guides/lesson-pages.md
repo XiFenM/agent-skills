@@ -33,9 +33,9 @@ Lesson Pages 把 `guide-learning` 的讲解写进一份课程网页：每一课�
 
 ## 完成前语言审查
 
-每次写入含正文的页面前，Agent 会调用一个只读的子 Agent，按 `vivid-language` 的“课程网页”体裁审查这段文字：是否口语化、生动、生活化，是否保留条件、因果、数字和 caveat。没有通过先改再复查；结课前还会审整页可见正文。
+每次写入含正文的页面前，Agent 会先调用 `vivid-language` 的远程审查脚本，把这段可见正文交给 ZenMux 上更会说人话的 Gemini 4 模型，按“课程网页”体裁审查：是否口语化、生动、生活化，是否保留条件、因果、数字和 caveat。没配 `ZENMUX_API_KEY`、或远程模型都不回应时，改用只读子 Agent 走同一套 rubric；没有通过先改再复查，结课前还会审整页可见正文。
 
-没有子 Agent 的宿主会明确标注“未独立审查”，不会假装通过。审查结果只放在对话里，不写进页面。
+远程与子 Agent 都不可用时，会明确标注“未独立审查”，不会假装通过。审查结果只放在对话里，不写进页面。想启用远程审查，按 [`vivid-language`](vivid-language.md) 的配置说明设置 `ZENMUX_API_KEY`；不想让正文外发时设置 `VIVID_LANGUAGE_REMOTE_REVIEW=off`。
 
 ## 怎样打开页面
 

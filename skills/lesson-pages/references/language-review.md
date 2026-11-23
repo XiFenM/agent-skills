@@ -10,15 +10,38 @@
 2. **结课、最后一页、或声称“页面完成”之前**：审整页可见正文（开课导入 + 各段正文 + 串讲/验收），不只审新片段。
 3. **改错或重写正文之后**：只复查改动段；如果改动跨段，复查受影响范围。
 
-## 怎么审
+## 怎么审：远程优先，子 Agent 兜底
+
+按顺序试，前一步拿不到结果才进下一步；每一步都不许跳过或假装通过。
+
+### 1. 远程模型（首选）
+
+1. 调用启用中的 `vivid-language` Skill 的 `scripts/zenmux_review.py`，把**可见正文**交给它，不要给整页 HTML、脚本或样式：
+
+   ```bash
+   python3 <vivid-language>/scripts/zenmux_review.py --kind page draft.md
+   ```
+
+   配置、模型链和隐私说明见该 Skill 的 `references/remote-review.md`。用户没有 `ZENMUX_API_KEY` 时脚本退出码为 2，不要追问 Key，直接进第 2 步。
+
+2. `verdict` 为 `PASS`：记录 `语言审查：PASS（ZenMux / <model>）`，可以继续。
+3. `verdict` 为 `REVISE`：先改 blocking，再把改动段送一次；`fact_risk` 不为“无”时逐条核对数字、版本和引用。
+4. 退出码 2 或 3、脚本不存在、宿主没有 Python：都算远程不可用，进第 2 步；退出码 1 是输入问题（空、超长、路径错），修输入再跑，不要当成通过。
+
+### 2. 子 Agent（远程不可用）
 
 1. 主 Agent 调宿主提供的子 Agent 工具（如 `subagent`）；子 Agent 只读审查，不改文件。
 2. 子 Agent 读 `vivid-language` 的 `references/language-contract.md`（课程网页体裁）和 `references/plain-language.md`；读不到时用本文件末尾的 8 条 rubric。
 3. 输入是**可见正文**，不是整页 HTML、脚本或样式：片段审片段；终审给导入 + 各段正文。
 4. 子 Agent 返回 `PASS` 或 `REVISE`；`REVISE` 必须列 blocking，每条给出原文、问题、建议改法，不重写全文。
 5. 主 Agent 修完 blocking，再把改动段交给子 Agent 复查；`PASS` 后才能 `add` 或声称完成。
+6. 记录 `语言审查：PASS（子 Agent，<审查范围>）`。
 
-## 审查 prompt（可直接用）
+### 3. 都没有
+
+不要静默跳过，也不要声称“语言审查通过”。按下面的 rubric 自审，明确告诉用户“未独立审查”，并请用户确认是否接受；只有用户明确接受后，才继续 `add`，且最终指路和结课时仍要标注“未独立审查”。
+
+## 审查 prompt（子 Agent 用，可直接粘贴）
 
 ```text
 你是课程网页的语言审查子 agent，只审查，不改文件。
@@ -53,6 +76,12 @@ blocking 只放：丢失条件/因果/caveat、编造事实、仍是教材腔、
 - [ ] 技术事实、数字、来源没有被“生动化”改掉？
 - [ ] 适合页面阅读，不是聊天碎片或整页术语墙？
 
-## 没有子 Agent 时
+## 报告怎么说
 
-不要静默跳过，也不要声称“语言审查通过”。按上面的 rubric 自审，明确告诉用户“未独立审查”，并请用户确认是否接受；只有用户明确接受后，才继续 `add`，且最终指路和结课时仍要标注“未独立审查”。
+预览、指路和结课里只写一句结论，三种来源分开写：
+
+- `语言审查：PASS（ZenMux / google/gemini-4-hydrogen）`
+- `语言审查：PASS（子 Agent，整页可见正文）`
+- `语言审查：未独立审查（自审，用户已确认接受）`
+
+不能只报页数或样式名，也不能把“未审”写成“通过”。

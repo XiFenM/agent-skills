@@ -20,11 +20,14 @@ EXPECTED_FILES = {
     "references/moves.md",
     "references/output-formats.md",
     "references/plain-language.md",
+    "references/remote-review.md",
     "references/practice.md",
     "references/source-library.md",
     "references/video-script.md",
     "scripts/style_lint.py",
+    "scripts/zenmux_review.py",
     "tests/test_style_lint.py",
+    "tests/test_zenmux_review.py",
 }
 
 EXPECTED_REFERENCES = {
@@ -37,6 +40,7 @@ EXPECTED_REFERENCES = {
     "output-formats.md",
     "plain-language.md",
     "practice.md",
+    "remote-review.md",
     "source-library.md",
     "video-script.md",
 }
@@ -217,6 +221,32 @@ def test_source_library_has_a_shortlist_and_entries() -> None:
     text = (SKILL / "references" / "source-library.md").read_text(encoding="utf-8")
     assert "如果只选五个" in text
     assert text.count("|") >= 40
+
+
+def test_remote_review_documents_the_zenmux_ladder() -> None:
+    text = (SKILL / "references" / "remote-review.md").read_text(encoding="utf-8")
+    for anchor in (
+        "ZENMUX_API_KEY",
+        "ZENMUX_BASE_URL",
+        "VIVID_LANGUAGE_REMOTE_REVIEW",
+        "google/gemini-4-neon",
+        "google/gemini-4-hydrogen",
+        "google/gemini-4-carbon",
+        "google/gemini-4-argon",
+        "子 Agent",
+        "退出码",
+        "未独立审查",
+    ):
+        assert anchor in text, anchor
+    assert "zenmux_review.py" in text
+
+
+def test_main_text_names_the_remote_reviewer_and_its_fallback() -> None:
+    text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    assert "zenmux_review.py" in text
+    assert "ZENMUX_API_KEY" in text
+    assert "references/remote-review.md" in text
+    assert "子 Agent" in text
 
 
 def test_user_guide_is_registered() -> None:

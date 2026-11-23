@@ -56,9 +56,9 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
 
 ## 完成前语言审查
 
-候选卡片在 `prepare` 前必须按 [language-review.md](references/language-review.md) 调用子 Agent 审查。目标不是口语化，而是**清晰、完整、可独立复习**：正面有场景/条件/任务，答案先结论再理由再边界，不泄题、不压成提示词、不混卡。
+候选卡片在 `prepare` 前必须按 [language-review.md](references/language-review.md) 审查（远程优先，子 Agent 兜底）。目标不是口语化，而是**清晰、完整、可独立复习**：正面有场景/条件/任务，答案先结论再理由再边界，不泄题、不压成提示词、不混卡。
 
-子 Agent 返回 `REVISE` 时，先改 blocking 再复查；未 `PASS` 不 `prepare`、不 `publish`、不上传。预览里写清 `PASS` / `REVISE` / `未独立审查`；没有子 Agent 时不得声称已通过独立审查。预览与审查结论的对话文字按 `vivid-language` 的对话体裁：结论先行、具体、不客套。
+审查返回 `REVISE` 时，先改 blocking 再复查；未 `PASS` 不 `prepare`、不 `publish`、不上传。预览里写清 `PASS` / `REVISE` / `未独立审查`；远程与子 Agent 都不可用时不得声称已通过独立审查。预览与审查结论的对话文字按 `vivid-language` 的对话体裁：结论先行、具体、不客套。
 
 ## API 章节创建、上传与凭据
 

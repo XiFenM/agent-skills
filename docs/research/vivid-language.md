@@ -151,6 +151,20 @@ Skill 发布后，用两份真实技术讲义做了两轮“口语化 / 生活�
 
 这也把“语言契约”从静态文档变成了完成门：不是建议，而是 `add` / `prepare` 前的前置条件。
 
+## 远程语言审查（2026-11-23）
+
+子 Agent 审查有一个结构性弱点：它继承当前对话的模型。模型自己说不出人话时，让它审自己的文风，多半还是同一套判断。用户的实际反馈是：有的模型（如 GPT-6）加多少规则都改不过来。
+
+因此把审查执行者换成“更会说人话的模型”，并允许远程：
+
+- **优先 ZenMux。** 默认模型链 `google/gemini-4-neon` → `hydrogen` → `carbon` → `argon`，第一个回应的胜出。只看 `ZENMUX_API_KEY`；没有 Key 就直接走子 Agent，不当成错误。
+- **子 Agent 降为兜底。** 远程没配、被关，或四个模型都不回应时，仍按 D64 的 prompt 和 8 条 rubric 审；再不行才自审并标注“未独立审查”。
+- **审阅协议不换。** 仍是 `PASS` / `REVISE`、blocking 与事实风险；远程只是更强的执行者，不是新的完成门。
+- **改写是候选。** 远程稿可以由主 Agent 采用、部分采用或退回；事实、数字、caveat 仍要本地核对，远程模型不获得“改事实”的授权。
+- **不默认外发。** 只有配置了 Key 才发请求；正文走 HTTPS 到 ZenMux，敏感文本用 `VIVID_LANGUAGE_REMOTE_REVIEW=off` 关闭。
+
+实现细节、退出码和排障见 `skills/vivid-language/references/remote-review.md`。一个刻意不做的选择：不在 `SKILL.md` 里教模型手拼 curl。重试、模型降级、JSON 解析和失败语义都在脚本里，手写会绕开它们。
+
 ## 为什么做成一个 Skill，而不是多个
 
 文章、视频、诊断、练习共享同一套底层动作。拆成多个 Skill 会造成三种重复：同一套九动作写三遍、触发边界互相重叠、用户要在“诊断/改写/视频”之间自己选。做成一个 Skill，用 `diagnose`、`rewrite`、`draft`、`video`、`coach` 五个模式分流；`references/` 按需读取，`SKILL.md` 只保留路由和硬约束。
@@ -190,5 +204,6 @@ Skill 发布后，用两份真实技术讲义做了两轮“口语化 / 生活�
 ## 验证
 
 - `scripts/style_lint.py` 对名词化、被动、套话、长句、抽象后缀、具体数字、人称、问句做确定性统计；`tests/test_style_lint.py` 覆盖教材体、具体体、代码块忽略、JSON 输出。
+- `scripts/zenmux_review.py` 的远程成功路径用注入 transport 的单元测试覆盖：模型降级、鉴权失败、解析失败、预算耗尽、截断与改写候选；真实 Key 的端到端审查尚未完成。
 - 仓库级测试检查：frontmatter、`agents/openai.yaml`、references 链接、体积预算、catalog 元数据、与 README/用户指南的一致性。
 - 设计上不做“文风评分”：linter 只给信号，避免把“好文风”简化成一个分数。

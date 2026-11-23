@@ -86,9 +86,21 @@ Agent 会先给"一句话答案"，必要时补一张流程/阶段图，再用 2
 
 `guide-learning` 的讲解、`lesson-pages` 的页面文字、`memo-cards` 的题面与答案、`english-coach` 的反馈，以及所有 Skill 的对话输出，共用同一套语言底线。完整契约在 [`references/language-contract.md`](https://github.com/XiFenM/agent-skills/blob/main/skills/vivid-language/references/language-contract.md)。
 
-它管的是：先给可抓的东西，完整优先于短，一个主例贯穿，术语先定义，事实与推断分开，结论能自评，对话不客套、不流水账。它不管教学深度、页面结构、卡片等级与授权——那些仍由各自 Skill 负责。课程网页和记忆卡片在完成前还会调用子 Agent，按这份契约分别审查页面语言（口语化、生动）和卡片语言（清晰、完整）。
+它管的是：先给可抓的东西，完整优先于短，一个主例贯穿，术语先定义，事实与推断分开，结论能自评，对话不客套、不流水账。它不管教学深度、页面结构、卡片等级与授权——那些仍由各自 Skill 负责。课程网页和记忆卡片在完成前会先让远程模型审查、失败时再交给子 Agent，按这份契约分别检查页面语言（口语化、生动）和卡片语言（清晰、完整）。
 
 如果你在这些 Skill 里觉得文字太书面，也可以直接说"按 language-contract 的教学/课程网页/记忆卡片体裁改一下"。
+
+## 想让它先过一遍更会说人话的模型
+
+如果你当前的模型怎么调都还是教材腔，可以让 `vivid-language` 先把文字交给 ZenMux 上更会说中文的 Gemini 4 模型审查或改写，再回到这场对话里执行：
+
+1. 在 [ZenMux 控制台](https://zenmux.ai/platform) 创建 API Key；
+2. 在 shell 里 `export ZENMUX_API_KEY="sk-..."`，写进 `~/.zshrc` 后 `source` 一次；
+3. 直接说“按 vivid-language 审一下这段”或“先别改，帮我诊断”。
+
+Agent 会先跑远程审查：默认依次尝试 `google/gemini-4-neon`、`google/gemini-4-hydrogen`、`google/gemini-4-carbon`、`google/gemini-4-argon`，谁先回应就用谁。Key 被拒绝、或四个模型都不回应时，退回只读子 Agent；子 Agent 也没有时，自审并明确写“未独立审查”。想看哪些模型通，跑 `python3 <vivid-language>/scripts/zenmux_review.py --check`。
+
+正文会通过 HTTPS 发到 ZenMux。没有 Key 时不发任何请求；不想外发时设置 `VIVID_LANGUAGE_REMOTE_REVIEW=off`。模型链可以用 `VIVID_LANGUAGE_ZENMUX_MODELS` 换成你自己的。完整说明见 Skill 的 `references/remote-review.md`。
 
 ## 一次典型交互
 

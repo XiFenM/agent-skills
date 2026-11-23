@@ -29,9 +29,9 @@ Memo Cards 把已经核验、值得反复强化的英语或技术材料整理为
 
 ## 完成前语言审查
 
-候选卡片在 `prepare` 前，Agent 会调用一个只读的子 Agent，按 `vivid-language` 的“记忆卡片”体裁审查：正面是否有场景、条件和任务，答案是否先结论再理由再边界，是否泄题、压成提示词或混卡。没有通过先改再复查；未 `PASS` 不 `prepare`、不发布、不上传。
+候选卡片在 `prepare` 前，Agent 会先调用 `vivid-language` 的远程审查脚本（`--kind cards`），把卡片正面、答案、边界和来源交给 ZenMux 上的 Gemini 4 模型，按“记忆卡片”体裁审查：正面是否有场景、条件和任务，答案是否先结论再理由再边界，是否泄题、压成提示词或混卡。没配 `ZENMUX_API_KEY`、或远程模型都不回应时，改用只读子 Agent。没有通过先改再复查；未 `PASS` 不 `prepare`、不发布、不上传。
 
-目标是**清晰、完整、可独立复习**，不要求口语化。没有子 Agent 的宿主会明确标注“未独立审查”，不会假装通过。
+目标是**清晰、完整、可独立复习**，不要求口语化。远程与子 Agent 都不可用时，会明确标注“未独立审查”，不会假装通过。想启用远程，按 [`vivid-language`](vivid-language.md) 配置 `ZENMUX_API_KEY`；不想外发卡片内容时设置 `VIVID_LANGUAGE_REMOTE_REVIEW=off`。
 
 ## 用户需要做什么
 

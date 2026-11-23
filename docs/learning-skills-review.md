@@ -2257,3 +2257,27 @@ D59 做完时 `SKILL.md` 与参考文档合计 66,968 字节，逼近 67,000 的
 - `tests/test_learning_skills.py` 更新四个 Skill 的契约指针，并新增“对话反馈走对话体裁”的断言。
 
 本轮在中央工作分支完成，未提交。消费仓库的 `.agent-skills.json` 仍写旧名，需在更新子模块时改成 `vivid-language` 并重新 materialize。
+
+## D66：`vivid-language` 增加 ZenMux 远程语言审查，子 Agent 降为兜底（2026-11-23）
+
+用户反馈：某些模型（如 GPT-6）加多少语言规则仍然不会说人话；D64 的子 Agent 审查继承同一个模型，等于让它给自己的文风打分，缺乏独立性。用户要求把 `vivid-language` 中“用子 Agent 优化、审阅语言”的能力改成优先调用 ZenMux 远程模型，用会说人话的模型来审查和改写。
+
+本决策：
+
+- **三档顺序，写死在各完成门里。** ① ZenMux 远程模型；② 宿主子 Agent；③ 自审并明确标注“未独立审查”。前一步拿不到结果才进下一步，任何一步都不能把“未审”写成“通过”。
+- **四个默认模型。** `google/gemini-4-neon`、`google/gemini-4-hydrogen`、`google/gemini-4-carbon`、`google/gemini-4-argon`，按顺序尝试，第一个回应的胜出；可用 `--model` 或 `VIVID_LANGUAGE_ZENMUX_MODELS` 覆盖。
+- **远程只是可选能力。** 只认 `ZENMUX_API_KEY`（ZenMux 官方 OpenAI 兼容约定，base URL 默认 `https://zenmux.ai/api/v1`，可用 `ZENMUX_BASE_URL` 覆盖）。没有 Key 时脚本零请求，退出码 2，直接走子 Agent；`VIVID_LANGUAGE_REMOTE_REVIEW=off` 可强制关闭。不新增受管配置、validator 或写入授权；`vivid-language` 仍是无状态语言层。
+- **不改写审阅协议。** 沿用 D64 的 `PASS` / `REVISE`、blocking / non_blocking、事实风险与 8 条 rubric；远程审查只是换了一个更强的执行者，页面与卡片的完成门不变。
+
+实现：
+
+- 新增 `skills/vivid-language/scripts/zenmux_review.py`：只用标准库；`--kind page|cards|article|conversation` 内置体裁目标、blocking 标准与审查清单；`--mode review|rewrite`；`--timeout`（默认 45s）、`--retries`（每模型默认 2 次）、`--max-total-seconds`（默认 180s）、`--max-input-chars`（默认 24 000）、`--rubric-file`、`--format json|text`、`--dry-run`、`--check`。
+- **降级与失败语义。** 网络错误、超时、429、5xx 可重试；重试完换下一个模型；401 立即停止（Key 无效，换模型也没用）；403 可能是单模型权限，算该模型失败并换下一个；返回不是 JSON 先重试再换模型；整条链失败退出码 3。退出码 1 只表示输入问题（空、超长、读不到），绝不表示通过。
+- **改写是候选稿。** `--mode rewrite` 返回 `rewrite` + `changes`（原文、改成、为什么）+ `fact_risk`，由主 Agent 对照原文核事实后决定采用或部分采用；不自动覆盖用户文本，不跳过准确性闸门。模型没按 JSON 返回时保留纯文本候选并标 `parsed_json=false`；`finish_reason=length` 时标 `truncated`，提示不可直接采用。
+- 新增 `skills/vivid-language/references/remote-review.md`：配置、隐私边界（正文会以 HTTPS 发往 ZenMux）、命令、退出码表、输出结构与排障；`SKILL.md` 新增“远程语言审查（可选）”一节并登记该 reference，靠删掉重复的 moves 段落与压缩契约段落把体积控制在 11 989 字节（≤12 000）。
+- `lesson-pages/references/language-review.md` 与 `memo-cards/references/language-review.md` 改为三步式：先远程（`--kind page` / `--kind cards`），退出码 2/3 才进子 Agent，再不行自审并标注；子 Agent prompt、8 条 rubric 与报告格式保留。`lesson-pages` 的 `SKILL.md` 改成“审查（远程优先，子 Agent 兜底）”，仍保持 11 997 字节（≤12 000）。
+- **测试。** 新增 `skills/vivid-language/tests/test_zenmux_review.py` 28 项：四模型默认链、环境变量覆盖、缺 Key / 被关闭 / 401 停止 / 403 换模型 / 全失败 / 超预算、超时降级、真实 HTTP 请求头与端点、JSON 围栏解析、解析失败换模型、散文提到两个 verdict 不算结论、结论自相矛盾按解析失败、改写与纯文本候选、截断标记、`--check`、输入上限、dry-run。`tests/test_vivid_language.py` 文件树、reference 集合与远程文档断言同步；`tests/test_learning_skills.py` 两个审查门增加“远程优先 + 脚本 + `--kind`”断言。
+- **实调边界。** 成功路径用注入 transport 的单元测试覆盖；手头没有真实 Key，未完成真实远程 PASS/REVISE 验收。无效 Key 实调返回 403，确认 base URL 与鉴权路径可达。
+- **已知基线失败。** `lesson-pages/assets/lesson-template.html` 179 818 字节，超过 170 000 预算；D63 已记录，与本轮无关。
+
+本轮在中央工作分支完成，未提交。消费仓库需要先配置 `ZENMUX_API_KEY` 才会走远程；未配置时行为与 D64 相同。
