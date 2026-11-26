@@ -10,13 +10,17 @@
 2. **卡片内容改动后、`prepare` / `publish` / 上传之前**：只复查改动卡；如果改动影响依赖卡，复查依赖链。
 3. **只审 included**；deferred 暂不审，纳入时再补审。blocked 不审，保持原状。
 
-## 怎么审：远程优先，子 Agent 兜底
+## 怎么审：Gemini 核心直走子 Agent，非 Gemini 宿主远程优先
 
-按顺序试，前一步拿不到结果才进下一步；每一步都不许跳过或假装通过。
+按下面的前置分流与顺序执行，每一步都不许跳过或假装通过：
 
-### 1. 远程模型（首选）
+### 0. 前置分流（主 Agent 已是 Gemini 核心）
 
-1. 调用启用中的 `vivid-language` Skill 的 `scripts/zenmux_review.py`，把候选卡片的正面、答案、边界标签和来源短标签交给它；不要给 XLSX、Markji 语法或整页 HTML：
+如果当前主 Agent 本身以 **Gemini** 为核心，**不需要调用 ZenMux API**，直接跳到第 2 步使用**宿主只读子 Agent**审查。若由统一脚本调用 `zenmux_review.py`，传 `--host-model gemini` 或设 `VIVID_LANGUAGE_HOST_MODEL=gemini`，脚本会以退出码 2 引导走第 2 步。
+
+### 1. 远程模型（非 Gemini 宿主首选）
+
+1. 当主 Agent 不是 Gemini，调用启用中的 `vivid-language` Skill 的 `scripts/zenmux_review.py`，把候选卡片的正面、答案、边界标签和来源短标签交给它；不要给 XLSX、Markji 语法或整页 HTML：
 
    ```bash
    python3 <vivid-language>/scripts/zenmux_review.py --kind cards cards.md
@@ -26,9 +30,9 @@
 
 2. `verdict` 为 `PASS`：记录 `语言审查：PASS（ZenMux / <model>，N 张 included）`，可以继续。
 3. `verdict` 为 `REVISE`：先逐卡改 blocking，再把改动卡送一次；`fact_risk` 不为“无”时逐条核对事实、版本和边界。
-4. 退出码 2 或 3、脚本不存在、宿主没有 Python：都算远程不可用，进第 2 步；退出码 1 是输入问题（空、超长、路径错），修输入再跑，不要当成通过。
+4. 退出码 2 或 3、脚本不存在、宿主没有 Python：都算跳过或远程不可用，进第 2 步；退出码 1 是输入问题（空、超长、路径错），修输入再跑，不要当成通过。
 
-### 2. 子 Agent（远程不可用）
+### 2. 子 Agent（Gemini 宿主首选，或远程不可用兜底）
 
 1. 主 Agent 调宿主提供的子 Agent 工具（如 `subagent`）；子 Agent 只读审查，不改文件。
 2. 子 Agent 读 `vivid-language` 的 `references/language-contract.md`（记忆卡片体裁）和 `memo-cards` 的 `references/card-content-layout.md`；读不到时用本文件末尾的 8 条 rubric。

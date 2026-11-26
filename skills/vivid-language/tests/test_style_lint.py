@@ -140,5 +140,19 @@ def test_markdown_render_contains_signal_table() -> None:
     rendered = style_lint.render_markdown(report)
     assert "# Style signals" in rendered
     assert "| 名词化 |" in rendered
+    assert "| 防御性免责 |" in rendered
     assert "## 建议" in rendered
     assert "## 长句示例" in rendered
+
+
+def test_defensive_disclaimers_are_flagged() -> None:
+    defensive_text = (
+        "这组数据不代表线上表现，也不能说明调度配置更优。"
+        "该结论不替代真实压测，不外推到其他硬件，也不声称所有后端一致。"
+    )
+    report = style_lint.analyze_text(defensive_text, path="defensive.md")
+    assert report["signals"]["defensive"]["count"] >= 4
+    assert any("防御性免责" in note for note in report["notes"])
+
+    clean_report = style_lint.analyze_text(CONCRETE, path="concrete.md")
+    assert clean_report["signals"]["defensive"]["count"] == 0

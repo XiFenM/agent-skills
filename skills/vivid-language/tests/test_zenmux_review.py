@@ -375,3 +375,70 @@ def test_prompts_carry_the_register_and_the_json_schema() -> None:
     )
     assert "记忆卡片" in rewrite["messages"][1]["content"]
     assert "rewrite" in rewrite["messages"][1]["content"]
+    assert "防御性免责" in review["messages"][1]["content"]
+
+
+def test_gemini_host_skips_zenmux_without_calling_transport() -> None:
+    calls: list[str] = []
+
+    def transport(url, payload, api_key, timeout):
+        calls.append(payload["model"])
+        return _chat('{"verdict":"PASS","blocking":[],"non_blocking":[],"fact_risk":"无"}')
+
+    result = zenmux_review.review_text(
+        "这是一段正文。",
+        kind="page",
+        api_key="test-key",
+        host_model="google/gemini-4-neon",
+        transport=transport,
+    )
+    assert result["status"] == "skipped"
+    assert result["host_model"] == "google/gemini-4-neon"
+    assert "sub-agent" in result["next"]
+    assert calls == []
+
+
+def test_gemini_host_env_and_cli_return_exit_2() -> None:
+    by_arg = _cli(
+        "--kind", "page", "--host-model", "Gemini 4 Neon", "--text", "一段正文。",
+        env={"ZENMUX_API_KEY": "test-key"},
+    )
+    assert by_arg.returncode == zenmux_review.EXIT_NOT_CONFIGURED
+    assert json.loads(by_arg.stdout)["status"] == "skipped"
+
+    by_env = _cli(
+        "--kind", "page", "--text", "一段正文。",
+        env={"ZENMUX_API_KEY": "test-key", zenmux_review.ENV_HOST_MODEL: "gemini-2.5-pro"},
+    )
+    assert by_env.returncode == zenmux_review.EXIT_NOT_CONFIGURED
+    assert json.loads(by_env.stdout)["status"] == "skipped"
+
+    text_out = _cli(
+        "--kind", "page", "--host-model", "gemini", "--format", "text", "--text", "一段正文。",
+        env={"ZENMUX_API_KEY": "test-key"},
+    )
+    assert text_out.returncode == zenmux_review.EXIT_NOT_CONFIGURED
+    assert "已跳过远程审查" in text_out.stdout and "子 Agent" in text_out.stdout
+
+
+def test_force_remote_and_non_gemini_host_still_call_zenmux() -> None:
+    result_gpt, calls_gpt = _review(
+        '{"verdict":"PASS","blocking":[],"non_blocking":[],"fact_risk":"无"}',
+        host_model="gpt-6-astra",
+    )
+    assert result_gpt["status"] == "ok"
+    assert calls_gpt == [DEFAULT_CHAIN[0]]
+
+    result_forced, calls_forced = _review(
+        '{"verdict":"PASS","blocking":[],"non_blocking":[],"fact_risk":"无"}',
+        host_model="gemini-4-neon",
+        force_remote=True,
+    )
+    assert result_forced["status"] == "ok"
+    assert calls_forced == [DEFAULT_CHAIN[0]]
+
+
+def test_check_models_skips_when_host_is_gemini() -> None:
+    result = zenmux_review.check_models(api_key="test-key", host_model="gemini-4-neon")
+    assert result["status"] == "skipped"
+    assert result["checks"] == []

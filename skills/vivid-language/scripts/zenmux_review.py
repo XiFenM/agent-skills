@@ -50,6 +50,7 @@ ENV_API_KEY = "ZENMUX_API_KEY"
 ENV_BASE_URL = "ZENMUX_BASE_URL"
 ENV_MODELS = "VIVID_LANGUAGE_ZENMUX_MODELS"
 ENV_DISABLE = "VIVID_LANGUAGE_REMOTE_REVIEW"
+ENV_HOST_MODEL = "VIVID_LANGUAGE_HOST_MODEL"
 
 EXIT_OK = 0
 EXIT_USAGE = 1
@@ -72,19 +73,22 @@ COMMON_BLOCKING = """\
 - 丢失条件、因果、caveat，或为了顺口删掉信息，读者会误读。
 - 编造事实、数字、引用、来源或个人经历。
 - 教材腔或客服腔：定义先行、“本节将讨论”、“需要注意的是”、“综上所述”、空泛配平句。
+- 未立先破、防御性免责腔：概念或因果还没建立，就反复穿插“不代表/不能说明/不意味着/不外推/不声称/不替代”等免责句；应先一次性定好前提、直说确定因果，把边界集中放到段尾或边界节。
 - 读者不知道谁在做什么：无主语、名词化、把动作藏进“进行/实现/优化”。
 - 一段里塞了多个中心，或一句话一口气读不完。"""
 
 KINDS: Dict[str, Dict[str, Any]] = {
     "page": {
         "label": "课程网页正文",
-        "goal": "口语化、生动、生活化，像当面在跟学习者说话；先场景、对象和问题，再机制与因果，最后收束。",
+        "goal": "口语化、生动、生活化，像当面在跟学习者说话；先定前提与场景，直说确定的机制与因果，最后集中收束结论与边界。",
         "blocking": """\
 - 仍是教材腔：概念定义开头、“本节将讨论”、没有具体对象或场景。
+- 防御性免责刷屏：在讲核心机制的途中每段挂“不代表/不替代/不证明/不外推”等尾巴，破坏概念建立。
 - 空泛配平句、制作说明或元数据（“示例”“示意图”“仅供参考”）混进正文。
 - 像聊天碎片或术语墙，不适合离线页面连续阅读。""",
         "checklist": (
             "开头先给场景、对象、问题，而不是定义或目标清单",
+            "先立后破：前提一次说清，机制段直说确定因果，边界集中放在边界层或批注",
             "像在跟学习者说话，不是“在念讲义”",
             "有具体例子、数字或日常比喻，比喻标了界限",
             "主语、条件、因果、caveat 完整",
@@ -382,6 +386,14 @@ def _disabled() -> bool:
     return os.environ.get(ENV_DISABLE, "").strip().casefold() in _OFF_VALUES
 
 
+def _gemini_host(host_model: Optional[str]) -> Optional[str]:
+    value = host_model if host_model is not None else os.environ.get(ENV_HOST_MODEL, "")
+    value = value.strip() if value else ""
+    if value and "gemini" in value.casefold():
+        return value
+    return None
+
+
 def _base_url(base_url: Optional[str]) -> str:
     value = (base_url or os.environ.get(ENV_BASE_URL) or DEFAULT_BASE_URL).strip()
     return value.rstrip("/")
@@ -468,6 +480,8 @@ def review_text(
     models: Optional[Sequence[str]] = None,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
+    host_model: Optional[str] = None,
+    force_remote: bool = False,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     retries: int = DEFAULT_RETRIES,
     max_total_seconds: float = DEFAULT_MAX_TOTAL_SECONDS,
@@ -479,8 +493,9 @@ def review_text(
 ) -> Dict[str, Any]:
     """Run the model ladder and return a JSON-ready result with a ``status``.
 
-    ``status`` is ``ok``, ``not-configured`` or ``unavailable``; callers map it
-    to exit codes 0, 2 and 3 and fall back to a sub-agent otherwise.
+    ``status`` is ``ok``, ``skipped``, ``not-configured`` or ``unavailable``;
+    callers map ``skipped`` and ``not-configured`` to exit 2 and ``unavailable``
+    to exit 3, falling back to a sub-agent in both cases.
     """
     if kind not in KINDS:
         raise ValueError(f"unknown kind: {kind}")
@@ -497,6 +512,16 @@ def review_text(
         "models": chain,
         "attempts": [],
     }
+
+    matched_host = None if force_remote else _gemini_host(host_model)
+    if matched_host:
+        result.update(
+            status="skipped",
+            host_model=matched_host,
+            reason=f"host agent already uses Gemini ({matched_host}); skip ZenMux",
+            next="use a read-only host sub-agent",
+        )
+        return result
 
     if _disabled():
         result.update(
@@ -606,6 +631,8 @@ def check_models(
     models: Optional[Sequence[str]] = None,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
+    host_model: Optional[str] = None,
+    force_remote: bool = False,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     transport: Optional[Callable[[str, Dict[str, Any], str, float], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
@@ -618,6 +645,16 @@ def check_models(
         "models": chain,
         "checks": [],
     }
+
+    matched_host = None if force_remote else _gemini_host(host_model)
+    if matched_host:
+        result.update(
+            status="skipped",
+            host_model=matched_host,
+            reason=f"host agent already uses Gemini ({matched_host}); skip ZenMux",
+            next="use a read-only host sub-agent",
+        )
+        return result
 
     if _disabled():
         result.update(status="not-configured", reason=f"{ENV_DISABLE} disables the remote reviewer")
@@ -667,6 +704,10 @@ def _read_text(args: argparse.Namespace) -> str:
 
 
 def _explain_reason(reason: str) -> str:
+    if "host agent already uses Gemini" in reason:
+        return reason.replace("host agent already uses Gemini", "主 Agent 已以 Gemini 为核心").replace(
+            "; skip ZenMux", "，无需调用 ZenMux"
+        )
     if ENV_DISABLE in reason:
         return f"{ENV_DISABLE} 已关闭远程审查"
     if ENV_API_KEY in reason and "rejected" in reason:
@@ -681,6 +722,8 @@ def _explain_reason(reason: str) -> str:
 def _render_text(result: Dict[str, Any]) -> str:
     status = result.get("status")
     detail = _explain_reason(str(result.get("reason") or ""))
+    if status == "skipped":
+        return f"已跳过远程审查：{detail}；改用宿主子 Agent。"
     if status == "not-configured":
         return f"远程审查未启用：{detail}；改用子 Agent。"
     if status == "unavailable":
@@ -737,6 +780,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="model to try; repeat to build a chain (overrides the default chain)",
     )
     parser.add_argument("--models", help="comma-separated model chain")
+    parser.add_argument(
+        "--host-model",
+        help=f"host agent core model (default: ${ENV_HOST_MODEL}); skips ZenMux when it contains 'gemini'",
+    )
+    parser.add_argument(
+        "--force-remote",
+        action="store_true",
+        help="call ZenMux even when --host-model indicates Gemini",
+    )
     parser.add_argument("--base-url", help=f"default: ${ENV_BASE_URL} or {DEFAULT_BASE_URL}")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--retries", type=int, default=DEFAULT_RETRIES, help="attempts per model")
@@ -761,11 +813,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         result = check_models(
             models=models or None,
             base_url=args.base_url,
+            host_model=args.host_model,
+            force_remote=args.force_remote,
             timeout=args.timeout,
         )
         if args.format == "text":
-            if result["status"] == "not-configured":
-                print(f"远程审查未启用：{_explain_reason(str(result.get('reason') or ''))}")
+            if result["status"] in ("not-configured", "skipped"):
+                prefix = "已跳过远程审查" if result["status"] == "skipped" else "远程审查未启用"
+                print(f"{prefix}：{_explain_reason(str(result.get('reason') or ''))}")
             else:
                 for check in result["checks"]:
                     mark = "ok" if check["ok"] else "fail"
@@ -773,7 +828,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         return EXIT_OK if result["status"] == "ok" else (
-            EXIT_NOT_CONFIGURED if result["status"] == "not-configured" else EXIT_UNAVAILABLE
+            EXIT_NOT_CONFIGURED if result["status"] in ("not-configured", "skipped") else EXIT_UNAVAILABLE
         )
 
     try:
@@ -813,6 +868,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mode=args.mode,
         models=models or None,
         base_url=args.base_url,
+        host_model=args.host_model,
+        force_remote=args.force_remote,
         timeout=args.timeout,
         retries=args.retries,
         max_total_seconds=args.max_total_seconds,
@@ -828,7 +885,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     status = result.get("status")
     if status == "ok":
         return EXIT_OK
-    if status == "not-configured":
+    if status in ("not-configured", "skipped"):
         return EXIT_NOT_CONFIGURED
     return EXIT_UNAVAILABLE
 

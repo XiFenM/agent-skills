@@ -318,6 +318,8 @@ def test_lesson_pages_requires_the_language_review_gate() -> None:
     review = (PAGES_ROOT / "references" / "language-review.md").read_text(encoding="utf-8")
     assert "(references/language-review.md)" in main
     assert "子 Agent" in main
+    assert "Gemini" in main and "Gemini" in review
+    assert "先立后破" in main and "先立后破" in review
     assert "口语化" in review and "生活化" in review
     assert "PASS" in review and "REVISE" in review
     assert "vivid-language" in review
@@ -326,6 +328,7 @@ def test_lesson_pages_requires_the_language_review_gate() -> None:
     assert "zenmux_review.py" in review
     assert "--kind page" in review
     assert "ZENMUX_API_KEY" in review
+    assert "防御性免责" in review
 
 
 def test_memo_cards_requires_the_language_review_gate() -> None:
@@ -334,6 +337,7 @@ def test_memo_cards_requires_the_language_review_gate() -> None:
     review = (memo_root / "references" / "language-review.md").read_text(encoding="utf-8")
     assert "(references/language-review.md)" in main
     assert "子 Agent" in main
+    assert "Gemini" in main and "Gemini" in review
     assert "清晰" in review and "完整" in review
     assert "不要求口语化" in review
     assert "PASS" in review and "REVISE" in review

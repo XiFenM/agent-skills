@@ -229,6 +229,9 @@ def test_remote_review_documents_the_zenmux_ladder() -> None:
         "ZENMUX_API_KEY",
         "ZENMUX_BASE_URL",
         "VIVID_LANGUAGE_REMOTE_REVIEW",
+        "VIVID_LANGUAGE_HOST_MODEL",
+        "--host-model",
+        "Gemini",
         "google/gemini-4-neon",
         "google/gemini-4-hydrogen",
         "google/gemini-4-carbon",
@@ -247,6 +250,8 @@ def test_main_text_names_the_remote_reviewer_and_its_fallback() -> None:
     assert "ZENMUX_API_KEY" in text
     assert "references/remote-review.md" in text
     assert "子 Agent" in text
+    assert "Gemini" in text
+    assert "先立后破" in text
 
 
 def test_user_guide_is_registered() -> None:

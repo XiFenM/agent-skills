@@ -92,13 +92,15 @@ Agent 会先给"一句话答案"，必要时补一张流程/阶段图，再用 2
 
 ## 想让它先过一遍更会说人话的模型
 
-如果你当前的模型怎么调都还是教材腔，可以让 `vivid-language` 先把文字交给 ZenMux 上更会说中文的 Gemini 4 模型审查或改写，再回到这场对话里执行：
+如果当前主 Agent 本身就是 **Gemini** 核心，不需要调用 ZenMux API，直接走只读子 Agent 审查即可（无需配置 Key；统一脚本调用时可传 `--host-model gemini` 或设 `VIVID_LANGUAGE_HOST_MODEL=gemini`）。
+
+如果你用的是非 Gemini 模型且怎么调都还是教材腔，可以让 `vivid-language` 先把文字交给 ZenMux 上更会说中文的 Gemini 4 模型审查或改写，再回到这场对话里执行：
 
 1. 在 [ZenMux 控制台](https://zenmux.ai/platform) 创建 API Key；
 2. 在 shell 里 `export ZENMUX_API_KEY="sk-..."`，写进 `~/.zshrc` 后 `source` 一次；
 3. 直接说“按 vivid-language 审一下这段”或“先别改，帮我诊断”。
 
-Agent 会先跑远程审查：默认依次尝试 `google/gemini-4-neon`、`google/gemini-4-hydrogen`、`google/gemini-4-carbon`、`google/gemini-4-argon`，谁先回应就用谁。Key 被拒绝、或四个模型都不回应时，退回只读子 Agent；子 Agent 也没有时，自审并明确写“未独立审查”。想看哪些模型通，跑 `python3 <vivid-language>/scripts/zenmux_review.py --check`。
+非 Gemini 宿主会先跑远程审查：默认依次尝试 `google/gemini-4-neon`、`google/gemini-4-hydrogen`、`google/gemini-4-carbon`、`google/gemini-4-argon`，谁先回应就用谁。Key 被拒绝、或四个模型都不回应时，退回只读子 Agent；子 Agent 也没有时，自审并明确写“未独立审查”。想看哪些模型通，跑 `python3 <vivid-language>/scripts/zenmux_review.py --check`。
 
 正文会通过 HTTPS 发到 ZenMux。没有 Key 时不发任何请求；不想外发时设置 `VIVID_LANGUAGE_REMOTE_REVIEW=off`。模型链可以用 `VIVID_LANGUAGE_ZENMUX_MODELS` 换成你自己的。完整说明见 Skill 的 `references/remote-review.md`。
 

@@ -33,9 +33,9 @@ Lesson Pages 把 `guide-learning` 的讲解写进一份课程网页：每一课�
 
 ## 完成前语言审查
 
-每次写入含正文的页面前，Agent 会先调用 `vivid-language` 的远程审查脚本，把这段可见正文交给 ZenMux 上更会说人话的 Gemini 4 模型，按“课程网页”体裁审查：是否口语化、生动、生活化，是否保留条件、因果、数字和 caveat。没配 `ZENMUX_API_KEY`、或远程模型都不回应时，改用只读子 Agent 走同一套 rubric；没有通过先改再复查，结课前还会审整页可见正文。
+每次写入含正文的页面前，会按“课程网页”体裁审查可见正文：是否口语化、生动、**先立后破**（先定前提直说确定因果，边界集中放边界层或批注），是否保留条件、因果、数字和 caveat，以及本段是否发挥了图解和动态交互优势。如果当前主 Agent 本身以 **Gemini** 为核心，直接走只读子 Agent 审查，无需调用 ZenMux API；非 Gemini 宿主优先走 `vivid-language` 的 ZenMux 远程模型，没配 `ZENMUX_API_KEY` 或远程不可用时退回只读子 Agent。没有通过先改再复查，结课前还会审整页可见正文。
 
-远程与子 Agent 都不可用时，会明确标注“未独立审查”，不会假装通过。审查结果只放在对话里，不写进页面。想启用远程审查，按 [`vivid-language`](vivid-language.md) 的配置说明设置 `ZENMUX_API_KEY`；不想让正文外发时设置 `VIVID_LANGUAGE_REMOTE_REVIEW=off`。
+远程与子 Agent 都不可用时，会明确标注“未独立审查”，不会假装通过。审查结果只放在对话里，不写进页面。非 Gemini 宿主想启用远程审查，按 [`vivid-language`](vivid-language.md) 的配置说明设置 `ZENMUX_API_KEY`；不想让正文外发时设置 `VIVID_LANGUAGE_REMOTE_REVIEW=off`。
 
 ## 怎样打开页面
 

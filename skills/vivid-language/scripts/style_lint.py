@@ -54,6 +54,11 @@ FILLER_RE = re.compile(
 HEDGE_RE = re.compile(
     r"可能|或许|也许|大概|似乎|一定程度上|在某种意义上|基本上|一般来说"
 )
+DEFENSIVE_RE = re.compile(
+    r"不代表|不意味着|不能说明|不能判断|不能据此|不等于|不等同|不构成|不作为|"
+    r"不替代|不外推|不推定|不自动(?:证明|保证|等于|构成|意味)|不证明|不声称|"
+    r"不冒充|并不说明|并不代表|并不意味|无法判断|尚不能"
+)
 ABSTRACT_SUFFIX_RE = re.compile(r"[\u4e00-\u9fff]{1,4}(?:性|化|度)")
 NUMBER_RE = re.compile(r"\d+(?:\.\d+)?%?")
 NUMBER_WITH_UNIT_RE = re.compile(
@@ -164,6 +169,7 @@ def analyze_text(
     passive = PASSIVE_RE.findall(clean)
     filler = FILLER_RE.findall(clean)
     hedge = HEDGE_RE.findall(clean)
+    defensive = DEFENSIVE_RE.findall(clean)
     abstract_suffix = ABSTRACT_SUFFIX_RE.findall(clean)
     numbers = NUMBER_RE.findall(clean)
     numbers_with_unit = NUMBER_WITH_UNIT_RE.findall(clean)
@@ -184,6 +190,10 @@ def analyze_text(
         notes.append("被动偏多：确认施事者是否可以说出来；能说就改成主动。")
     if filler:
         notes.append("有套话连接词：先删掉，再看逻辑是否还需要保留。")
+    if len(defensive) >= 3:
+        notes.append(
+            "防御性免责偏多（不代表/不能说明/不外推等）：先立好前提，直说当前条件下确定的因果和用途，把适用边界挪到段尾或边界节集中说一次。"
+        )
     if len(long_sentences) >= 3 and long_ratio >= 0.25:
         notes.append(
             f"长句偏多（{len(long_sentences)} 句超过 {max_sentence_chars} 字）：先断句，再改词。"
@@ -221,6 +231,7 @@ def analyze_text(
             "passive": _signal(passive, chinese_chars),
             "filler": _signal(filler, chinese_chars),
             "hedge": _signal(hedge, chinese_chars),
+            "defensive": _signal(defensive, chinese_chars),
             "abstract_suffix": _signal(abstract_suffix, chinese_chars),
         },
         "concreteness": {
@@ -276,6 +287,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "passive": "被动",
         "filler": "套话连接词",
         "hedge": "模糊限定",
+        "defensive": "防御性免责",
         "abstract_suffix": "抽象后缀（性/化/度）",
     }
     for key, label in labels.items():

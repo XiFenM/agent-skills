@@ -1,11 +1,12 @@
 # 远程语言审查与改写（ZenMux）
 
-本地模型说不出人话时，加多少规则都可能原地打转。这个 Skill 可以先把正文交给 ZenMux 上更会聊天、更会写中文的模型，拿回 `PASS` / `REVISE` 或一份候选改写；拿不到才退回宿主子 Agent。
+本地非 Gemini 模型说不出人话时，加多少规则都可能原地打转。这个 Skill 可以先把正文交给 ZenMux 上更会聊天、更会写中文的 Gemini 模型，拿回 `PASS` / `REVISE` 或一份候选改写；拿不到才退回宿主子 Agent。
 
-远程不是硬依赖。三档顺序固定：
+远程不是硬依赖。按下面的前置分流和三档顺序执行：
 
-1. **ZenMux 远程模型**（本文件）：配置了 `ZENMUX_API_KEY`，且模型链里有一个能回应。脚本不存在、宿主没有 Python、命令直接报错，也按“远程不可用”处理，不猜、不重试。
-2. **宿主子 Agent**：没配置、被关掉，或整条模型链都不回应。
+0. **前置分流（主 Agent 已是 Gemini 核心）**：默认模型链本身就是 Gemini 4。如果当前主 Agent 本身已以 **Gemini** 为核心，**不需要调用 ZenMux API**，直接跳过第 1 步，改用**宿主子 Agent 审查**（无需配置或运行 `zenmux_review.py`；若脚本被统一流水线调用，传 `--host-model gemini` 或设 `VIVID_LANGUAGE_HOST_MODEL=gemini` 即可直接以退出码 2 引导回退到子 Agent）。
+1. **ZenMux 远程模型**（非 Gemini 宿主首选）：主 Agent 不是 Gemini，配置了 `ZENMUX_API_KEY`，且模型链里有一个能回应。脚本不存在、宿主没有 Python、命令直接报错，也按“远程不可用”处理，不猜、不重试。
+2. **宿主子 Agent**：主 Agent 已是 Gemini 核心，或远程没配置、被关掉、整条模型链都不回应。
 3. **自审 + 明示**：子 Agent 也没有时，按各自 Skill 的 rubric 自审，并写“未独立审查”，不得声称已通过。
 
 ## 配置
@@ -23,6 +24,7 @@ export ZENMUX_API_KEY="sk-..."     # 必需；在 https://zenmux.ai/platform 创
 | `ZENMUX_BASE_URL` | OpenAI 兼容端点 | `https://zenmux.ai/api/v1` |
 | `VIVID_LANGUAGE_ZENMUX_MODELS` | 模型链，逗号或空格分隔 | 下面四个 |
 | `VIVID_LANGUAGE_REMOTE_REVIEW` | 设为 `off` / `0` / `false` 时强制走子 Agent | 不设置 |
+| `VIVID_LANGUAGE_HOST_MODEL` | 声明主 Agent 核心模型（含 `gemini` 时跳过 ZenMux，直走子 Agent） | 不设置 |
 
 默认模型链，按顺序尝试，第一个回应的胜出：
 
@@ -63,14 +65,14 @@ python3 <vivid-language>/scripts/zenmux_review.py --kind article --mode rewrite 
 python3 <vivid-language>/scripts/zenmux_review.py --check
 ```
 
-常用参数：`--model`（可重复，构成模型链）、`--timeout` 单次请求秒数（默认 45）、`--retries` 每个模型最多试几次（默认 2）、`--max-total-seconds` 整条链预算（默认 180）、`--max-input-chars`（默认 24000，超了分段送）、`--rubric-file` 追加本次体裁要求、`--format text` 输出给人看的版本、`--dry-run` 只看将发送的请求。
+常用参数：`--model`（可重复，构成模型链）、`--host-model`（声明主 Agent 核心模型，含 `gemini` 时直接以退出码 2 回退到子 Agent）、`--force-remote`（强制走远程，覆盖 `--host-model` 的 Gemini 跳过规则）、`--timeout` 单次请求秒数（默认 45）、`--retries` 每个模型最多试几次（默认 2）、`--max-total-seconds` 整条链预算（默认 180）、`--max-input-chars`（默认 24000，超了分段送）、`--rubric-file` 追加本次体裁要求、`--format text` 输出给人看的版本、`--dry-run` 只看将发送的请求。
 
 ## 退出码与下一步
 
 | 退出码 | 含义 | 主 Agent 下一步 |
 |---|---|---|
 | 0 | 有模型回应并解析成功 | 用结果；`REVISE` 先改 blocking 再复查 |
-| 2 | 没配置：缺 `ZENMUX_API_KEY`，或 `VIVID_LANGUAGE_REMOTE_REVIEW=off` | 走子 Agent；不要重试，不要问用户要 Key |
+| 2 | 跳过或未配置：主 Agent 已是 Gemini 核心、缺 `ZENMUX_API_KEY`，或 `VIVID_LANGUAGE_REMOTE_REVIEW=off` | 走子 Agent；不要重试，不要问用户要 Key |
 | 3 | 配了但不可用：四个模型都没回应、401、全部 403、超预算 | 走子 Agent；把失败原因用一句话告诉用户 |
 | 1 | 输入问题：空文本、超长、文件读不到 | 修输入再跑，不要当“审查通过” |
 

@@ -50,38 +50,24 @@ Review 报告和结课确认按 `guide-learning` 的要求完整留在对话里�
 
 ## 教材式呈现
 
-讲解顺序与语言按 `vivid-language` 的 `references/language-contract.md`（课程网页体裁）：先场景、对象和问题，再机制与因果，最后总结；必要背景和限制写全。对话里的指路与反馈按对话体裁。写正文前，按 [language-review.md](references/language-review.md) 审查（远程优先，子 Agent 兜底）；结课前再审整页。未通过不改、不声称完成。
+语言按 `vivid-language` 的 `references/language-contract.md`（课程网页体裁）：**先立后破**——先定前提与场景，直说确定因果，边界集中放边界层或批注，不在机制段堆叠防御性免责句。对话指路与反馈按对话体裁。写正文前按 [language-review.md](references/language-review.md) 审查（非 Gemini 宿主远程优先，Gemini 宿主及兜底走子 Agent）；结课前再审整页。未通过不改、不声称完成。
 
 ## 一课在页面上怎样展开
 
-1. **开课**：`new` 建页，只写导入、骨架和资料指路（写法见 opening.md）；一门课的页面用同一种风格（`--look`，见
-   [page-design.md](references/page-design.md) 第 9 节）。核对画像与前置在对话里进行；不需要提问时，同一轮接着追加第一段。
-2. **每段**：讲到下一次提问为止的那几个节点连同那道题，一次 `add`；每个节点至多一个交互部件。节奏只听 `guide-learning`；
-   一段读起来超过约 9 分钟时，先清理重复、拆清段落，用图组织关系，把已讲过的可选细节移入 `<details>`；不删必要
-   背景和因果来凑时长，不为篇幅多加提问。
-3. **作答之后**：先 `state --to answered`，题头不再提示作答；反馈在对话，需要展开的补充用 `add --into node-N` 放到所属
-   节点下。复查题和普通检查题一样写进页面并逐字发到对话；复查答完后用 `state --to closed --fragment <参考要点>` 关闭
-   原题，一次写进参考要点。
-4. **串讲与验收**：导师串讲、综合验收各在其时机追加；进入正式练习时页面只加一行指向练习约定（写法见 upkeep.md）。
-5. **不提前写**：还没讲的节点不进页面。学习者明确要求“剩下的都写出来”时可以提前写讲解节点（仍一段一次 `add`），题目仍等真正提出时
-   用 `add --after` 插到对应节点之后；串讲和验收题不提前写。结课后不再写入，除非学习者要求。
+1. **开课**：`new` 建页，写整体导览（多课首课先交代阶段安排）、核心思想、全流程骨架和资料指路（见 opening.md）；一门课统一风格（`--look`，见 [page-design.md](references/page-design.md) 第 9 节）。核对前置在对话进行；无需提问时同轮追加第一段。
+2. **每段**：把讲到下次提问前的节点连同该题一次 `add`。**拒绝纯文本加表格搬运**：每段至少配 1 个交互部件或舞台 SVG 图解（选型见 [interactive-widgets.md](references/interactive-widgets.md) 和 [widget-packs.md](references/widget-packs.md)）；每节点聚焦 1 个主实验台，可搭轻量类比卡、误区卡、句内可调段或对照图。节奏只听 `guide-learning`；超约 9 分钟先去重、拆段、用图组织，已讲可选细节移入 `<details>`，不删因果，不为篇幅加题。
+3. **作答之后**：先 `state --to answered`；反馈在对话，需展开的补充用 `add --into node-N` 放进所属节点。复查题照常写页并逐字发对话；答完后用 `state --to closed --fragment <参考要点>` 关闭原题并写参考要点。
+4. **串讲与验收**：导师串讲、综合验收按时机追加；正式练习只加一行指路（见 upkeep.md）。
+5. **不提前写**：未讲节点不进页面。学习者要求“剩下的都写出来”时可提前写讲解（仍逐段 `add`），题目等提出时用 `add --after` 插入；串讲与验收题不提前写。结课后除非要求不再写入。
 
-块与题目写法见 [page-structure.md](references/page-structure.md)。
-
-新版模板内置横排站点名称和每个节点的“复制为 Markdown”按钮；复制覆盖节点内的正文、补充与完整图示步骤，不夹带导航和操作控件。行为与验证见 [page-design.md](references/page-design.md) 和 [browser-checks.md](references/browser-checks.md)。
+块与题目写法见 [page-structure.md](references/page-structure.md)。模板内置横排站牌与整节点 Markdown 复制（覆盖正文、补充和完整图示步骤，不夹带控件），验证见 [page-design.md](references/page-design.md) 和 [browser-checks.md](references/browser-checks.md)。
 
 ## 每次更新页面
 
-1. 用 `outline` 看已有的块、行号和题目状态。不读整页，不读模板。
-2. 用宿主的写文件工具把片段写成 UTF-8 文件，放在临时目录而不是仓库里；片段只含内容块，不写页面框架和基础样式。
-   公式写 TeX、代码块标 `data-lang`，写入时渲染成静态 HTML（需要本机有 Node，出错时整段不写入）。部件包的片段只写
-   结构，脚本只把用到的部件包带进这一页；页面钩子会自动移到正文外、运行时之前。
-3. 用 `add` 插入片段，或用 `state` 改题目状态。脚本会盖上新版本号并检查，结果不合格就不写入；提示续页时改用
-   `continue`。
-4. 按下文“验证”检查。
-5. 在对话里发指路。
-
-常用命令与建页约定见 opening.md，题目状态与续页见 upkeep.md；指路阅读时间取写入输出的 `reading_minutes`。
+1. 用 `outline` 看已有块、行号和题目状态；不读整页，不读模板。
+2. 用写文件工具把内容块写成临时 UTF-8 片段（不放仓库、不写框架和基础样式）；公式写 TeX、代码标 `data-lang`，写入时渲染静态 HTML（需本机 Node，出错不写入）。部件包只写结构，脚本按需注入并将钩子移至运行时前。
+3. `add` 插入片段或 `state` 改题态；检查不合格不写入，提示续页改用 `continue`。
+4. 按下文“验证”检查，再在对话发指路（阅读时间取输出 `reading_minutes`）。命令见 opening.md，题态与续页见 upkeep.md。
 
 ## 文件、查看与授权
 
