@@ -376,6 +376,11 @@ def test_prompts_carry_the_register_and_the_json_schema() -> None:
     assert "记忆卡片" in rewrite["messages"][1]["content"]
     assert "rewrite" in rewrite["messages"][1]["content"]
     assert "防御性免责" in review["messages"][1]["content"]
+    cards_review = zenmux_review._build_payload(
+        DEFAULT_CHAIN[0], "正文", "cards", "review", "", 0
+    )
+    assert "commit hash" in cards_review["messages"][1]["content"]
+    assert "防御性免责" in cards_review["messages"][1]["content"]
 
 
 def test_gemini_host_skips_zenmux_without_calling_transport() -> None:

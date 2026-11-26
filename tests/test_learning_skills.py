@@ -21,6 +21,7 @@ REFERENCE_FILES = {
     "material-reading.md",
     "practice-review-mastery.md",
     "repository-adaptation.md",
+    "review-loop.md",
     "source-authority.md",
     "state-records.md",
     "teaching-cycle.md",
@@ -39,7 +40,7 @@ EXPECTED_GUIDE_FILES = {
 # Size budgets keep the agent-facing text from growing by accretion. Raise them
 # only together with a deliberate removal elsewhere.
 GUIDE_MAIN_MAX_LINES = 170
-GUIDE_TOTAL_MAX_BYTES = 85_000
+GUIDE_TOTAL_MAX_BYTES = 90_000
 FIRST_USE_SECTION_MAX_LINES = 8
 
 PAGES_REFERENCE_FILES = {
@@ -335,11 +336,13 @@ def test_memo_cards_requires_the_language_review_gate() -> None:
     memo_root = ROOT / "skills" / "memo-cards"
     main = (memo_root / "SKILL.md").read_text(encoding="utf-8")
     review = (memo_root / "references" / "language-review.md").read_text(encoding="utf-8")
+    layout = (memo_root / "references" / "card-content-layout.md").read_text(encoding="utf-8")
     assert "(references/language-review.md)" in main
     assert "子 Agent" in main
     assert "Gemini" in main and "Gemini" in review
-    assert "清晰" in review and "完整" in review
-    assert "不要求口语化" in review
+    assert "清晰" in review and "说人话" in review and "先立后破" in review
+    assert "commit" in review and "防御性免责" in review
+    assert "追剧卡" in layout and "美剧单集" in layout
     assert "PASS" in review and "REVISE" in review
     assert "vivid-language" in review
     assert "未独立审查" in review
@@ -347,6 +350,14 @@ def test_memo_cards_requires_the_language_review_gate() -> None:
     assert "zenmux_review.py" in review
     assert "--kind cards" in review
     assert "ZENMUX_API_KEY" in review
+
+
+def test_guide_learning_documents_the_review_loop() -> None:
+    main = (GUIDE_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    review_loop = (GUIDE_ROOT / "references" / "review-loop.md").read_text(encoding="utf-8")
+    assert "(references/review-loop.md)" in main
+    for anchor in ("回忆地图", "费曼微口述", "跨周交错回捞", "<details>", "不强绑在开新课前"):
+        assert anchor in review_loop, anchor
 
 
 def test_memo_cards_links_the_self_review_checklist() -> None:

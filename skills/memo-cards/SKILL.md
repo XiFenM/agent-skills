@@ -30,13 +30,11 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
    `git add` 或重新 materialize；来源尚未提交时，在预览中提醒一句，是否提交由用户决定。
 2. 评估事实是否稳定、可追溯且值得重复强化；把 raw 对话、遗留问题、猜测、冲突和未核验时效事实留在 blocked preview。制卡是为了理解与面试：优先"为什么这样设计""怎样取舍""怎样诊断"和口述类卡片；学习者已熟练或一眼即知的内容（首答即对且没有迁移价值的计数、查表、定义复述）评为 C，不制卡。A 级只给能防止高代价错误、或能回答一道可能面试题的卡，并为每张 A 卡写一句理由。选材前先从来源列出学习目标与核心结论作为覆盖清单；纠错卡只收来源确认判错的回答；未实测或只是推断的行为不写成确定事实。按需读取 [卡片质量与身份](references/card-quality-and-identity.md)。
 3. 由 Agent 完成语义工作：先确定单一回忆目标，再按 [卡片内容与版式](references/card-content-layout.md)
-   撰写可独立理解的题面与答案；语言按 `vivid-language` 的
-   `references/language-contract.md`（记忆卡片体裁）：正面重建场景、对象、条件和作答目标，
-   答案先直接回答、再理由/步骤、最后边界；完整优先于短，不把 A 卡压成提示词；未启用该 Skill 时，按 card-content-layout 的本地规则执行。按单张、乱序复习的情境
-   审阅，不依赖原课堂、相邻卡或来源链接才能读懂。判断
-   A／B／C、常青／版本快照、原子／机制／综合口述层级。机制卡若声明子卡依赖，必须引用同一 request
+   撰写**人话、先立后破、可独立复习**的题面与答案；流程链路、生命周期、排障递进类知识优先做成 4–6 集的**追剧卡（美剧单集模式）**，单张带短头标和 1 句前情提要以兼容乱序复习，并可附 1 张本单元总览地图卡；纯辨析与踩坑保持极简人话卡。语言按 `vivid-language` 的
+   `references/language-contract.md`（记忆卡片体裁）：常规单点/机制卡保持轻量（约 80–180 字），正面给场景冲突与必要条件，答案先直接回答、再讲因果步骤、末尾只留真会让结论反转的踩坑点或例外；**卡面零 commit hash**（精确提交留在 `fact_scope`／manifest，跨版本差异只写人类可读版本号），**清退防御性免责套话**；未启用该 Skill 时，按 card-content-layout 的本地规则执行。判断
+   A／B／C、常青／版本快照、原子／机制／综合口述层级；每单元默认精选高价值卡（常规 5–8 张，受配置软目标约束，不为凑数扩量）。机制卡若声明子卡依赖，必须引用同一 request
    内 eligible、已核验且 active 的原子／机制卡；综合口述卡引用其中 2–5 张。不要手写 Markji 语法、
-   逻辑 ID、XLSX、hash 或 manifest。结论与边界标签可按卡片语言覆盖，但必须短促，并在同一
+   逻辑 ID、XLSX、hash 或 manifest。结论与边界标签（如“结论”“踩坑点”“例外”）可按卡片语言覆盖，但必须短促，并在同一
    collection 中保持一致。写完后按[制卡自检清单](references/card-review-checklist.md)逐张自检并做批次
    检查，没通过的卡先改；再按“完成前语言审查”一节通过语言审查，才进入 `prepare`。
 4. 按 [受管 Markdown 与 XLSX 合同](references/markdown-xlsx-staging.md) 形成严格 request JSON，调用 `scripts/memo_cards.py prepare`。工具负责模板、身份、inventory、软目标、XLSX、差异和预览摘要。
@@ -56,7 +54,7 @@ description: 将用户明确指定的成熟学习素材制作成受管 Markdown 
 
 ## 完成前语言审查
 
-候选卡片在 `prepare` 前必须按 [language-review.md](references/language-review.md) 审查（非 Gemini 宿主远程优先，Gemini 宿主及兜底走子 Agent）。目标不是口语化，而是**清晰、完整、可独立复习**：正面有场景/条件/任务，答案先结论再理由再边界，不泄题、不压成提示词、不混卡。
+候选卡片在 `prepare` 前必须按 [language-review.md](references/language-review.md) 审查（非 Gemini 宿主远程优先，Gemini 宿主及兜底走子 Agent）。目标是**清晰、说人话、先立后破、可独立复习**：正面有场景冲突与必要条件，答案像跟同行口头讲机制一样自然，卡面不暴露 commit hash、不堆防御性免责句、不泄题、不压成提示词、不混卡；剧集卡单张乱序弹出也能独立作答。
 
 审查返回 `REVISE` 时，先改 blocking 再复查；未 `PASS` 不 `prepare`、不 `publish`、不上传。预览里写清 `PASS` / `REVISE` / `未独立审查`；远程与子 Agent 都不可用时不得声称已通过独立审查。预览与审查结论的对话文字按 `vivid-language` 的对话体裁：结论先行、具体、不客套。
 

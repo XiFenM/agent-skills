@@ -98,6 +98,7 @@ description: "Guide human learners to deep, transferable understanding: explain 
 按用户当轮意图选最窄的一种，不因仓库里已有学习记录而自动升级：
 
 - **一次答疑**：直接解决问题；零写入。没有学习者画像时，答完再提出建立。
+- **学后复习**：按需生成一页回忆地图（折叠自测骨架）、随时单点 5 分钟费曼微口述（3 个来回收工，不绑开新课）与跨周交错回捞；属复习辅助，不改课程状态，见 [review-loop.md](references/review-loop.md)。
 - **独立 Session**：用户明确开始、继续或恢复一段学习；需要跨会话时只保存会话事件和断点，不自动建 Lesson。
 - **持久 Course**：用户明确开展多课学习；维护计划、已授权 Lesson 的账本和断点。
 
@@ -165,3 +166,4 @@ description: "Guide human learners to deep, transferable understanding: explain 
 - [repository-adaptation.md](references/repository-adaptation.md)：把状态映射到仓库文件、选择路径、解释受管 context，或建立、更新学习者画像时读。
 - [material-reading.md](references/material-reading.md)：读取本地图片、drawio 等混合资料或核验文件类型时读。
 - [article-artifacts.md](references/article-artifacts.md)：提议、起草或写入学习文章时读。
+- [review-loop.md](references/review-loop.md)：做一页回忆地图、5 分钟费曼微口述或跨周交错回捞时读。
